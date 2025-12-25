@@ -13,7 +13,7 @@ Scoring Criteria (from apartment-criteria.md):
 """
 
 from dataclasses import dataclass
-from typing import Any, Dict, List, Optional, Tuple
+from typing import Any, Callable, Dict, List, Optional, Tuple
 
 # Budget constraints
 MAX_TOTAL_BUDGET = 270_000  # EUR
@@ -83,6 +83,13 @@ class DealBreakerResult:
 
 
 @dataclass
+class DealBreakerCheck:
+    """Configuration for a deal breaker check."""
+    name: str
+    check_fn: Callable[[Dict[str, Any]], DealBreakerResult]
+
+
+@dataclass
 class ScoreBreakdown:
     """Detailed score breakdown for a listing."""
     location: float
@@ -95,159 +102,139 @@ class ScoreBreakdown:
     total_weighted: float
 
 
-def check_deal_breakers(listing: Dict[str, Any]) -> List[DealBreakerResult]:
-    """
-    Check all deal breakers for a listing.
-
-    Args:
-        listing: Dict with listing data (from sqlite3.Row or dict)
-
-    Returns:
-        List of DealBreakerResult objects
-    """
-    results = []
-
-    # 1. Not panel construction
+def _check_not_panel(listing: Dict[str, Any]) -> DealBreakerResult:
+    """Check if building is not panel construction."""
     building_type = (listing.get("building_type") or "").lower()
     is_panel = "panel" in building_type or "панел" in building_type
-    results.append(DealBreakerResult(
+    return DealBreakerResult(
         name="Not panel construction",
         passed=not is_panel,
         reason="Panel construction" if is_panel else "OK",
         value=building_type
-    ))
+    )
 
-    # 2. Has elevator (if floor 3+)
+
+def _check_elevator(listing: Dict[str, Any]) -> DealBreakerResult:
+    """Check if elevator exists for floor 3+."""
+    floor, elevator = listing.get("floor_number"), listing.get("has_elevator")
+    needs_elevator = floor and floor >= 3
+    passed = bool(elevator) if needs_elevator else True
+    reason = f"Floor {floor}, elevator: {elevator}" if needs_elevator else f"Floor {floor or 'N/A'} - elevator not required"
+    return DealBreakerResult("Has elevator (floor 3+)", passed, reason, elevator)
+
+
+def _check_floor_limit(listing: Dict[str, Any]) -> DealBreakerResult:
+    """Check if floor is 4 or below."""
     floor = listing.get("floor_number")
-    has_elevator = listing.get("has_elevator")
-    if floor and floor >= 3:
-        elevator_ok = bool(has_elevator)
-        results.append(DealBreakerResult(
-            name="Has elevator (floor 3+)",
-            passed=elevator_ok,
-            reason=f"Floor {floor}, elevator: {has_elevator}",
-            value=has_elevator
-        ))
-    else:
-        results.append(DealBreakerResult(
-            name="Has elevator (floor 3+)",
-            passed=True,
-            reason=f"Floor {floor or 'N/A'} - elevator not required",
-            value=has_elevator
-        ))
+    if not floor:
+        return DealBreakerResult(f"Floor {MAX_FLOOR} or below", True, "Floor unknown", None)
+    passed = floor <= MAX_FLOOR
+    reason = f"Floor {floor}" + ("" if passed else " - too high")
+    return DealBreakerResult(f"Floor {MAX_FLOOR} or below", passed, reason, floor)
 
-    # 3. Floor 4 or below
-    if floor:
-        floor_ok = floor <= MAX_FLOOR
-        results.append(DealBreakerResult(
-            name=f"Floor {MAX_FLOOR} or below",
-            passed=floor_ok,
-            reason=f"Floor {floor}" + (" - too high" if not floor_ok else ""),
-            value=floor
-        ))
-    else:
-        results.append(DealBreakerResult(
-            name=f"Floor {MAX_FLOOR} or below",
-            passed=True,  # Unknown = pass (verify later)
-            reason="Floor unknown",
-            value=None
-        ))
 
-    # 4. 2+ toilets/bathrooms
+def _check_bathrooms(listing: Dict[str, Any]) -> DealBreakerResult:
+    """Check if listing has 2+ bathrooms."""
     bathrooms = listing.get("bathrooms_count") or 0
     bath_ok = bathrooms >= MIN_BATHROOMS
-    results.append(DealBreakerResult(
+    return DealBreakerResult(
         name=f"{MIN_BATHROOMS}+ bathrooms",
         passed=bath_ok,
         reason=f"{bathrooms} bathroom(s)",
         value=bathrooms
-    ))
+    )
 
-    # 5. Act 15+ (if new build)
+
+def _check_act_status(listing: Dict[str, Any]) -> DealBreakerResult:
+    """Check if new build has Act 15+."""
+    building_type = (listing.get("building_type") or "").lower()
     act_status = (listing.get("act_status") or "").lower()
-    building_type_lower = building_type.lower()
-    is_new_build = "new" in building_type_lower or "ново" in building_type_lower
+    is_new_build = "new" in building_type or "ново" in building_type
+    if not is_new_build:
+        return DealBreakerResult("Act 15+ (new build)", True, "Not a new build - N/A", act_status)
+    passed = "15" in act_status or "16" in act_status
+    return DealBreakerResult("Act 15+ (new build)", passed, f"Act status: {act_status or 'unknown'}", act_status)
 
-    if is_new_build:
-        has_act_15_plus = "15" in act_status or "16" in act_status
-        results.append(DealBreakerResult(
-            name="Act 15+ (new build)",
-            passed=has_act_15_plus,
-            reason=f"Act status: {act_status or 'unknown'}",
-            value=act_status
-        ))
-    else:
-        results.append(DealBreakerResult(
-            name="Act 15+ (new build)",
-            passed=True,
-            reason="Not a new build - N/A",
-            value=act_status
-        ))
 
-    # 6. No legal issues
+def _check_no_legal_issues(listing: Dict[str, Any]) -> DealBreakerResult:
+    """Check if listing has no legal issues."""
     has_legal_issues = listing.get("has_legal_issues")
-    results.append(DealBreakerResult(
+    return DealBreakerResult(
         name="No legal issues",
         passed=not has_legal_issues,
         reason="Has legal issues" if has_legal_issues else "OK",
         value=has_legal_issues
-    ))
+    )
 
-    # 7. Has balcony or garden
+
+def _check_outdoor_space(listing: Dict[str, Any]) -> DealBreakerResult:
+    """Check if listing has balcony, garden, or terrace."""
     has_balcony = listing.get("has_balcony")
     has_garden = listing.get("has_garden")
     has_terrace = listing.get("has_terrace")
     outdoor_ok = any([has_balcony, has_garden, has_terrace])
-    results.append(DealBreakerResult(
+    return DealBreakerResult(
         name="Has balcony/garden",
         passed=outdoor_ok,
         reason=f"Balcony: {has_balcony}, Garden: {has_garden}, Terrace: {has_terrace}",
         value=outdoor_ok
-    ))
+    )
 
-    # 8. East/South orientation
+
+def _check_orientation(listing: Dict[str, Any]) -> DealBreakerResult:
+    """Check if listing has East/South orientation."""
     orientation = (listing.get("orientation") or "").lower()
-    # Check for E, S, East, South, Изток, Юг
     good_orientations = ["e", "s", "east", "south", "изток", "юг", "и", "ю", "се", "юи", "югоизток"]
     has_good_orientation = any(o in orientation for o in good_orientations) if orientation else True
-    results.append(DealBreakerResult(
+    return DealBreakerResult(
         name="East/South orientation",
         passed=has_good_orientation,
         reason=f"Orientation: {orientation or 'unknown'}",
         value=orientation
-    ))
+    )
 
-    # 9. Total cost <= 270,000 EUR
+
+def _check_budget(listing: Dict[str, Any]) -> DealBreakerResult:
+    """Check if total cost is within budget."""
     price = listing.get("price_eur") or 0
     renovation = listing.get("estimated_renovation_eur") or 0
     total = price + renovation
     budget_ok = total <= MAX_TOTAL_BUDGET
-    results.append(DealBreakerResult(
+    return DealBreakerResult(
         name=f"Total cost <= {MAX_TOTAL_BUDGET:,} EUR",
         passed=budget_ok,
         reason=f"Price: {price:,.0f} + Reno: {renovation:,.0f} = {total:,.0f} EUR",
         value=total
-    ))
+    )
 
-    # 10. Within 600m of metro
+
+def _check_metro_distance(listing: Dict[str, Any]) -> DealBreakerResult:
+    """Check if listing is within 600m of metro."""
     metro_distance = listing.get("metro_distance_m")
-    if metro_distance is not None:
-        metro_ok = metro_distance <= MAX_METRO_DISTANCE
-        results.append(DealBreakerResult(
-            name=f"Within {MAX_METRO_DISTANCE}m of metro",
-            passed=metro_ok,
-            reason=f"{metro_distance}m from metro",
-            value=metro_distance
-        ))
-    else:
-        results.append(DealBreakerResult(
-            name=f"Within {MAX_METRO_DISTANCE}m of metro",
-            passed=True,  # Unknown = pass (verify later)
-            reason="Metro distance unknown",
-            value=None
-        ))
+    if metro_distance is None:
+        return DealBreakerResult(f"Within {MAX_METRO_DISTANCE}m of metro", True, "Metro distance unknown", None)
+    passed = metro_distance <= MAX_METRO_DISTANCE
+    return DealBreakerResult(f"Within {MAX_METRO_DISTANCE}m of metro", passed, f"{metro_distance}m from metro", metro_distance)
 
-    return results
+
+# Config-driven deal breaker checks
+DEAL_BREAKER_CHECKS = [
+    DealBreakerCheck("Not panel construction", _check_not_panel),
+    DealBreakerCheck("Has elevator (floor 3+)", _check_elevator),
+    DealBreakerCheck("Floor 4 or below", _check_floor_limit),
+    DealBreakerCheck("2+ bathrooms", _check_bathrooms),
+    DealBreakerCheck("Act 15+ (new build)", _check_act_status),
+    DealBreakerCheck("No legal issues", _check_no_legal_issues),
+    DealBreakerCheck("Has balcony/garden", _check_outdoor_space),
+    DealBreakerCheck("East/South orientation", _check_orientation),
+    DealBreakerCheck("Total cost within budget", _check_budget),
+    DealBreakerCheck("Within metro distance", _check_metro_distance),
+]
+
+
+def check_deal_breakers(listing: Dict[str, Any]) -> List[DealBreakerResult]:
+    """Check all deal breakers for a listing."""
+    return [check.check_fn(listing) for check in DEAL_BREAKER_CHECKS]
 
 
 def passes_all_deal_breakers(listing: Dict[str, Any]) -> Tuple[bool, List[str]]:
@@ -262,18 +249,8 @@ def passes_all_deal_breakers(listing: Dict[str, Any]) -> Tuple[bool, List[str]]:
     return len(failed) == 0, failed
 
 
-def calculate_score(listing: Dict[str, Any]) -> ScoreBreakdown:
-    """
-    Calculate weighted score for a listing.
-
-    Each criterion scored 0-5, then weighted.
-
-    Returns:
-        ScoreBreakdown with individual and total scores
-    """
-    scores = {}
-
-    # 1. Location Score (25%) - metro distance + district quality
+def _score_location(listing: Dict[str, Any]) -> float:
+    """Score location based on metro distance and district tier (0-5)."""
     location_score = 0.0
     metro_distance = listing.get("metro_distance_m")
     if metro_distance is not None:
@@ -305,22 +282,26 @@ def calculate_score(listing: Dict[str, Any]) -> ScoreBreakdown:
     else:
         location_score += 1.0  # Unknown district
 
-    scores["location"] = min(5.0, location_score)
+    return min(5.0, location_score)
 
-    # 2. Price/sqm Score (20%)
+
+def _score_price_sqm(listing: Dict[str, Any]) -> float:
+    """Score price per sqm against benchmarks (0-5)."""
     price_sqm = listing.get("price_per_sqm_eur") or 0
     if price_sqm <= PRICE_BENCHMARKS["excellent"]:
-        scores["price_sqm"] = 5.0
+        return 5.0
     elif price_sqm <= PRICE_BENCHMARKS["good"]:
-        scores["price_sqm"] = 4.0
+        return 4.0
     elif price_sqm <= PRICE_BENCHMARKS["fair"]:
-        scores["price_sqm"] = 3.0
+        return 3.0
     elif price_sqm <= PRICE_BENCHMARKS["expensive"]:
-        scores["price_sqm"] = 2.0
+        return 2.0
     else:
-        scores["price_sqm"] = 1.0
+        return 1.0
 
-    # 3. Condition vs Budget Score (15%)
+
+def _score_condition(listing: Dict[str, Any]) -> float:
+    """Score condition and budget headroom (0-5)."""
     price = listing.get("price_eur") or 0
     renovation = listing.get("estimated_renovation_eur") or 0
     total = price + renovation
@@ -343,9 +324,11 @@ def calculate_score(listing: Dict[str, Any]) -> ScoreBreakdown:
     elif budget_remaining < 0:
         condition_score = max(1.0, condition_score - 2.0)
 
-    scores["condition"] = condition_score
+    return condition_score
 
-    # 4. Layout Score (15%) - rooms, bathrooms, orientation
+
+def _score_layout(listing: Dict[str, Any]) -> float:
+    """Score layout based on rooms, bathrooms, orientation (0-5)."""
     layout_score = 0.0
 
     rooms = listing.get("rooms_count") or 0
@@ -371,28 +354,33 @@ def calculate_score(listing: Dict[str, Any]) -> ScoreBreakdown:
     else:
         layout_score += 0.5
 
-    scores["layout"] = min(5.0, layout_score)
+    return min(5.0, layout_score)
 
-    # 5. Building Quality Score (10%)
+
+def _score_building(listing: Dict[str, Any]) -> float:
+    """Score building type and construction year (0-5)."""
     building_type = (listing.get("building_type") or "").lower()
     year = listing.get("construction_year")
 
     if "panel" in building_type or "панел" in building_type:
-        scores["building"] = 1.0  # Panel = bad
+        return 1.0  # Panel = bad
     elif "new" in building_type or "ново" in building_type:
-        scores["building"] = 4.5
+        return 4.5
     elif "brick" in building_type or "тухла" in building_type:
         if year and year >= 2000:
-            scores["building"] = 4.0
+            return 4.0
         elif year and year >= 1980:
-            scores["building"] = 3.5
+            return 3.5
         else:
-            scores["building"] = 3.0
+            return 3.0
     else:
-        scores["building"] = 2.5
+        return 2.5
 
-    # 6. Rental Potential Score (10%)
+
+def _score_rental(listing: Dict[str, Any]) -> float:
+    """Score rental potential based on amenities and location (0-5)."""
     rental_score = 2.5  # Base
+    metro_distance = listing.get("metro_distance_m")
 
     if listing.get("near_schools"):
         rental_score += 0.5
@@ -405,9 +393,11 @@ def calculate_score(listing: Dict[str, Any]) -> ScoreBreakdown:
     if listing.get("is_furnished"):
         rental_score += 0.5
 
-    scores["rental"] = min(5.0, rental_score)
+    return min(5.0, rental_score)
 
-    # 7. Extras Score (5%)
+
+def _score_extras(listing: Dict[str, Any]) -> float:
+    """Score extras like storage, parking, AC (0-5)."""
     extras_score = 0.0
 
     if listing.get("has_storage"):
@@ -421,24 +411,27 @@ def calculate_score(listing: Dict[str, Any]) -> ScoreBreakdown:
     if listing.get("has_builtin_wardrobes"):
         extras_score += 0.5
 
-    scores["extras"] = min(5.0, extras_score) if extras_score > 0 else 2.0
+    return min(5.0, extras_score) if extras_score > 0 else 2.0
 
-    # Calculate weighted total
+
+def calculate_score(listing: Dict[str, Any]) -> ScoreBreakdown:
+    """Calculate weighted score for a listing. Each criterion scored 0-5, then weighted."""
+    scores = {
+        "location": _score_location(listing),
+        "price_sqm": _score_price_sqm(listing),
+        "condition": _score_condition(listing),
+        "layout": _score_layout(listing),
+        "building": _score_building(listing),
+        "rental": _score_rental(listing),
+        "extras": _score_extras(listing),
+    }
+
     total_weighted = sum(
         scores[criterion] * (weight / 100) * 5
         for criterion, weight in WEIGHTS.items()
-    ) / 5  # Normalize to 0-5 scale
+    ) / 5
 
-    return ScoreBreakdown(
-        location=scores["location"],
-        price_sqm=scores["price_sqm"],
-        condition=scores["condition"],
-        layout=scores["layout"],
-        building=scores["building"],
-        rental=scores["rental"],
-        extras=scores["extras"],
-        total_weighted=round(total_weighted, 2)
-    )
+    return ScoreBreakdown(**scores, total_weighted=round(total_weighted, 2))
 
 
 def calculate_total_investment(listing: Dict[str, Any]) -> float:

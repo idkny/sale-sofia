@@ -31,6 +31,121 @@ from proxies.proxy_validator import preflight_check
 from utils.log_config import setup_logging
 
 
+async def _collect_listing_urls(
+    page,
+    scraper,
+    start_url: str,
+    limit: int,
+    delay: float,
+    proxy: str | None,
+    proxy_pool: Optional[ScoredProxyPool]
+) -> list[str]:
+    """
+    Phase 1: Collect listing URLs from search pages with pagination.
+
+    Returns:
+        List of listing URLs found (up to limit).
+    """
+    current_url = start_url
+    current_page = 1
+    all_listing_urls = []
+
+    while len(all_listing_urls) < limit:
+        logger.info(f"[Page {current_page}] Loading: {current_url}")
+
+        try:
+            await page.goto(current_url, wait_until="domcontentloaded")
+            html = await page.content()
+
+            # Check if this is the last page
+            if hasattr(scraper, "is_last_page") and scraper.is_last_page(html, current_page):
+                logger.info(f"Last page detected at page {current_page}")
+                listing_urls = await scraper.extract_search_results(html)
+                if listing_urls:
+                    new_urls = [u for u in listing_urls if u not in all_listing_urls]
+                    all_listing_urls.extend(new_urls)
+                    logger.info(f"Found {len(new_urls)} new listings on last page (total: {len(all_listing_urls)})")
+                break
+
+            listing_urls = await scraper.extract_search_results(html)
+            if not listing_urls:
+                logger.info(f"No more listings found on page {current_page}")
+                break
+
+            new_urls = [u for u in listing_urls if u not in all_listing_urls]
+            all_listing_urls.extend(new_urls)
+            logger.info(f"Found {len(new_urls)} new listings (total: {len(all_listing_urls)})")
+
+        except Exception as e:
+            logger.error(f"Error loading search page {current_page}: {e}")
+            if proxy_pool and proxy:
+                proxy_pool.record_result(proxy, success=False)
+            break
+
+        if len(all_listing_urls) >= limit:
+            break
+
+        # Get next page URL
+        if hasattr(scraper, "get_next_page_url"):
+            current_url = scraper.get_next_page_url(current_url, current_page)
+            current_page += 1
+        else:
+            break
+
+        await asyncio.sleep(delay)
+
+    return all_listing_urls[:limit]
+
+
+async def _scrape_listings(
+    page,
+    scraper,
+    urls: list[str],
+    delay: float,
+    proxy: str | None,
+    proxy_pool: Optional[ScoredProxyPool]
+) -> dict:
+    """
+    Phase 2: Scrape individual listings from collected URLs.
+
+    Returns:
+        Dictionary with stats: {scraped: int, failed: int, total_attempts: int}
+    """
+    stats = {"scraped": 0, "failed": 0, "total_attempts": 0}
+
+    for i, url in enumerate(urls, 1):
+        logger.info(f"[{i}/{len(urls)}] {url}")
+        stats["total_attempts"] += 1
+
+        try:
+            await page.goto(url, wait_until="domcontentloaded")
+            html = await page.content()
+
+            listing = await scraper.extract_listing(html, url)
+            if listing:
+                data_store_main.save_listing(listing)
+                stats["scraped"] += 1
+                logger.info(f"  -> Saved: {listing.price_eur} EUR, {listing.sqm_total} sqm")
+                if proxy_pool and proxy:
+                    proxy_pool.record_result(proxy, success=True)
+            else:
+                stats["failed"] += 1
+                logger.warning(f"  -> Failed to extract listing data")
+                if proxy_pool and proxy:
+                    proxy_pool.record_result(proxy, success=False)
+
+        except Exception as e:
+            stats["failed"] += 1
+            logger.error(f"Error scraping {url}: {e}")
+            if proxy_pool and proxy:
+                proxy_pool.record_result(proxy, success=False)
+            continue
+
+        await asyncio.sleep(delay)
+
+    return stats
+
+
 async def scrape_from_start_url(
     scraper,
     start_url: str,
@@ -68,103 +183,10 @@ async def scrape_from_start_url(
 
     try:
         page = await browser_handle.new_tab()
-        current_url = start_url
-        current_page = 1
-        all_listing_urls = []
-
-        # Phase 1: Collect listing URLs from search pages (with pagination)
-        while len(all_listing_urls) < limit:
-            logger.info(f"[Page {current_page}] Loading: {current_url}")
-
-            try:
-                await page.goto(current_url, wait_until="domcontentloaded")
-                html = await page.content()
-
-                # Check if this is the last page using scraper's detection method
-                if hasattr(scraper, "is_last_page") and scraper.is_last_page(html, current_page):
-                    logger.info(f"Last page detected at page {current_page}")
-                    # Still extract listings from this page before stopping
-                    listing_urls = await scraper.extract_search_results(html)
-                    if listing_urls:
-                        new_urls = [u for u in listing_urls if u not in all_listing_urls]
-                        all_listing_urls.extend(new_urls)
-                        logger.info(f"Found {len(new_urls)} new listings on last page (total: {len(all_listing_urls)})")
-                    break
-
-                listing_urls = await scraper.extract_search_results(html)
-                if not listing_urls:
-                    logger.info(f"No more listings found on page {current_page}")
-                    break
-
-                new_urls = [u for u in listing_urls if u not in all_listing_urls]
-                all_listing_urls.extend(new_urls)
-                logger.info(f"Found {len(new_urls)} new listings (total: {len(all_listing_urls)})")
-
-            except Exception as e:
-                logger.error(f"Error loading search page {current_page}: {e}")
-                # Record failure for mubeng rotator (it will auto-rotate)
-                if proxy_pool and proxy:
-                    proxy_pool.record_result(proxy, success=False)
-                break
-
-            if len(all_listing_urls) >= limit:
-                break
-
-            # Get next page URL
-            if hasattr(scraper, "get_next_page_url"):
-                current_url = scraper.get_next_page_url(current_url, current_page)
-                current_page += 1
-            else:
-                break  # No pagination support
-
-            # Rate limit between page loads
-            await asyncio.sleep(delay)
-
-        # Trim to limit
-        urls_to_scrape = all_listing_urls[:limit]
-        logger.info(f"Collected {len(urls_to_scrape)} listing URLs to scrape")
-
-        # Phase 2: Scrape each listing
-        for i, url in enumerate(urls_to_scrape, 1):
-            logger.info(f"[{i}/{len(urls_to_scrape)}] {url}")
-            stats["total_attempts"] += 1
-
-            try:
-                await page.goto(url, wait_until="domcontentloaded")
-                html = await page.content()
-
-                listing = await scraper.extract_listing(html, url)
-                if listing:
-                    data_store_main.save_listing(listing)
-                    stats["scraped"] += 1
-                    logger.info(f"  -> Saved: {listing.price_eur} EUR, {listing.sqm_total} sqm")
-
-                    # Record success for mubeng rotator
-                    if proxy_pool and proxy:
-                        proxy_pool.record_result(proxy, success=True)
-                else:
-                    stats["failed"] += 1
-                    logger.warning(f"  -> Failed to extract listing data")
-
-                    # Record failure for mubeng rotator
-                    if proxy_pool and proxy:
-                        proxy_pool.record_result(proxy, success=False)
-
-            except Exception as e:
-                stats["failed"] += 1
-                logger.error(f"Error scraping {url}: {e}")
-
-                # Record failure for mubeng rotator (it will auto-rotate)
-                if proxy_pool and proxy:
-                    proxy_pool.record_result(proxy, success=False)
-
-                continue
-
-            # Rate limit between listing scrapes
-            await asyncio.sleep(delay)
-
-        logger.info(f"Scraping complete. Saved {stats['scraped']}/{len(urls_to_scrape)} listings.")
-
+        urls = await _collect_listing_urls(page, scraper, start_url, limit, delay, proxy, proxy_pool)
+        logger.info(f"Collected {len(urls)} listing URLs to scrape")
+        stats = await _scrape_listings(page, scraper, urls, delay, proxy, proxy_pool)
+        logger.info(f"Scraping complete. Saved {stats['scraped']}/{len(urls)} listings.")
     finally:
         await browser_handle._browser.close()
 
@@ -184,6 +206,241 @@ async def cleanup_browser(browser_instance: Optional[Any], browser_type: str) ->
             logger.error(f"Error during browser cleanup: {e}")
 
 
+def _print_banner() -> None:
+    """Print startup banner."""
+    print("=" * 60)
+    print("SOFIA REAL ESTATE SCRAPER - AUTO MODE")
+    print("=" * 60)
+    print()
+
+
+def _load_start_urls() -> dict | None:
+    """Load and validate start URLs from config."""
+    from config.loader import get_start_urls
+
+    start_urls = get_start_urls()
+    if not start_urls:
+        print("[ERROR] No start URLs configured!")
+        print("[HINT] Add URLs to config/start_urls.yaml")
+        return None
+
+    total_urls = sum(len(urls) for urls in start_urls.values())
+    print(f"[INFO] Found {total_urls} start URLs across {len(start_urls)} sites")
+    print()
+    return start_urls
+
+
+def _setup_infrastructure(orch) -> bool:
+    """Start Redis and Celery, wait for proxies. Returns True if successful."""
+    # 1. Start Redis
+    if not orch.start_redis():
+        print("[ERROR] Failed to start Redis. Aborting.")
+        return False
+
+    # 2. Start Celery
+    if not orch.start_celery():
+        print("[ERROR] Failed to start Celery. Aborting.")
+        return False
+
+    # 3. Wait for proxies
+    print()
+    print("[INFO] Checking proxy availability...")
+    if not orch.wait_for_proxies(min_count=5, timeout=600):
+        print("[ERROR] Could not get proxies. Aborting.")
+        return False
+
+    return True
+
+
+def _initialize_proxy_pool() -> Optional[ScoredProxyPool]:
+    """Initialize proxy scoring pool. Returns pool or None if failed."""
+    print("[INFO] Initializing proxy scoring system...")
+    try:
+        proxy_pool = ScoredProxyPool(PROXIES_DIR / "live_proxies.json")
+        stats = proxy_pool.get_stats()
+        print(f"[SUCCESS] Proxy pool initialized: {stats['total_proxies']} proxies, "
+              f"avg score: {stats['average_score']:.2f}")
+        return proxy_pool
+    except Exception as e:
+        logger.warning(f"Failed to initialize proxy pool: {e}")
+        print(f"[WARNING] Proxy scoring disabled: {e}")
+        return None
+
+
+def _start_proxy_rotator() -> tuple[str, Any, Any]:
+    """Start mubeng proxy rotator. Returns (proxy_url, process, temp_file)."""
+    print()
+    print("[INFO] Starting proxy rotator...")
+    proxy_url, mubeng_process, temp_proxy_file = setup_mubeng_rotator(
+        port=8089,
+        min_live_proxies=5,
+    )
+
+    if not mubeng_process:
+        print("[ERROR] Failed to start proxy rotator. Aborting.")
+        return proxy_url, mubeng_process, temp_proxy_file
+
+    print(f"[SUCCESS] Proxy rotator running at {proxy_url}")
+    return proxy_url, mubeng_process, temp_proxy_file
+
+
+def _run_preflight_level1(proxy_url: str, max_attempts: int = 6) -> bool:
+    """
+    Level 1 pre-flight: Try with mubeng auto-rotation.
+    Mubeng rotates on error, so more attempts = more proxies tested.
+    """
+    print("[INFO] Running pre-flight proxy check...")
+    for attempt in range(1, max_attempts + 1):
+        if preflight_check(proxy_url, timeout=15):
+            print(f"[SUCCESS] Pre-flight check passed (attempt {attempt})")
+            return True
+        else:
+            print(f"[WARNING] Pre-flight check failed (attempt {attempt}/{max_attempts})")
+            if attempt < max_attempts:
+                time.sleep(1)  # Short delay, mubeng auto-rotates
+    return False
+
+
+def _run_preflight_level2(mubeng_process: Any) -> tuple[bool, Any, str]:
+    """
+    Level 2 pre-flight: Soft restart - reload mubeng with same proxy file.
+    Returns (success, new_process, new_proxy_url).
+    """
+    print()
+    print("[INFO] Soft restart: Reloading proxy rotator...")
+    stop_mubeng_rotator(mubeng_process, None)  # Don't delete temp file
+
+    proxy_url, new_process, _ = setup_mubeng_rotator(
+        port=8089,
+        min_live_proxies=5,
+    )
+    if not new_process:
+        return False, new_process, proxy_url
+
+    print(f"[SUCCESS] Proxy rotator restarted at {proxy_url}")
+    for attempt in range(1, 4):
+        if preflight_check(proxy_url, timeout=15):
+            print(f"[SUCCESS] Pre-flight check passed after soft restart (attempt {attempt})")
+            return True, new_process, proxy_url
+        else:
+            print(f"[WARNING] Pre-flight still failing (attempt {attempt}/3)")
+            if attempt < 3:
+                time.sleep(1)
+
+    return False, new_process, proxy_url
+
+
+def _run_preflight_level3(orch, proxy_pool: Optional[ScoredProxyPool]) -> tuple[bool, Any, str, Any]:
+    """
+    Level 3 pre-flight: Full refresh - scrape new proxies (5-10 min).
+    Returns (success, new_process, new_proxy_url, new_temp_file).
+    """
+    print()
+    print("[INFO] Full refresh: Fetching new proxies (this takes 5-10 min)...")
+
+    mtime_before, task_id = orch.trigger_proxy_refresh()
+    if not orch.wait_for_refresh_completion(mtime_before, min_count=5, task_id=task_id):
+        print("[ERROR] Proxy refresh timed out or failed. Aborting.")
+        return False, None, "", None
+
+    # Reload proxy pool after refresh
+    if proxy_pool:
+        print("[INFO] Reloading proxy pool after refresh...")
+        proxy_pool.reload_proxies()
+        stats = proxy_pool.get_stats()
+        print(f"[SUCCESS] Proxy pool reloaded: {stats['total_proxies']} proxies")
+
+    print("[INFO] Restarting proxy rotator with fresh proxies...")
+    proxy_url, new_process, new_temp_file = setup_mubeng_rotator(
+        port=8089,
+        min_live_proxies=5,
+    )
+    if not new_process:
+        print("[ERROR] Failed to restart proxy rotator. Aborting.")
+        return False, new_process, proxy_url, new_temp_file
+    print(f"[SUCCESS] Proxy rotator restarted at {proxy_url}")
+
+    # Final pre-flight check
+    for attempt in range(1, 4):
+        if preflight_check(proxy_url, timeout=15):
+            print(f"[SUCCESS] Pre-flight check passed after refresh (attempt {attempt})")
+            return True, new_process, proxy_url, new_temp_file
+        else:
+            print(f"[WARNING] Pre-flight still failing (attempt {attempt}/3)")
+            if attempt < 3:
+                time.sleep(1)
+
+    return False, new_process, proxy_url, new_temp_file
+
+
+def _crawl_all_sites(start_urls: dict, proxy_url: str, proxy_pool: Optional[ScoredProxyPool]) -> dict:
+    """Crawl all configured sites. Returns aggregated stats."""
+    from config.loader import get_site_config
+    from websites import get_scraper
+
+    print()
+    print("=" * 60)
+    print("STARTING CRAWL")
+    print("=" * 60)
+
+    total_stats = {"scraped": 0, "failed": 0, "total_attempts": 0}
+
+    for site, urls in start_urls.items():
+        scraper = get_scraper(site)
+        if not scraper:
+            print(f"[WARNING] Scraper for {site} not implemented, skipping")
+            continue
+
+        # Load per-site configuration
+        site_config = get_site_config(site)
+        print(f"\n[SITE] {site} ({len(urls)} start URLs)")
+        print(f"[CONFIG] limit={site_config.limit}, delay={site_config.delay}s, timeout={site_config.timeout}s")
+
+        for i, url in enumerate(urls, 1):
+            print(f"\n[{i}/{len(urls)}] {url}")
+            try:
+                stats = asyncio.run(
+                    scrape_from_start_url(
+                        scraper,
+                        url,
+                        limit=site_config.limit,
+                        delay=site_config.delay,
+                        proxy=proxy_url,
+                        proxy_pool=proxy_pool
+                    )
+                )
+                # Aggregate stats
+                total_stats["scraped"] += stats["scraped"]
+                total_stats["failed"] += stats["failed"]
+                total_stats["total_attempts"] += stats["total_attempts"]
+                print(f"[STATS] Scraped: {stats['scraped']}, Failed: {stats['failed']}")
+            except Exception as e:
+                logger.error(f"Error crawling {url}: {e}")
+                print(f"[ERROR] Failed to crawl {url}: {e}")
+                continue
+
+    return total_stats
+
+
+def _print_summary(stats: dict, proxy_pool: Optional[ScoredProxyPool]) -> None:
+    """Print final crawl summary and save proxy scores."""
+    print()
+    print("=" * 60)
+    print("CRAWL COMPLETE")
+    print("=" * 60)
+    print(f"\n[SUMMARY] Total scraped: {stats['scraped']}, "
+          f"Failed: {stats['failed']}, "
+          f"Success rate: {stats['scraped'] / max(stats['total_attempts'], 1) * 100:.1f}%")
+
+    # Save final proxy scores
+    if proxy_pool:
+        print("\n[INFO] Saving final proxy scores...")
+        proxy_pool.save_scores()
+        stats_pool = proxy_pool.get_stats()
+        print(f"[SUCCESS] Final proxy stats: {stats_pool['total_proxies']} proxies, "
+              f"avg score: {stats_pool['average_score']:.2f}")
+
+
 def run_auto_mode() -> None:
     """
     Run automated scraping mode.
@@ -191,219 +448,42 @@ def run_auto_mode() -> None:
     Starts Redis, Celery, waits for proxies, and crawls all configured start URLs.
     Uses ScoredProxyPool to track proxy performance during scraping.
     """
-    from config.loader import get_site_config, get_start_urls
     from orchestrator import Orchestrator
-    from websites import get_scraper
 
-    print("=" * 60)
-    print("SOFIA REAL ESTATE SCRAPER - AUTO MODE")
-    print("=" * 60)
-    print()
+    _print_banner()
 
-    # Load start URLs first to validate config
-    start_urls = get_start_urls()
+    start_urls = _load_start_urls()
     if not start_urls:
-        print("[ERROR] No start URLs configured!")
-        print("[HINT] Add URLs to config/start_urls.yaml")
         return
 
-    total_urls = sum(len(urls) for urls in start_urls.values())
-    print(f"[INFO] Found {total_urls} start URLs across {len(start_urls)} sites")
-    print()
-
-    # Initialize proxy pool for scoring (will be loaded after proxies are available)
-    proxy_pool: Optional[ScoredProxyPool] = None
-
     with Orchestrator() as orch:
-        # 1. Start Redis
-        if not orch.start_redis():
-            print("[ERROR] Failed to start Redis. Aborting.")
+        if not _setup_infrastructure(orch):
             return
 
-        # 2. Start Celery
-        if not orch.start_celery():
-            print("[ERROR] Failed to start Celery. Aborting.")
-            return
-
-        # 3. Wait for proxies
-        print()
-        print("[INFO] Checking proxy availability...")
-        if not orch.wait_for_proxies(min_count=5, timeout=600):
-            print("[ERROR] Could not get proxies. Aborting.")
-            return
-
-        # Initialize proxy scoring pool
-        print("[INFO] Initializing proxy scoring system...")
-        try:
-            proxy_pool = ScoredProxyPool(PROXIES_DIR / "live_proxies.json")
-            stats = proxy_pool.get_stats()
-            print(f"[SUCCESS] Proxy pool initialized: {stats['total_proxies']} proxies, "
-                  f"avg score: {stats['average_score']:.2f}")
-        except Exception as e:
-            logger.warning(f"Failed to initialize proxy pool: {e}")
-            print(f"[WARNING] Proxy scoring disabled: {e}")
-            proxy_pool = None
-
-        # 4. Set up proxy rotator
-        print()
-        print("[INFO] Starting proxy rotator...")
-        proxy_url, mubeng_process, temp_proxy_file = setup_mubeng_rotator(
-            port=8089,
-            min_live_proxies=5,
-        )
-
+        proxy_pool = _initialize_proxy_pool()
+        proxy_url, mubeng_process, temp_proxy_file = _start_proxy_rotator()
         if not mubeng_process:
-            print("[ERROR] Failed to start proxy rotator. Aborting.")
             return
 
-        print(f"[SUCCESS] Proxy rotator running at {proxy_url}")
-
-        # Pre-flight check with tiered recovery:
-        # Level 1: Let mubeng auto-rotate (more attempts)
-        # Level 2: Soft restart mubeng (reload same proxy file)
-        # Level 3: Full proxy refresh (scrape + check, 5-10 min)
-        preflight_passed = False
-
-        # Level 1: Try pre-flight with mubeng auto-rotation (up to 6 attempts)
-        # Mubeng rotates on error, so more attempts = more proxies tested
-        print("[INFO] Running pre-flight proxy check...")
-        for attempt in range(1, 7):
-            if preflight_check(proxy_url, timeout=15):
-                print(f"[SUCCESS] Pre-flight check passed (attempt {attempt})")
-                preflight_passed = True
-                break
-            else:
-                print(f"[WARNING] Pre-flight check failed (attempt {attempt}/6)")
-                if attempt < 6:
-                    time.sleep(1)  # Short delay, mubeng auto-rotates
-
-        # Level 2: Soft restart - reload mubeng with same proxy file
-        if not preflight_passed:
-            print()
-            print("[INFO] Soft restart: Reloading proxy rotator...")
-            stop_mubeng_rotator(mubeng_process, None)  # Don't delete temp file
-
-            proxy_url, mubeng_process, _ = setup_mubeng_rotator(
-                port=8089,
-                min_live_proxies=5,
-            )
-            if mubeng_process:
-                print(f"[SUCCESS] Proxy rotator restarted at {proxy_url}")
-                for attempt in range(1, 4):
-                    if preflight_check(proxy_url, timeout=15):
-                        print(f"[SUCCESS] Pre-flight check passed after soft restart (attempt {attempt})")
-                        preflight_passed = True
-                        break
-                    else:
-                        print(f"[WARNING] Pre-flight still failing (attempt {attempt}/3)")
-                        if attempt < 3:
-                            time.sleep(1)
-
-        # Level 3: Full refresh - scrape new proxies (5-10 min)
-        if not preflight_passed:
-            print()
-            print("[INFO] Full refresh: Fetching new proxies (this takes 5-10 min)...")
-            stop_mubeng_rotator(mubeng_process, temp_proxy_file)
-
-            mtime_before, task_id = orch.trigger_proxy_refresh()
-            if not orch.wait_for_refresh_completion(mtime_before, min_count=5, task_id=task_id):
-                print("[ERROR] Proxy refresh timed out or failed. Aborting.")
-                return
-
-            # Reload proxy pool after refresh
-            if proxy_pool:
-                print("[INFO] Reloading proxy pool after refresh...")
-                proxy_pool.reload_proxies()
-                stats = proxy_pool.get_stats()
-                print(f"[SUCCESS] Proxy pool reloaded: {stats['total_proxies']} proxies")
-
-            print("[INFO] Restarting proxy rotator with fresh proxies...")
-            proxy_url, mubeng_process, temp_proxy_file = setup_mubeng_rotator(
-                port=8089,
-                min_live_proxies=5,
-            )
-            if not mubeng_process:
-                print("[ERROR] Failed to restart proxy rotator. Aborting.")
-                return
-            print(f"[SUCCESS] Proxy rotator restarted at {proxy_url}")
-
-            # Final pre-flight check
-            for attempt in range(1, 4):
-                if preflight_check(proxy_url, timeout=15):
-                    print(f"[SUCCESS] Pre-flight check passed after refresh (attempt {attempt})")
-                    preflight_passed = True
-                    break
-                else:
-                    print(f"[WARNING] Pre-flight still failing (attempt {attempt}/3)")
-                    if attempt < 3:
-                        time.sleep(1)
+        # Pre-flight with 3-level recovery
+        preflight_passed = _run_preflight_level1(proxy_url)
 
         if not preflight_passed:
-            print("[ERROR] Pre-flight check failed after all recovery attempts. Proxies may be blocked.")
+            preflight_passed, mubeng_process, proxy_url = _run_preflight_level2(mubeng_process)
+
+        if not preflight_passed:
+            result = _run_preflight_level3(orch, proxy_pool)
+            preflight_passed, mubeng_process, proxy_url, temp_proxy_file = result
+
+        if not preflight_passed:
+            print("[ERROR] Pre-flight failed after all recovery attempts.")
             stop_mubeng_rotator(mubeng_process, temp_proxy_file)
             return
 
         try:
-            # 5. Crawl each site's URLs
-            print()
-            print("=" * 60)
-            print("STARTING CRAWL")
-            print("=" * 60)
-
-            total_stats = {"scraped": 0, "failed": 0, "total_attempts": 0}
-
-            for site, urls in start_urls.items():
-                scraper = get_scraper(site)
-                if not scraper:
-                    print(f"[WARNING] Scraper for {site} not implemented, skipping")
-                    continue
-
-                # Load per-site configuration
-                site_config = get_site_config(site)
-                print(f"\n[SITE] {site} ({len(urls)} start URLs)")
-                print(f"[CONFIG] limit={site_config.limit}, delay={site_config.delay}s, timeout={site_config.timeout}s")
-
-                for i, url in enumerate(urls, 1):
-                    print(f"\n[{i}/{len(urls)}] {url}")
-                    try:
-                        stats = asyncio.run(
-                            scrape_from_start_url(
-                                scraper,
-                                url,
-                                limit=site_config.limit,
-                                delay=site_config.delay,
-                                proxy=proxy_url,
-                                proxy_pool=proxy_pool
-                            )
-                        )
-                        # Aggregate stats
-                        total_stats["scraped"] += stats["scraped"]
-                        total_stats["failed"] += stats["failed"]
-                        total_stats["total_attempts"] += stats["total_attempts"]
-                        print(f"[STATS] Scraped: {stats['scraped']}, Failed: {stats['failed']}")
-                    except Exception as e:
-                        logger.error(f"Error crawling {url}: {e}")
-                        print(f"[ERROR] Failed to crawl {url}: {e}")
-                        continue
-
-            print()
-            print("=" * 60)
-            print("CRAWL COMPLETE")
-            print("=" * 60)
-            print(f"\n[SUMMARY] Total scraped: {total_stats['scraped']}, "
-                  f"Failed: {total_stats['failed']}, "
-                  f"Success rate: {total_stats['scraped'] / max(total_stats['total_attempts'], 1) * 100:.1f}%")
-
-            # Save final proxy scores
-            if proxy_pool:
-                print("\n[INFO] Saving final proxy scores...")
-                proxy_pool.save_scores()
-                stats = proxy_pool.get_stats()
-                print(f"[SUCCESS] Final proxy stats: {stats['total_proxies']} proxies, "
-                      f"avg score: {stats['average_score']:.2f}")
-
+            stats = _crawl_all_sites(start_urls, proxy_url, proxy_pool)
+            _print_summary(stats, proxy_pool)
         finally:
-            # Clean up proxy rotator
             print()
             print("[INFO] Stopping proxy rotator...")
             stop_mubeng_rotator(mubeng_process, temp_proxy_file)

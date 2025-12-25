@@ -127,6 +127,146 @@ def check_scraped_proxies_task(self, _previous_result=None):
     return {"job_id": job_id, "chord_id": chord_result.id, "total_chunks": total_chunks, "status": "DISPATCHED"}
 
 
+def _run_mubeng_liveness_check(proxy_chunk: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
+    """
+    Run mubeng binary to check which proxies are alive.
+
+    Returns:
+        List of live proxy dicts from the chunk.
+    """
+    chunk_size = len(proxy_chunk)
+    live_proxies = []
+
+    temp_input_path = Path(tempfile.mktemp(suffix=".txt"))
+    temp_output_path = Path(tempfile.mktemp(suffix=".txt"))
+
+    try:
+        # Write proxy URLs to temp input file
+        with open(temp_input_path, "w") as f:
+            for proxy in proxy_chunk:
+                protocol = proxy.get("protocol", "http")
+                f.write(f"{protocol}://{proxy['host']}:{proxy['port']}\n")
+
+        # Run mubeng with PTY wrapper (mubeng hangs without terminal)
+        mubeng_cmd = [
+            str(MUBENG_EXECUTABLE_PATH), "--check",
+            "-f", str(temp_input_path),
+            "-o", str(temp_output_path),
+            "-t", "10s",
+        ]
+        cmd = ["script", "-q", "/dev/null", "-c", shlex.join(mubeng_cmd)]
+        result = subprocess.run(cmd, capture_output=True, text=True, timeout=120, check=False)
+
+        if result.returncode != 0 and result.stderr:
+            logger.warning(f"Mubeng returned non-zero ({result.returncode}): {result.stderr[:200]}")
+
+        # Parse output: map live proxy URLs back to original dicts
+        live_proxy_urls = []
+        if temp_output_path.exists():
+            with open(temp_output_path, "r") as f:
+                live_proxy_urls = [line.strip() for line in f if line.strip()]
+
+        proxy_data_map = {f"{p['host']}:{p['port']}": p for p in proxy_chunk}
+        for proxy_url in live_proxy_urls:
+            match = re.search(r"://(.*?:\d+)", proxy_url)
+            if match and (host_port := match.group(1)) in proxy_data_map:
+                live_proxies.append(proxy_data_map[host_port])
+
+        logger.info(f"Chunk liveness check: {len(live_proxies)}/{chunk_size} proxies alive")
+
+    except subprocess.TimeoutExpired:
+        logger.error(f"Mubeng check timed out after 120s for chunk of {chunk_size} proxies")
+    except Exception as e:
+        logger.error(f"Mubeng check failed for a chunk: {e}")
+    finally:
+        temp_input_path.unlink(missing_ok=True)
+        temp_output_path.unlink(missing_ok=True)
+
+    return live_proxies
+
+
+def _enrich_with_anonymity(live_proxies: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
+    """
+    Check anonymity level for each live proxy and log results.
+    Modifies proxies in-place and returns the same list.
+    """
+    if not live_proxies:
+        return live_proxies
+
+    logger.info(f"Checking anonymity for {len(live_proxies)} live proxies...")
+    for proxy in live_proxies:
+        enrich_proxy_with_anonymity(proxy, timeout=10)
+
+    anon_counts = {}
+    for p in live_proxies:
+        level = p.get("anonymity", "Unknown")
+        anon_counts[level] = anon_counts.get(level, 0) + 1
+    logger.info(f"Anonymity check complete: {anon_counts}")
+
+    return live_proxies
+
+
+def _filter_by_real_ip_subnet(proxies: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
+    """
+    Filter out proxies where exit_ip is in same /24 subnet as our real IP.
+    These proxies are not actually working (routing through local connection).
+    """
+    real_ip = get_real_ip()
+    if not real_ip:
+        return proxies
+
+    real_ip_prefix = ".".join(real_ip.split(".")[:3])
+    before_count = len(proxies)
+
+    filtered = [
+        p for p in proxies
+        if p.get("exit_ip") and not p.get("exit_ip", "").startswith(real_ip_prefix + ".")
+    ]
+
+    removed = before_count - len(filtered)
+    if removed > 0:
+        logger.info(f"Filtered {removed} proxies with exit_ip in same /24 as real IP {real_ip_prefix}.x")
+
+    return filtered
+
+
+def _check_quality_for_non_transparent(proxies: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
+    """
+    Run quality checks for non-transparent proxies. Modifies in-place.
+    """
+    candidates = [p for p in proxies if p.get("anonymity") not in ("Transparent", "1")]
+
+    if not candidates:
+        return proxies
+
+    logger.info(f"Checking quality for {len(candidates)} non-transparent proxies...")
+    for proxy in candidates:
+        enrich_proxy_with_quality(proxy, timeout=60)
+
+    ip_passed = sum(1 for p in candidates if p.get("ip_check_passed"))
+    target_passed = sum(1 for p in candidates if p.get("target_passed"))
+    both_passed = sum(1 for p in candidates if p.get("ip_check_passed") and p.get("target_passed"))
+    logger.info(
+        f"Quality check complete: {both_passed}/{len(candidates)} passed both checks "
+        f"(IP: {ip_passed}, Target: {target_passed})"
+    )
+
+    return proxies
+
+
+def _update_redis_progress(job_id: str) -> None:
+    """Increment completed chunks counter in Redis for progress tracking."""
+    if not job_id:
+        return
+    try:
+        r = get_redis_client()
+        completed = r.incr(f"proxy_refresh:{job_id}:completed_chunks")
+        r.setex(f"proxy_refresh:{job_id}:status", PROGRESS_KEY_TTL, "PROCESSING")
+        logger.debug(f"Job {job_id}: chunk completed ({completed} total)")
+    except Exception as e:
+        logger.warning(f"Failed to update Redis progress: {e}")
+
+
 @celery_app.task
 def check_proxy_chunk_task(proxy_chunk: List[Dict[str, Any]], job_id: str = "") -> List[Dict[str, Any]]:
     """
@@ -137,124 +277,80 @@ def check_proxy_chunk_task(proxy_chunk: List[Dict[str, Any]], job_id: str = "") 
         proxy_chunk: List of proxy dicts to check
         job_id: Job ID for Redis progress tracking (from dispatcher)
     """
-    live_proxies_in_chunk = []
-    chunk_size = len(proxy_chunk)
+    live_proxies = _run_mubeng_liveness_check(proxy_chunk)
+    live_proxies = _enrich_with_anonymity(live_proxies)
+    live_proxies = _filter_by_real_ip_subnet(live_proxies)
+    live_proxies = _check_quality_for_non_transparent(live_proxies)
+    _update_redis_progress(job_id)
+    return live_proxies
 
-    # Create temp input file with proxy URLs
-    # IMPORTANT: Must close file before mubeng reads it (flush alone is not enough)
-    temp_input_path = Path(tempfile.mktemp(suffix=".txt"))
-    with open(temp_input_path, "w") as temp_input_file:
-        for proxy in proxy_chunk:
+
+def _flatten_and_filter_results(results: List[List[Dict[str, Any]]]) -> List[Dict[str, Any]]:
+    """
+    Flatten chunk results and filter out transparent proxies.
+
+    Returns:
+        List of non-transparent proxies from all chunks.
+    """
+    all_proxies = [proxy for chunk_result in results for proxy in chunk_result if proxy]
+
+    before_count = len(all_proxies)
+    filtered = [p for p in all_proxies if p.get("anonymity") not in ("Transparent", "1")]
+
+    removed = before_count - len(filtered)
+    if removed > 0:
+        logger.info(f"Filtered out {removed} Transparent proxies (don't hide IP).")
+
+    return filtered
+
+
+def _log_quality_statistics(proxies: List[Dict[str, Any]]) -> None:
+    """Log quality check statistics for proxies that were quality-checked."""
+    quality_checked = [p for p in proxies if "quality_checked_at" in p]
+
+    if not quality_checked:
+        logger.info("No quality checks were performed on proxies.")
+        return
+
+    ip_passed = sum(1 for p in quality_checked if p.get("ip_check_passed"))
+    target_passed = sum(1 for p in quality_checked if p.get("target_passed"))
+    both_passed = sum(1 for p in quality_checked if p.get("ip_check_passed") and p.get("target_passed"))
+
+    logger.info(
+        f"Quality statistics: {len(quality_checked)} proxies checked. "
+        f"Passed both checks: {both_passed}, IP check: {ip_passed}, Target only: {target_passed}"
+    )
+
+
+def _save_proxy_files(proxies: List[Dict[str, Any]]) -> None:
+    """Save proxies to JSON and TXT files."""
+    json_output = PROXIES_DIR / "live_proxies.json"
+    txt_output = PROXIES_DIR / "live_proxies.txt"
+
+    with open(json_output, "w") as f:
+        json.dump(proxies, f, indent=2)
+
+    with open(txt_output, "w") as f:
+        for proxy in proxies:
             protocol = proxy.get("protocol", "http")
-            temp_input_file.write(f"{protocol}://{proxy['host']}:{proxy['port']}\n")
-    # File is now closed and flushed
+            f.write(f"{protocol}://{proxy['host']}:{proxy['port']}\n")
 
-    # Create temp output file path
-    temp_output_path = Path(tempfile.mktemp(suffix=".txt"))
+    logger.info(f"Successfully saved {len(proxies)} live proxies from all workers.")
+
+
+def _mark_job_complete(job_id: str, result_count: int) -> None:
+    """Mark job as complete in Redis with result count."""
+    if not job_id:
+        return
 
     try:
-        # Mubeng command with explicit timeout (critical for reliability)
-        mubeng_cmd = [
-            str(MUBENG_EXECUTABLE_PATH),
-            "--check",
-            "-f", str(temp_input_path),
-            "-o", str(temp_output_path),
-            "-t", "10s",  # 10 second timeout per proxy (default is 30s)
-        ]
-        # Wrap with `script` to provide PTY - mubeng hangs without terminal
-        cmd = ["script", "-q", "/dev/null", "-c", shlex.join(mubeng_cmd)]
-        # Use check=False to handle errors manually (mubeng returns non-zero for various reasons)
-        result = subprocess.run(cmd, capture_output=True, text=True, timeout=120, check=False)
-
-        if result.returncode != 0 and result.stderr:
-            logger.warning(f"Mubeng returned non-zero ({result.returncode}): {result.stderr[:200]}")
-
-        # Read results AFTER mubeng completes
-        if temp_output_path.exists():
-            with open(temp_output_path, "r") as f:
-                live_proxy_urls = [line.strip() for line in f if line.strip()]
-        else:
-            live_proxy_urls = []
-
-        # Enrich the live proxies found in this chunk
-        proxy_data_map = {f"{p['host']}:{p['port']}": p for p in proxy_chunk}
-        for proxy_url in live_proxy_urls:
-            match = re.search(r"://(.*?:\d+)", proxy_url)
-            if match and (host_port := match.group(1)) in proxy_data_map:
-                live_proxies_in_chunk.append(proxy_data_map[host_port])
-
-        logger.info(f"Chunk liveness check: {len(live_proxies_in_chunk)}/{chunk_size} proxies alive")
-
-        # Check anonymity level for each live proxy
-        if live_proxies_in_chunk:
-            logger.info(f"Checking anonymity for {len(live_proxies_in_chunk)} live proxies...")
-            for proxy in live_proxies_in_chunk:
-                enrich_proxy_with_anonymity(proxy, timeout=10)
-
-            # Count anonymity levels
-            anon_counts = {}
-            for p in live_proxies_in_chunk:
-                level = p.get("anonymity", "Unknown")
-                anon_counts[level] = anon_counts.get(level, 0) + 1
-            logger.info(f"Anonymity check complete: {anon_counts}")
-
-            # Filter out proxies where exit_ip is in same /24 subnet as our real IP
-            # (proxy not actually working, just routing through local connection)
-            real_ip = get_real_ip()
-            if real_ip:
-                # Extract /24 subnet (first 3 octets)
-                real_ip_prefix = ".".join(real_ip.split(".")[:3])
-                before_filter = len(live_proxies_in_chunk)
-                live_proxies_in_chunk = [
-                    p for p in live_proxies_in_chunk
-                    if p.get("exit_ip") and not p.get("exit_ip", "").startswith(real_ip_prefix + ".")
-                ]
-                filtered = before_filter - len(live_proxies_in_chunk)
-                if filtered > 0:
-                    logger.info(f"Filtered {filtered} proxies with exit_ip in same /24 as real IP {real_ip_prefix}.x (not actually proxying)")
-
-        # Quality check stage: Only check non-transparent proxies
-        quality_candidates = [
-            p for p in live_proxies_in_chunk
-            if p.get("anonymity") not in ("Transparent", "1")
-        ]
-
-        if quality_candidates:
-            logger.info(f"Checking quality for {len(quality_candidates)} non-transparent proxies...")
-            for proxy in quality_candidates:
-                enrich_proxy_with_quality(proxy, timeout=60)
-
-            # Count quality results
-            ip_passed = sum(1 for p in quality_candidates if p.get("ip_check_passed"))
-            target_passed = sum(1 for p in quality_candidates if p.get("target_passed"))
-            both_passed = sum(
-                1 for p in quality_candidates
-                if p.get("ip_check_passed") and p.get("target_passed")
-            )
-            logger.info(
-                f"Quality check complete: {both_passed}/{len(quality_candidates)} passed both checks "
-                f"(IP: {ip_passed}, Target: {target_passed})"
-            )
-
-    except subprocess.TimeoutExpired:
-        logger.error(f"Mubeng check timed out after 120s for chunk of {chunk_size} proxies")
+        r = get_redis_client()
+        r.setex(f"proxy_refresh:{job_id}:status", PROGRESS_KEY_TTL, "COMPLETE")
+        r.setex(f"proxy_refresh:{job_id}:completed_at", PROGRESS_KEY_TTL, int(time.time()))
+        r.setex(f"proxy_refresh:{job_id}:result_count", PROGRESS_KEY_TTL, result_count)
+        logger.info(f"Job {job_id} marked as COMPLETE with {result_count} proxies")
     except Exception as e:
-        logger.error(f"Mubeng check failed for a chunk: {e}")
-    finally:
-        temp_input_path.unlink(missing_ok=True)
-        temp_output_path.unlink(missing_ok=True)
-
-    # Increment completed chunks counter for progress tracking
-    if job_id:
-        try:
-            r = get_redis_client()
-            completed = r.incr(f"proxy_refresh:{job_id}:completed_chunks")
-            r.setex(f"proxy_refresh:{job_id}:status", PROGRESS_KEY_TTL, "PROCESSING")
-            logger.debug(f"Job {job_id}: chunk completed ({completed} total)")
-        except Exception as e:
-            logger.warning(f"Failed to update Redis progress: {e}")
-
-    return live_proxies_in_chunk
+        logger.warning(f"Failed to update Redis completion status: {e}")
 
 
 @celery_app.task
@@ -263,85 +359,25 @@ def process_check_results_task(results: List[List[Dict[str, Any]]], job_id: str 
     Callback task that collects results from all chunk tasks,
     combines them, and saves the final master list.
 
-    Logs quality check statistics but does not filter by quality.
-    Users can filter the live_proxies.json file based on ip_check_passed/target_passed fields.
-
     Args:
         results: List of results from all chunk tasks
         job_id: Job ID for Redis progress tracking (from dispatcher)
     """
     logger.info(f"Processing results from all proxy check workers (job_id: {job_id})...")
-    all_live_proxies = [proxy for chunk_result in results for proxy in chunk_result if proxy]
 
-    # Filter out Transparent proxies (anonymity level 1) - they don't hide your IP
-    before_filter = len(all_live_proxies)
-    all_live_proxies = [
-        p for p in all_live_proxies
-        if p.get("anonymity") not in ("Transparent", "1")
-    ]
-    filtered_count = before_filter - len(all_live_proxies)
-    if filtered_count > 0:
-        logger.info(f"Filtered out {filtered_count} Transparent proxies (don't hide IP).")
+    all_proxies = _flatten_and_filter_results(results)
 
-    if not all_live_proxies:
+    if not all_proxies:
         logger.warning("No live proxies were found across all chunks.")
-        # Mark job as complete even with no results
-        if job_id:
-            try:
-                r = get_redis_client()
-                r.setex(f"proxy_refresh:{job_id}:status", PROGRESS_KEY_TTL, "COMPLETE")
-                r.setex(f"proxy_refresh:{job_id}:completed_at", PROGRESS_KEY_TTL, int(time.time()))
-                r.setex(f"proxy_refresh:{job_id}:result_count", PROGRESS_KEY_TTL, 0)
-            except Exception as e:
-                logger.warning(f"Failed to update Redis completion status: {e}")
+        _mark_job_complete(job_id, 0)
         return "Completed: No live proxies found."
 
-    # Log quality check statistics (if quality checks were performed)
-    quality_checked = [p for p in all_live_proxies if "quality_checked_at" in p]
-    if quality_checked:
-        ip_passed = sum(1 for p in quality_checked if p.get("ip_check_passed"))
-        target_passed = sum(1 for p in quality_checked if p.get("target_passed"))
-        both_passed = sum(
-            1 for p in quality_checked
-            if p.get("ip_check_passed") and p.get("target_passed")
-        )
-        logger.info(
-            f"Quality statistics: {len(quality_checked)} proxies checked. "
-            f"Passed both checks: {both_passed}, "
-            f"IP check: {ip_passed}, "
-            f"Target only: {target_passed}"
-        )
-    else:
-        logger.info("No quality checks were performed on proxies.")
+    _log_quality_statistics(all_proxies)
+    sorted_proxies = sorted(all_proxies, key=lambda p: p.get("timeout", 999))
+    _save_proxy_files(sorted_proxies)
+    _mark_job_complete(job_id, len(sorted_proxies))
 
-    # Sort by timeout (speed)
-    all_live_proxies.sort(key=lambda p: p.get("timeout", 999))
-
-    json_output = PROXIES_DIR / "live_proxies.json"
-    txt_output = PROXIES_DIR / "live_proxies.txt"
-
-    # Overwrite the master files with the new, complete list
-    with open(json_output, "w") as f:
-        json.dump(all_live_proxies, f, indent=2)
-    with open(txt_output, "w") as f:
-        for proxy in all_live_proxies:
-            protocol = proxy.get("protocol", "http")
-            f.write(f"{protocol}://{proxy['host']}:{proxy['port']}\n")
-
-    logger.info(f"Successfully saved {len(all_live_proxies)} live proxies from all workers.")
-
-    # Mark job as complete with result count
-    if job_id:
-        try:
-            r = get_redis_client()
-            r.setex(f"proxy_refresh:{job_id}:status", PROGRESS_KEY_TTL, "COMPLETE")
-            r.setex(f"proxy_refresh:{job_id}:completed_at", PROGRESS_KEY_TTL, int(time.time()))
-            r.setex(f"proxy_refresh:{job_id}:result_count", PROGRESS_KEY_TTL, len(all_live_proxies))
-            logger.info(f"Job {job_id} marked as COMPLETE with {len(all_live_proxies)} proxies")
-        except Exception as e:
-            logger.warning(f"Failed to update Redis completion status: {e}")
-
-    return f"Completed: Saved {len(all_live_proxies)} live proxies."
+    return f"Completed: Saved {len(sorted_proxies)} live proxies."
 
 
 @celery_app.task

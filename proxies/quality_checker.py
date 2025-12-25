@@ -1,12 +1,12 @@
 """
-Proxy Quality Checker - Tests proxies against Google and target sites.
+Proxy Quality Checker - Tests proxies against IP services and target sites.
 
-Checks if proxies work with specific target sites and detects Google captchas.
+Checks if proxies work with IP check services and target sites (e.g., imot.bg).
 This complements the basic liveness checks by verifying proxies work with
-the actual sites we intend to scrape (e.g., imot.bg).
+the actual sites we intend to scrape.
 
 Features:
-1. Google captcha detection - identifies when Google blocks proxy traffic
+1. IP service check - verifies proxy connectivity via multiple IP services
 2. Target site validation - ensures proxy works with imot.bg or other sites
 3. Combined quality check - returns comprehensive proxy quality metrics
 4. Integration function - enriches proxy dicts with quality data
@@ -17,19 +17,20 @@ Usage:
     checker = QualityChecker(timeout=15)
 
     # Individual checks
-    google_ok = checker.check_google("http://1.2.3.4:8080")
+    passed, exit_ip = checker.check_ip_service("http://1.2.3.4:8080")
     target_ok = checker.check_target_site("http://1.2.3.4:8080", "https://www.imot.bg")
 
     # Combined check
     results = checker.check_all("http://1.2.3.4:8080")
-    # Returns: {"google_passed": bool, "target_passed": bool}
+    # Returns: {"ip_check_passed": bool, "ip_check_exit_ip": str, "target_passed": bool}
 
     # Enrich proxy dict
     proxy = {"host": "1.2.3.4", "port": 8080, "protocol": "http"}
     enriched = enrich_proxy_with_quality(proxy, timeout=15)
-    # Returns proxy with added: google_passed, target_passed, quality_checked_at
+    # Returns proxy with added: ip_check_passed, ip_check_exit_ip, target_passed, quality_checked_at
 """
 
+import json
 import logging
 import time
 from typing import Optional
@@ -66,10 +67,10 @@ DEFAULT_TIMEOUT = 60
 
 class QualityChecker:
     """
-    Checks proxy quality against Google and target sites.
+    Checks proxy quality against IP services and target sites.
 
     This class provides methods to validate that proxies work with specific
-    sites (Google, imot.bg) and aren't triggering captchas or blocks.
+    sites (IP check services, imot.bg) and aren't leaking the real IP.
 
     Attributes:
         timeout: Request timeout in seconds for all checks
@@ -84,6 +85,87 @@ class QualityChecker:
         """
         self.timeout = timeout
         self._user_agent = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
+
+    def _fetch_ip_from_service(self, proxy_url: str, service: dict) -> str | None:
+        """
+        Make HTTP request to IP check service via proxy and parse response.
+
+        Args:
+            proxy_url: Full proxy URL (e.g., "http://1.2.3.4:8080")
+            service: Service config dict with 'url', 'type', and optional 'key'
+
+        Returns:
+            Exit IP string if successful, None on failure
+        """
+        try:
+            with httpx.Client(
+                proxy=proxy_url,
+                timeout=self.timeout,
+                follow_redirects=True,
+            ) as client:
+                response = client.get(
+                    service["url"],
+                    headers={"User-Agent": self._user_agent},
+                )
+
+            if response.status_code != 200:
+                logger.debug(
+                    f"Proxy {proxy_url} failed {service['url']}: "
+                    f"status {response.status_code}"
+                )
+                return None
+
+            # Parse response based on type
+            if service["type"] == "json":
+                try:
+                    data = response.json()
+                    return data.get(service.get("key", "ip"))
+                except json.JSONDecodeError:
+                    return None
+            else:
+                return response.text.strip()
+
+        except httpx.TimeoutException:
+            logger.debug(f"Proxy {proxy_url} timed out on {service['url']}")
+            return None
+        except httpx.ProxyError as e:
+            logger.debug(f"Proxy {proxy_url} error on {service['url']}: {e}")
+            return None
+        except Exception as e:
+            logger.debug(
+                f"Proxy {proxy_url} unexpected error on {service['url']}: {e}"
+            )
+            return None
+
+    def _is_valid_proxy_ip(self, exit_ip: str) -> bool:
+        """
+        Validate that exit IP is a valid proxy IP (not our real IP).
+
+        Args:
+            exit_ip: The IP address returned by the service
+
+        Returns:
+            True if valid proxy IP, False if invalid or matches our real IP
+        """
+        # Validate it looks like an IP
+        if not exit_ip or len(exit_ip) < 7 or "." not in exit_ip:
+            return False
+
+        # CRITICAL: Reject if exit_ip matches our real IP (proxy not working)
+        global _cached_real_ip
+        if _cached_real_ip is None:
+            _cached_real_ip = get_real_ip()
+
+        if _cached_real_ip:
+            real_ip_prefix = ".".join(_cached_real_ip.split(".")[:3])
+            if exit_ip.startswith(real_ip_prefix + "."):
+                logger.warning(
+                    f"Exit IP {exit_ip} matches our real IP subnet - "
+                    f"proxy not working, rejecting"
+                )
+                return False
+
+        return True
 
     def check_ip_service(self, proxy_url: str) -> tuple[bool, str | None]:
         """
@@ -109,68 +191,12 @@ class QualityChecker:
             '1.2.3.4'
         """
         for service in IP_CHECK_SERVICES:
-            try:
-                with httpx.Client(
-                    proxy=proxy_url,
-                    timeout=self.timeout,
-                    follow_redirects=True,
-                ) as client:
-                    response = client.get(
-                        service["url"],
-                        headers={"User-Agent": self._user_agent},
-                    )
-
-                if response.status_code != 200:
-                    logger.debug(
-                        f"Proxy {proxy_url} failed {service['url']}: "
-                        f"status {response.status_code}"
-                    )
-                    continue
-
-                # Parse response based on type
-                if service["type"] == "json":
-                    import json
-                    try:
-                        data = response.json()
-                        exit_ip = data.get(service.get("key", "ip"))
-                    except json.JSONDecodeError:
-                        continue
-                else:
-                    exit_ip = response.text.strip()
-
-                # Validate it looks like an IP
-                if exit_ip and len(exit_ip) >= 7 and "." in exit_ip:
-                    # CRITICAL: Reject if exit_ip matches our real IP (proxy not working)
-                    global _cached_real_ip
-                    if _cached_real_ip is None:
-                        _cached_real_ip = get_real_ip()
-
-                    if _cached_real_ip:
-                        real_ip_prefix = ".".join(_cached_real_ip.split(".")[:3])
-                        if exit_ip.startswith(real_ip_prefix + "."):
-                            logger.warning(
-                                f"Proxy {proxy_url} returned our real IP {exit_ip} - "
-                                f"proxy not working, rejecting"
-                            )
-                            return False, None
-
-                    logger.debug(
-                        f"Proxy {proxy_url} passed IP check via {service['url']}: {exit_ip}"
-                    )
-                    return True, exit_ip
-
-            except httpx.TimeoutException:
-                logger.debug(f"Proxy {proxy_url} timed out on {service['url']}")
-                continue
-            except httpx.ProxyError as e:
-                logger.debug(f"Proxy {proxy_url} error on {service['url']}: {e}")
-                continue
-            except Exception as e:
+            exit_ip = self._fetch_ip_from_service(proxy_url, service)
+            if exit_ip and self._is_valid_proxy_ip(exit_ip):
                 logger.debug(
-                    f"Proxy {proxy_url} unexpected error on {service['url']}: {e}"
+                    f"Proxy {proxy_url} passed IP check via {service['url']}: {exit_ip}"
                 )
-                continue
-
+                return True, exit_ip
         logger.debug(f"Proxy {proxy_url} failed all IP check services")
         return False, None
 
@@ -302,17 +328,17 @@ def enrich_proxy_with_quality(
     """
     Add quality check results to a proxy dictionary.
 
-    Performs comprehensive quality checks (Google captcha detection,
-    target site validation) and adds the results to the proxy dict.
+    Performs IP service check and adds the results to the proxy dict.
 
     Args:
         proxy: Proxy dict with 'protocol', 'host', 'port' keys
-        timeout: Request timeout in seconds (default: 15)
+        timeout: Request timeout in seconds (default: 60)
 
     Returns:
         Same proxy dict with added fields:
-        - google_passed: bool
-        - target_passed: bool
+        - ip_check_passed: bool
+        - ip_check_exit_ip: str | None
+        - target_passed: bool | None
         - quality_checked_at: float (Unix timestamp)
 
     Example:
@@ -323,8 +349,9 @@ def enrich_proxy_with_quality(
             'host': '1.2.3.4',
             'port': 8080,
             'protocol': 'http',
-            'google_passed': True,
-            'target_passed': True,
+            'ip_check_passed': True,
+            'ip_check_exit_ip': '5.6.7.8',
+            'target_passed': None,
             'quality_checked_at': 1703123456.789
         }
     """
