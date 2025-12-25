@@ -138,7 +138,7 @@ Test only waited 5 minutes → FAIL
 - [x] Test with imot.bg (price: 170400 EUR, area: 71 sqm, floor: 4/6)
 - [x] Migrate imot_scraper.py to Scrapling (2025-12-25, 17 tests pass)
 - [x] Migrate bazar_scraper.py to Scrapling (2025-12-25)
-- [ ] Enable adaptive mode with baseline selectors
+- [x] Enable adaptive mode with baseline selectors (2025-12-25)
 - [ ] Test StealthyFetcher with mubeng proxy
 - [ ] Set up Ollama LLM for description extraction
 

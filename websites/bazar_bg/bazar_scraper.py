@@ -26,6 +26,7 @@ class BazarBgScraper(ScraplingMixin, BaseSiteScraper):
         self.site_name = "bazar.bg"
         self.base_url = "https://bazar.bg"
         self.search_base = "https://bazar.bg/obiavi/apartamenti/sofia"
+        self.adaptive_mode = True  # Enable adaptive matching for selector resilience
 
     # =========================================================================
     # PUBLIC METHODS (required by BaseSiteScraper)
@@ -134,7 +135,13 @@ class BazarBgScraper(ScraplingMixin, BaseSiteScraper):
         listing_urls = []
 
         # Find all listing links using the CSS selector
-        for link in self.css(page, sel.LISTING_LINK):
+        for link in self.css(
+            page,
+            sel.LISTING_LINK,
+            identifier="bazar_listing_links",
+            auto_save=True,
+            auto_match=self.adaptive_mode,
+        ):
             href = self.get_attr(link, sel.LISTING_URL_ATTR)
             if not href:
                 continue
@@ -175,7 +182,13 @@ class BazarBgScraper(ScraplingMixin, BaseSiteScraper):
                 return True
 
         # Method 2: Check if no listings on page
-        listing_links = self.css(page, sel.LISTING_LINK)
+        listing_links = self.css(
+            page,
+            sel.LISTING_LINK,
+            identifier="bazar_pagination",
+            auto_save=True,
+            auto_match=self.adaptive_mode,
+        )
         if len(listing_links) == 0:
             logger.debug("Last page detected: no listings found")
             return True
@@ -516,7 +529,13 @@ class BazarBgScraper(ScraplingMixin, BaseSiteScraper):
         images = []
 
         # Look for images in img tags
-        for img in self.css(page, "img"):
+        for img in self.css(
+            page,
+            "img",
+            identifier="bazar_images",
+            auto_save=True,
+            auto_match=self.adaptive_mode,
+        ):
             src = self.get_attr(img, "src") or self.get_attr(img, "data-src") or ""
 
             if re.search(sel.IMAGE_HOST_PATTERN, src):
@@ -526,7 +545,13 @@ class BazarBgScraper(ScraplingMixin, BaseSiteScraper):
                     images.append(src)
 
         # Also look in anchor tags (carousel/lightbox)
-        for link in self.css(page, "a[href]"):
+        for link in self.css(
+            page,
+            "a[href]",
+            identifier="bazar_image_links",
+            auto_save=True,
+            auto_match=self.adaptive_mode,
+        ):
             href = self.get_attr(link, "href")
             if re.search(sel.IMAGE_HOST_PATTERN, href):
                 if any(ext in href.lower() for ext in sel.IMAGE_EXTENSIONS):
@@ -540,12 +565,24 @@ class BazarBgScraper(ScraplingMixin, BaseSiteScraper):
     def _extract_title(self, page: Adaptor, url: str) -> Optional[str]:
         """Extract listing title."""
         # Try meta title
-        title_tag = self.css_first(page, "title")
+        title_tag = self.css_first(
+            page,
+            "title",
+            identifier="bazar_title",
+            auto_save=True,
+            auto_match=self.adaptive_mode,
+        )
         if title_tag:
             return self.get_text(title_tag)
 
         # Try h1
-        h1 = self.css_first(page, "h1")
+        h1 = self.css_first(
+            page,
+            "h1",
+            identifier="bazar_h1",
+            auto_save=True,
+            auto_match=self.adaptive_mode,
+        )
         if h1:
             return self.get_text(h1)
 
@@ -555,7 +592,13 @@ class BazarBgScraper(ScraplingMixin, BaseSiteScraper):
     def _extract_description(self, page: Adaptor) -> Optional[str]:
         """Extract listing description."""
         # Find text blocks containing property keywords
-        for div in self.css(page, "div"):
+        for div in self.css(
+            page,
+            "div",
+            identifier="bazar_description",
+            auto_save=True,
+            auto_match=self.adaptive_mode,
+        ):
             text = self.get_text(div)
             if len(text) > 100 and len(text) < 5000:
                 if any(kw in text.lower() for kw in sel.DESCRIPTION_KEYWORDS):

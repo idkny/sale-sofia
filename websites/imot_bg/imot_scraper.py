@@ -26,6 +26,7 @@ class ImotBgScraper(ScraplingMixin, BaseSiteScraper):
         self.site_name = "imot.bg"
         self.base_url = "https://www.imot.bg"
         self.search_base = "https://www.imot.bg/obiavi/prodazhbi/grad-sofiya"
+        self.adaptive_mode = True  # Enable adaptive matching for selector resilience
 
     # =========================================================================
     # PUBLIC METHODS (required by BaseSiteScraper)
@@ -131,7 +132,13 @@ class ImotBgScraper(ScraplingMixin, BaseSiteScraper):
         page = self.parse(html)
         listing_urls = []
 
-        for link in self.css(page, "a[href]"):
+        for link in self.css(
+            page,
+            "a[href]",
+            identifier="imot_listing_links",
+            auto_save=True,
+            auto_match=self.adaptive_mode,
+        ):
             href = self.get_attr(link, "href")
 
             # Check if link matches listing pattern
@@ -196,7 +203,13 @@ class ImotBgScraper(ScraplingMixin, BaseSiteScraper):
     def _has_next_page_link(self, page: Adaptor, current_page: int) -> bool:
         """Check if link to next page exists."""
         next_page = current_page + 1
-        for link in self.css(page, "a[href]"):
+        for link in self.css(
+            page,
+            "a[href]",
+            identifier="imot_pagination",
+            auto_save=True,
+            auto_match=self.adaptive_mode,
+        ):
             href = self.get_attr(link, "href")
             if f"/p-{next_page}" in href:
                 return True
@@ -464,7 +477,13 @@ class ImotBgScraper(ScraplingMixin, BaseSiteScraper):
         images = []
 
         # Look for images in img tags
-        for img in self.css(page, "img"):
+        for img in self.css(
+            page,
+            "img",
+            identifier="imot_images",
+            auto_save=True,
+            auto_match=self.adaptive_mode,
+        ):
             src = self.get_attr(img, "src") or self.get_attr(img, "data-src") or ""
 
             if re.search(sel.IMAGE_HOST_PATTERN, src):
@@ -474,7 +493,13 @@ class ImotBgScraper(ScraplingMixin, BaseSiteScraper):
                     images.append(src)
 
         # Also look in anchor tags (carousel/lightbox)
-        for link in self.css(page, "a[href]"):
+        for link in self.css(
+            page,
+            "a[href]",
+            identifier="imot_image_links",
+            auto_save=True,
+            auto_match=self.adaptive_mode,
+        ):
             href = self.get_attr(link, "href")
             if re.search(sel.IMAGE_HOST_PATTERN, href):
                 if any(ext in href.lower() for ext in sel.IMAGE_EXTENSIONS):
@@ -488,12 +513,24 @@ class ImotBgScraper(ScraplingMixin, BaseSiteScraper):
     def _extract_title(self, page: Adaptor, url: str) -> Optional[str]:
         """Extract listing title."""
         # Try meta title
-        title_tag = self.css_first(page, "title")
+        title_tag = self.css_first(
+            page,
+            "title",
+            identifier="imot_title",
+            auto_save=True,
+            auto_match=self.adaptive_mode,
+        )
         if title_tag:
             return self.get_text(title_tag)
 
         # Try h1
-        h1 = self.css_first(page, "h1")
+        h1 = self.css_first(
+            page,
+            "h1",
+            identifier="imot_h1",
+            auto_save=True,
+            auto_match=self.adaptive_mode,
+        )
         if h1:
             return self.get_text(h1)
 
@@ -503,7 +540,13 @@ class ImotBgScraper(ScraplingMixin, BaseSiteScraper):
     def _extract_description(self, page: Adaptor) -> Optional[str]:
         """Extract listing description."""
         # Find text blocks containing property keywords
-        for div in self.css(page, "div"):
+        for div in self.css(
+            page,
+            "div",
+            identifier="imot_description",
+            auto_save=True,
+            auto_match=self.adaptive_mode,
+        ):
             text = self.get_text(div)
             if len(text) > 100 and len(text) < 2000:
                 if any(kw in text.lower() for kw in sel.DESCRIPTION_KEYWORDS):
@@ -525,7 +568,13 @@ class ImotBgScraper(ScraplingMixin, BaseSiteScraper):
             agent_phone = phone_match.group(0).replace(" ", "")
 
         # Look for agency subdomain links
-        for link in self.css(page, "a[href]"):
+        for link in self.css(
+            page,
+            "a[href]",
+            identifier="imot_contact_links",
+            auto_save=True,
+            auto_match=self.adaptive_mode,
+        ):
             href = self.get_attr(link, "href")
             if ".imot.bg" in href and "www.imot.bg" not in href:
                 agency_match = re.search(sel.AGENCY_SUBDOMAIN_PATTERN, href)
