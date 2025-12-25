@@ -153,10 +153,18 @@ def main():
         print(f"WARN: Dispatcher state: {result.state}")
 
     # Step 5: Wait for chunk processing (Mubeng checks take time)
-    print(f"\n[Step 5] Waiting for Mubeng workers to process chunks...")
-    print("(29 chunks × ~60s each ÷ 4 workers = ~7-10 minutes)")
+    # DYNAMIC TIMEOUT: Calculate based on actual proxy count
+    # See docs/specs/105_CHUNK_PROCESSING_TIMING_BUG.md for details
+    chunk_size = 100
+    workers = 4
+    time_per_chunk = 90  # seconds (conservative: includes mubeng + anonymity + quality checks)
+    num_chunks = (len(proxies) + chunk_size - 1) // chunk_size
+    num_rounds = (num_chunks + workers - 1) // workers
+    calculated_timeout = num_rounds * time_per_chunk * 1.5  # 50% safety margin
+    timeout = max(calculated_timeout, 300)  # minimum 5 minutes
 
-    timeout = 900  # 15 minutes (29 chunks, each 45-95s, 4 workers)
+    print(f"\n[Step 5] Waiting for Mubeng workers to process chunks...")
+    print(f"(Dynamic timeout: {len(proxies)} proxies → {num_chunks} chunks → {num_rounds} rounds → {int(timeout)}s timeout)")
     start_time = time.time()
     check_interval = 15  # Check every 15 seconds
 
