@@ -79,69 +79,145 @@ archive/research/  archive/specs/          (code supersedes)
 
 ## Session History
 
-### 2025-12-25 (Session 4 - Phase 1 Tool Tests & Reference Specs)
+### 2025-12-25 (Session 8 - Event-Based Completion)
 
 | Task | Status |
 |------|--------|
-| Test 1.1: Redis connectivity | Complete - v7.0.15 |
-| Test 1.2: Celery worker start/stop | Complete - 5 tasks registered |
-| Test 1.3: Mubeng SERVER mode | Complete - routes requests, auto-rotates |
-| Test 1.4: Mubeng CHECKER mode | Complete - 16/20 alive, filters dead |
-| Test 1.5: PSC binary | Complete - scraped 2,847 proxies |
-| Create AutoBiz comparison spec | Complete - 103_AUTOBIZ_PROXY_REFERENCE.md |
-| Create proxy format issues spec | Complete - 104_PROXY_FORMAT_ISSUES.md |
+| Switch to event-based completion | Complete |
+| Test with actual orchestrator code | Complete - VERIFIED |
 
-**Summary**: All Phase 1 isolated component tests PASSED. Created two critical reference specs: (1) 103 comparing AutoBiz vs current implementation - found current is MORE complete than AutoBiz with PTY wrapper, inline quality checks, better filtering. (2) 104 documenting potential proxy format bugs for Playwright/Camoufox.
+**Summary**: Implemented and VERIFIED event-based completion using Celery chord result. Dispatcher now returns `chord_id`, orchestrator uses `AsyncResult(chord_id).get()` to block until done. Created `test_orchestrator_event_based.py` to verify actual production code path works.
 
-**Key Insights for Next Instance**:
-1. **All tools work in isolation** - Redis, Celery, Mubeng (server+checker), PSC all functional
-2. **Mubeng has 2 modes**: SERVER (`-a localhost:8089`) for browser routing, CHECKER (`--check`) for liveness
-3. **Current > AutoBiz**: We have PTY wrapper, inline anonymity/quality checks, /24 subnet filtering
-4. **Potential bugs to verify** (spec 104): `validate_proxy()` includes protocol in server field, missing Camoufox converter
-5. **Next**: Phase 2 data flow tests (verify handoffs between tools)
+**Changes Made**:
+1. `proxies/tasks.py:124-127`: Changed `.delay()` to `.apply_async()`, returns `chord_id`
+2. `orchestrator.py:533-597`: Uses `AsyncResult(chord_id).get()` with background progress thread
 
-**Specs Created**:
-- `docs/specs/103_AUTOBIZ_PROXY_REFERENCE.md` - Side-by-side code comparison
-- `docs/specs/104_PROXY_FORMAT_ISSUES.md` - Format requirements by tool
+**Test Results**:
+- 35 chunks processed in 21 minutes
+- chord_id correctly extracted and used
+- Progress shown: 0% → 100%
+- 79 usable proxies at completion
+
+**Spec Archived**: `107_REDIS_PROGRESS_TRACKING.md` → `archive/specs/`
 
 ---
 
-### 2025-12-24 (Session 3 - P0 Bugs & Debugging Workflow)
+### 2025-12-25 (Session 7 - Redis Progress Tracking Implementation)
 
 | Task | Status |
 |------|--------|
-| Run stress tests | Complete - Test 5 PASSED |
-| Verify real IP protection | Complete - proxy-level verified |
-| Implement browser proxy enforcement | Complete - 3 files updated |
-| Create debugging workflow for Celery/Mubeng/PSC | Complete |
-| Organize docs into workflow structure | Complete |
+| Review orchestrator.py for timing bugs | Complete |
+| Review tasks.py for dispatcher patterns | Complete |
+| Create spec 107 (Redis Progress Tracking) | Complete |
+| Implement Redis progress tracking | PARTIAL - polling works, needs event-based |
+| Test full pipeline | FAILED - timeout, chunks took longer than expected |
 
-**Summary**: Resolved all P0 bugs. Ran stress tests (no orphan mubeng processes). Verified proxy-level IP protection. Added browser-level proxy enforcement (browsers_main.py, firefox.py, chromium.py). Created comprehensive debugging workflow in TASKS.md with spec 101_DEBUG_CELERY_MUBENG_PROXIES.md. Organized 13 docs into archive/docs/, moved active specs to docs/specs/.
+**Summary**: Implemented Redis-based progress tracking but discovered polling is unreliable. Chunks can take 5-11 minutes EACH (not 45-95s as expected), causing tests to timeout. Need to switch to event-based completion using Celery chord result.
 
-**Files Changed**:
-- `browsers_main.py:147-152` - reject if no proxy
-- `browsers/strategies/firefox.py:17-19` - reject if proxy=None
-- `browsers/strategies/chromium.py:19-21` - reject if proxy=None
-- `docs/specs/101_DEBUG_CELERY_MUBENG_PROXIES.md` - debugging spec
-- `docs/specs/102_PROXY_SYSTEM_SPECS.md` - architecture spec
+**What Was Implemented**:
+
+1. **`proxies/tasks.py` changes**:
+   - Added `get_redis_client()` helper (lines 27-37)
+   - `check_scraped_proxies_task` now uses `bind=True` and sets Redis keys:
+     - `proxy_refresh:{job_id}:total_chunks`
+     - `proxy_refresh:{job_id}:completed_chunks` (starts at 0)
+     - `proxy_refresh:{job_id}:status` (DISPATCHED → PROCESSING → COMPLETE)
+     - `proxy_refresh:{job_id}:started_at`
+   - Returns `{"job_id": job_id, "total_chunks": N, "status": "DISPATCHED"}`
+   - `check_proxy_chunk_task` increments `completed_chunks` on completion
+   - `process_check_results_task` sets `status=COMPLETE`, `completed_at`, `result_count`
+
+2. **`orchestrator.py` changes**:
+   - Added `_get_redis_client()` method (lines 46-55)
+   - Added `get_refresh_progress(job_id)` method (lines 57-94)
+   - Updated `wait_for_refresh_completion()` to:
+     - Extract job_id from dispatcher result
+     - Poll Redis for progress (completed/total, status)
+     - Show progress: `[PROGRESS] 15/30 chunks (50%)`
+
+**What Was Verified**:
+- Redis keys ARE created correctly
+- Chunk counter DOES increment (saw 29→30 during test)
+- Status transitions work (DISPATCHED→PROCESSING)
+- Callback sets COMPLETE (not verified - worker killed before callback ran)
+
+**Why Test Failed**:
+- Test calculated 1080s timeout for 30 chunks
+- Some chunks took 686s (11+ min) each
+- Total time needed: ~18+ minutes
+- Test killed worker at timeout, callback never ran
+
+**The Root Problem (discovered during session)**:
+Polling with `time.sleep(15)` is unreliable because:
+1. We can't predict how long chunks will take
+2. Network latency varies
+3. Even "dynamic" timeout can be wrong
+4. If we timeout, we kill the worker and lose all work
+
+**The Solution (NOT YET IMPLEMENTED)**:
+Use Celery's chord result to BLOCK until callback completes:
+
+```python
+# In tasks.py check_scraped_proxies_task:
+chord_result = (parallel_tasks | callback).apply_async()
+return {"job_id": job_id, "chord_id": chord_result.id, ...}
+
+# In orchestrator.py wait_for_refresh_completion:
+from celery.result import AsyncResult
+chord_result = AsyncResult(chord_id, app=celery_app)
+result = chord_result.get(timeout=None)  # Block until done - no polling!
+```
+
+This is reliable because:
+- No timeout needed - we wait until actually done
+- Celery handles all coordination internally
+- Progress can still be shown via Redis (optional)
+
+**Files Changed This Session**:
+- `proxies/tasks.py` - Redis progress tracking (read lines 1-130, 238-260, 285-345)
+- `orchestrator.py` - Progress monitoring (read lines 39-94, 451-576)
+- `docs/specs/107_REDIS_PROGRESS_TRACKING.md` - Created spec
+
+**Files to Read Next Session**:
+1. `docs/specs/107_REDIS_PROGRESS_TRACKING.md` - Full spec with code examples
+2. `proxies/tasks.py:83-126` - Dispatcher with Redis tracking
+3. `proxies/tasks.py:246-256` - Chunk completion increment
+4. `proxies/tasks.py:332-343` - Callback completion marking
+5. `orchestrator.py:451-576` - Wait for refresh (needs event-based fix)
+
+**Exact Changes Needed Next Session**:
+1. In `tasks.py:check_scraped_proxies_task`:
+   - Change `(parallel_tasks | callback).delay()` to `chord_result = (parallel_tasks | callback).apply_async()`
+   - Add `"chord_id": chord_result.id` to return dict
+
+2. In `orchestrator.py:wait_for_refresh_completion`:
+   - After extracting job_id from result, also extract chord_id
+   - Replace polling loop with `AsyncResult(chord_id).get(timeout=None)`
+   - Keep Redis progress for UI/logging only
 
 ---
 
-### 2025-12-24 (Session 2 - Stress Test Infrastructure)
+### 2025-12-25 (Session 6 - Full Pipeline Test Complete)
 
 | Task | Status |
 |------|--------|
-| Study reference Mubeng/Celery implementations | Complete |
-| Create stress test suite | Complete |
-| Run stress tests | **NOT DONE - session cut off** |
+| Test 2.3: Full pipeline end-to-end | Complete - PASSED |
 
-**Summary**: User correctly pushed back on jumping to conclusions about subprocess cleanup. Created comprehensive stress test suite in `tests/stress/` with 5 tests (critical: Test 5 for orphan detection). Tests were NOT executed before session ended.
+**Summary**: Completed Test 2.3 (full pipeline). The `scrape_and_check_chain_task` successfully orchestrates PSC → Dispatcher → Mubeng chunks → Result aggregation. Tested with 5,000 proxies → 79 live proxies (1.6% success rate).
 
-**Key Finding**: Current implementation appears BETTER than reference - has PTY wrapper, better error handling. But tests must run to verify.
+**Timing Results**:
+- PSC scrape: ~3 minutes (195s)
+- Chunk processing: ~16 minutes (978s) for 50 chunks
+- Total pipeline: ~20 minutes for 5,000 proxies
 
-**Potential Issue**: `proxies/tasks.py:124-126` - subprocess.run() may not clean up mubeng if Celery killed with SIGKILL.
+**Key Findings**:
+1. **Full pipeline works end-to-end** - Chain task correctly sequences all phases
+2. **Dynamic timeout works** - Calculated 1,755s timeout, finished in 975s
+3. **All enrichment checks run** - anonymity, exit_ip, quality all verified in output
+4. **No orphan processes** - Clean shutdown of PSC, mubeng, celery
 
-**Next**: Run `bash tests/stress/run_all_stress_tests.sh` and analyze results before any code changes.
+**Test File Created**:
+- `tests/stress/test_full_pipeline.py` - Full pipeline integration test
 
 ---
 

@@ -14,7 +14,7 @@
 | 1 | Available |
 | 2 | Available |
 
-**Session 4 Handoff (2025-12-25)**: Phase 1 tests complete. See specs 103/104 for reference implementations and format issues to investigate.
+**Session 8 (2025-12-25)**: Event-based completion DONE. Tested full pipeline: 3,873→87 proxies, PASS. Timing bug (spec 105) fully resolved.
 
 **Claim**: Add `[Instance N]` next to task before starting
 **Complete**: Add `[x]` and remove `[Instance N]` when done
@@ -65,11 +65,18 @@ Test only waited 5 minutes → FAIL
 | 10,000 | 100 | ~35 min |
 
 ### Tasks Before Production
-- [ ] Review `orchestrator.py` for hardcoded timeouts
-- [ ] Review `tasks.py` for any code that waits on dispatcher result
-- [ ] Implement dynamic timeout: `timeout = (chunks / workers) * time_per_chunk * 1.5`
-- [ ] Add progress monitoring (Redis counter or log-based)
-- [ ] Test with 5,000+ proxy mock data
+- [x] Review `orchestrator.py` for hardcoded timeouts (wait_for_refresh_completion:445-461 only waits 30s)
+- [x] Review `tasks.py` for dispatcher wait patterns (dispatcher returns immediately)
+- [x] Implement Redis progress tracking
+  - `proxies/tasks.py`: Redis keys for progress tracking
+  - `orchestrator.py`: `get_refresh_progress()` method
+- [x] Switch to event-based completion (CRITICAL - next step)
+  - Dispatcher returns chord_id: `proxies/tasks.py:124-127`
+  - Orchestrator uses `AsyncResult(chord_id).get()`: `orchestrator.py:533-597`
+  - Background thread shows progress during wait
+- [x] Test full pipeline end-to-end with event-based completion
+  - test_orchestrator_event_based.py: 35 chunks, 21min, chord_id verified
+  - Proof: `[INFO] Using chord_id ... for event-based wait`
 
 ---
 
@@ -94,7 +101,10 @@ Test only waited 5 minutes → FAIL
   - **What it tests**: PSC output format → Dispatcher parsing → Chunk splitting → Mubeng parallel workers → Result aggregation
   - **How it helps**: If Test 2.3 fails, we'll know it's NOT a data format or dispatcher issue
   - **File**: `tests/stress/test_psc_dispatcher_mubeng.py`
-- [ ] Test 2.3: Full pipeline end-to-end
+- [x] Test 2.3: Full pipeline end-to-end - PASSED (5000 proxies → 79 live, 16min chunk phase)
+  - **File**: `tests/stress/test_full_pipeline.py`
+  - **What it tests**: scrape_and_check_chain_task (PSC + dispatcher + mubeng + callback)
+  - **Timing**: PSC ~3min, chunks ~16min, total ~20min for 5000 proxies
 
 ### Phase 3: Stress Tests
 - [x] Test 3.1: Run `bash tests/stress/run_all_stress_tests.sh` - PASSED
@@ -111,6 +121,62 @@ Test only waited 5 minutes → FAIL
 - [ ] Test full proxy refresh + quality detection flow
 - [ ] Test imot.bg scraper with real listings
 - [ ] Debug/refine extraction logic
+
+---
+
+## Crawler Validation & Enhancement (P1)
+
+**Spec**: [106_CRAWLER_VALIDATION_PLAN.md](../specs/106_CRAWLER_VALIDATION_PLAN.md)
+
+### Phase 0: Scrapling Integration (NEW - Foundation Upgrade)
+- [x] Install Scrapling and verify setup (v0.2.99)
+- [x] Create `websites/scrapling_base.py` adapter
+  - Auto-encoding detection (windows-1251, UTF-8, etc.)
+  - `fetch()` with proper Bulgarian text handling
+  - `get_page_text()` for clean text extraction
+  - CSS/XPath selectors with auto_match support
+- [x] Test with imot.bg (price: 170400 EUR, area: 71 sqm, floor: 4/6)
+- [ ] Migrate imot_scraper.py to Scrapling
+- [ ] Migrate bazar_scraper.py to Scrapling
+- [ ] Enable adaptive mode with baseline selectors
+- [ ] Test StealthyFetcher with mubeng proxy
+- [ ] Set up Ollama LLM for description extraction
+
+### Phase 1: Scraper Validation
+- [ ] Create test harness (`tests/scrapers/`)
+- [ ] Validate imot.bg scraper (pagination, extraction, save)
+- [ ] Validate bazar.bg scraper (pagination, extraction, save)
+- [ ] Create validation matrix (document what works)
+
+### Phase 2: Description Extraction
+- [ ] Build `DescriptionExtractor` class (regex patterns)
+- [ ] Test extraction accuracy (target: >70%)
+- [ ] Optional: Add LLM fallback for complex descriptions
+
+### Phase 3: Change Detection & History
+- [ ] Create `scrape_history` table
+- [ ] Create `listing_changes` table (track ALL field changes)
+- [ ] Build `ChangeDetector` class
+- [ ] Integrate into scraper flow
+- [ ] Add dashboard timeline view
+
+### Phase 3.5: Cross-Site Duplicate Detection & Merging
+- [ ] Create `listing_sources` table (track which sites list property)
+- [ ] Build `PropertyFingerprinter` class (identify duplicates)
+- [ ] Build `PropertyMerger` class (smart data merging)
+- [ ] Track price discrepancies across sites
+- [ ] Add cross-site comparison view to dashboard
+
+### Phase 4: Rate Limiting & Orchestration
+- [ ] Define rate limit config per site
+- [ ] Build Redis-backed `SiteRateLimiter`
+- [ ] Build async orchestrator (parallel sites)
+- [ ] Integrate with Celery
+
+### Phase 5: Full Pipeline
+- [ ] Implement homes.bg scraper
+- [ ] E2E testing (full pipeline)
+- [ ] Add monitoring/alerting
 
 ---
 
@@ -205,3 +271,16 @@ Test only waited 5 minutes → FAIL
 - [x] Configure Claude Code hooks (`.claude/settings.json`)
   - PreToolUse hook for Write|Edit operations
   - Deny dangerous commands (rm -rf, sudo, force push)
+- [x] Add max_depth (3) and block_root_files rules to manifest
+  - Blocks files directly in docs/ (must use subdirs)
+  - Blocks paths deeper than 3 directories
+- [x] Split ARCHITECTURE.md into focused documents
+  - `ARCHITECTURE.md` - 131 lines (was 821)
+  - `DESIGN_PATTERNS.md` - 187 lines
+  - `DATA_FLOW.md` - 190 lines
+  - `ADDING_COMPONENTS.md` - 168 lines
+  - `CONVENTIONS.md` - 125 lines
+- [x] Initialize git repository
+  - Enhanced .gitignore (secrets, db, logs, proxies)
+  - Initial commit: 253 files
+  - Branch: main

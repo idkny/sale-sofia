@@ -1,0 +1,550 @@
+"""
+Scrapling-based scraper with adaptive element tracking.
+
+Provides:
+- Faster parsing than BeautifulSoup (774x in benchmarks)
+- Adaptive selectors that survive site changes
+- StealthyFetcher for anti-bot bypass
+- Integration with mubeng proxy rotation
+- Auto-encoding detection (windows-1251, UTF-8, etc.)
+
+Usage:
+    class ImotBgScraper(ScraplingMixin, BaseSiteScraper):
+        ...
+"""
+
+import hashlib
+import json
+import re
+from pathlib import Path
+from typing import List, Optional, Tuple, Union
+
+import chardet
+import httpx
+from loguru import logger
+from scrapling import Adaptor
+from scrapling.fetchers import Fetcher, StealthyFetcher
+
+# Storage for adaptive selectors
+SELECTOR_STORAGE = Path(__file__).parent.parent / "data" / "scrapling_selectors"
+SELECTOR_STORAGE.mkdir(parents=True, exist_ok=True)
+
+# Default mubeng proxy endpoint
+MUBENG_PROXY = "http://localhost:8089"
+
+# Common encodings for Bulgarian/Cyrillic sites
+CYRILLIC_ENCODINGS = ["windows-1251", "utf-8", "iso-8859-5", "koi8-r"]
+
+
+def detect_encoding(content: bytes, headers: dict = None) -> str:
+    """
+    Detect encoding from content and headers.
+
+    Priority:
+    1. HTTP Content-Type header
+    2. HTML meta charset tag
+    3. chardet auto-detection
+    4. Default to utf-8
+
+    Args:
+        content: Raw bytes from response
+        headers: HTTP response headers
+
+    Returns:
+        Detected encoding string
+    """
+    # 1. Check HTTP headers
+    if headers:
+        content_type = headers.get("content-type", "")
+        charset_match = re.search(r"charset=([^\s;]+)", content_type, re.IGNORECASE)
+        if charset_match:
+            encoding = charset_match.group(1).strip('"\'')
+            logger.debug(f"Encoding from header: {encoding}")
+            return encoding
+
+    # 2. Check HTML meta tag (look in first 1024 bytes)
+    head_content = content[:1024].decode("ascii", errors="ignore")
+
+    # <meta charset="...">
+    meta_match = re.search(r'<meta[^>]+charset=["\']?([^"\'\s>]+)', head_content, re.IGNORECASE)
+    if meta_match:
+        encoding = meta_match.group(1)
+        logger.debug(f"Encoding from meta charset: {encoding}")
+        return encoding
+
+    # <meta http-equiv="Content-Type" content="...; charset=...">
+    http_equiv_match = re.search(
+        r'<meta[^>]+content=["\'][^"\']*charset=([^"\'\s;]+)',
+        head_content,
+        re.IGNORECASE
+    )
+    if http_equiv_match:
+        encoding = http_equiv_match.group(1)
+        logger.debug(f"Encoding from meta http-equiv: {encoding}")
+        return encoding
+
+    # 3. Auto-detect with chardet
+    detected = chardet.detect(content[:10000])  # Sample first 10KB
+    if detected and detected.get("encoding"):
+        confidence = detected.get("confidence", 0)
+        encoding = detected["encoding"]
+        logger.debug(f"Encoding from chardet: {encoding} (confidence: {confidence:.0%})")
+        if confidence > 0.7:
+            return encoding
+
+    # 4. Default
+    logger.debug("Encoding defaulting to utf-8")
+    return "utf-8"
+
+
+def fetch_with_encoding(
+    url: str,
+    proxy: Optional[str] = None,
+    timeout: int = 30,
+    headers: dict = None,
+) -> Tuple[str, str]:
+    """
+    Fetch URL with automatic encoding detection.
+
+    Args:
+        url: Target URL
+        proxy: Optional proxy URL
+        timeout: Request timeout in seconds
+        headers: Optional custom headers
+
+    Returns:
+        Tuple of (decoded_html, detected_encoding)
+    """
+    default_headers = {
+        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36",
+        "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
+        "Accept-Language": "bg-BG,bg;q=0.9,en;q=0.8",
+    }
+    if headers:
+        default_headers.update(headers)
+
+    with httpx.Client(
+        timeout=timeout,
+        follow_redirects=True,
+        proxy=proxy,
+    ) as client:
+        response = client.get(url, headers=default_headers)
+        response.raise_for_status()
+
+        # Get raw bytes
+        content = response.content
+
+        # Detect encoding
+        encoding = detect_encoding(content, dict(response.headers))
+
+        # Decode
+        try:
+            html = content.decode(encoding)
+        except (UnicodeDecodeError, LookupError):
+            # Fallback: try common Cyrillic encodings
+            for enc in CYRILLIC_ENCODINGS:
+                try:
+                    html = content.decode(enc)
+                    encoding = enc
+                    logger.warning(f"Fallback encoding used: {enc}")
+                    break
+                except UnicodeDecodeError:
+                    continue
+            else:
+                # Last resort: decode with errors ignored
+                html = content.decode("utf-8", errors="replace")
+                encoding = "utf-8 (with replacements)"
+
+        return html, encoding
+
+
+class ScraplingMixin:
+    """
+    Mixin class to add Scrapling capabilities to scrapers.
+
+    Provides:
+    - parse(): Parse HTML with Scrapling Adaptor
+    - css()/css_first(): Select elements with adaptive matching
+    - fetch_stealth(): Fetch with anti-bot bypass
+    - fetch_fast(): Fast HTTP fetch without JS
+    """
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        self._selector_storage_path = SELECTOR_STORAGE / f"{self.site_name}_selectors.json"
+        self._adaptive_enabled = True
+
+    def parse(self, html: str, url: str = "") -> Adaptor:
+        """
+        Parse HTML with Scrapling.
+
+        Args:
+            html: Raw HTML content
+            url: Page URL (used for relative link resolution)
+
+        Returns:
+            Adaptor object for element selection
+        """
+        return Adaptor(html, url=url, auto_save=self._adaptive_enabled)
+
+    def css(
+        self,
+        page: Adaptor,
+        selector: str,
+        auto_match: bool = False,
+        auto_save: bool = False,
+        identifier: str = "",
+    ) -> List:
+        """
+        Select elements using CSS selector.
+
+        Args:
+            page: Scrapling Adaptor object
+            selector: CSS selector string
+            auto_match: If True, use fuzzy matching to find elements
+                       even if the selector changed (requires prior auto_save)
+            auto_save: If True, save element signature for future auto_match
+            identifier: Unique ID for this selector (for auto_match/auto_save)
+
+        Returns:
+            List of matching elements
+        """
+        try:
+            return page.css(
+                selector,
+                identifier=identifier,
+                auto_match=auto_match,
+                auto_save=auto_save,
+            )
+        except Exception as e:
+            logger.warning(f"CSS selector failed: {selector} - {e}")
+            return []
+
+    def css_first(
+        self,
+        page: Adaptor,
+        selector: str,
+        auto_match: bool = False,
+        auto_save: bool = False,
+        identifier: str = "",
+        default=None,
+    ):
+        """
+        Select first matching element.
+
+        Args:
+            page: Scrapling Adaptor object
+            selector: CSS selector string
+            auto_match: If True, use fuzzy matching (requires prior auto_save)
+            auto_save: If True, save element signature for future auto_match
+            identifier: Unique ID for this selector
+            default: Value to return if no match found
+
+        Returns:
+            First matching element or default
+        """
+        try:
+            result = page.css_first(
+                selector,
+                identifier=identifier,
+                auto_match=auto_match,
+                auto_save=auto_save,
+            )
+            return result if result else default
+        except Exception as e:
+            logger.warning(f"CSS first selector failed: {selector} - {e}")
+            return default
+
+    def xpath(self, page: Adaptor, query: str) -> List:
+        """
+        Select elements using XPath.
+
+        Args:
+            page: Scrapling Adaptor object
+            query: XPath query string
+
+        Returns:
+            List of matching elements
+        """
+        try:
+            return page.xpath(query)
+        except Exception as e:
+            logger.warning(f"XPath query failed: {query} - {e}")
+            return []
+
+    def get_text(self, element, default: str = "") -> str:
+        """
+        Safely extract text from element.
+
+        Args:
+            element: Scrapling element
+            default: Value if element is None or has no text
+
+        Returns:
+            Element text or default
+        """
+        if element is None:
+            return default
+        try:
+            # Try .text first
+            text = element.text
+            if text and text.strip():
+                return text.strip()
+
+            # Fallback: extract from html_content
+            if hasattr(element, 'html_content'):
+                html = element.html_content
+                # Strip HTML tags
+                clean = re.sub(r'<[^>]+>', ' ', html)
+                clean = re.sub(r'\s+', ' ', clean).strip()
+                return clean if clean else default
+
+            return default
+        except Exception:
+            return default
+
+    def get_page_text(self, page: Adaptor) -> str:
+        """
+        Extract all visible text from page.
+
+        Strips HTML tags and normalizes whitespace.
+
+        Args:
+            page: Scrapling Adaptor object
+
+        Returns:
+            Clean text content
+        """
+        try:
+            html = page.html_content
+
+            # Remove script and style content
+            html = re.sub(r'<script[^>]*>.*?</script>', '', html, flags=re.DOTALL | re.IGNORECASE)
+            html = re.sub(r'<style[^>]*>.*?</style>', '', html, flags=re.DOTALL | re.IGNORECASE)
+
+            # Remove HTML tags
+            text = re.sub(r'<[^>]+>', ' ', html)
+
+            # Decode HTML entities
+            import html as html_lib
+            text = html_lib.unescape(text)
+
+            # Normalize whitespace
+            text = re.sub(r'\s+', ' ', text).strip()
+
+            return text
+        except Exception as e:
+            logger.warning(f"get_page_text failed: {e}")
+            return ""
+
+    def get_attr(self, element, attr: str, default: str = "") -> str:
+        """
+        Safely get attribute from element.
+
+        Args:
+            element: Scrapling element
+            attr: Attribute name
+            default: Value if not found
+
+        Returns:
+            Attribute value or default
+        """
+        if element is None:
+            return default
+        try:
+            return element.attrib.get(attr, default)
+        except Exception:
+            return default
+
+    # --- Fetcher Methods ---
+
+    def fetch(
+        self,
+        url: str,
+        proxy: Optional[str] = None,
+        timeout: int = 30,
+    ) -> Adaptor:
+        """
+        Fetch page with automatic encoding detection.
+
+        Recommended for Bulgarian sites (handles windows-1251, UTF-8, etc.)
+
+        Args:
+            url: Target URL
+            proxy: Optional proxy URL (defaults to mubeng if available)
+            timeout: Request timeout in seconds
+
+        Returns:
+            Scrapling Adaptor with properly decoded content
+        """
+        try:
+            html, encoding = fetch_with_encoding(url, proxy=proxy, timeout=timeout)
+            logger.debug(f"Fetched {url} with encoding: {encoding}")
+            return Adaptor(html, url=url, auto_save=self._adaptive_enabled)
+        except Exception as e:
+            logger.error(f"Fetch failed: {url} - {e}")
+            raise
+
+    def fetch_stealth(
+        self,
+        url: str,
+        proxy: Optional[str] = None,
+        solve_cloudflare: bool = True,
+        humanize: bool = True,
+        timeout: int = 30000,
+    ) -> Adaptor:
+        """
+        Fetch page with StealthyFetcher (anti-bot bypass).
+
+        Uses modified Firefox (Camoufox) with:
+        - Fingerprint spoofing
+        - WebRTC leak protection
+        - Human-like behavior simulation
+
+        Args:
+            url: Target URL
+            proxy: Proxy URL (defaults to mubeng)
+            solve_cloudflare: Auto-solve Cloudflare challenges
+            humanize: Simulate human mouse movement
+            timeout: Request timeout in ms
+
+        Returns:
+            Scrapling Adaptor with page content
+        """
+        try:
+            page = StealthyFetcher.fetch(
+                url,
+                proxy=proxy or MUBENG_PROXY,
+                solve_cloudflare=solve_cloudflare,
+                humanize=humanize,
+                geoip=True,
+                block_webrtc=True,
+                network_idle=True,
+                timeout=timeout,
+            )
+            logger.debug(f"StealthyFetcher: {url} - success")
+            return page
+        except Exception as e:
+            logger.error(f"StealthyFetcher failed: {url} - {e}")
+            raise
+
+    def fetch_fast(
+        self,
+        url: str,
+        proxy: Optional[str] = None,
+        timeout: int = 15000,
+    ) -> Adaptor:
+        """
+        Fast HTTP fetch without browser (no JS execution).
+
+        Use for:
+        - Simple pages without JS protection
+        - API endpoints
+        - Pages that don't need full rendering
+
+        Args:
+            url: Target URL
+            proxy: Proxy URL (defaults to mubeng)
+            timeout: Request timeout in ms
+
+        Returns:
+            Scrapling Adaptor with page content
+        """
+        try:
+            page = Fetcher.fetch(
+                url,
+                proxy=proxy or MUBENG_PROXY,
+                timeout=timeout,
+            )
+            logger.debug(f"Fetcher: {url} - success")
+            return page
+        except Exception as e:
+            logger.error(f"Fetcher failed: {url} - {e}")
+            raise
+
+    # --- Adaptive Selector Management ---
+
+    def save_selectors(self, selectors: dict):
+        """
+        Save selector patterns for future adaptive matching.
+
+        Args:
+            selectors: Dict of {name: selector} mappings
+        """
+        try:
+            existing = self._load_selectors()
+            existing.update(selectors)
+            with open(self._selector_storage_path, "w") as f:
+                json.dump(existing, f, indent=2)
+            logger.info(f"Saved {len(selectors)} selectors for {self.site_name}")
+        except Exception as e:
+            logger.warning(f"Failed to save selectors: {e}")
+
+    def _load_selectors(self) -> dict:
+        """Load saved selector patterns."""
+        if self._selector_storage_path.exists():
+            try:
+                with open(self._selector_storage_path) as f:
+                    return json.load(f)
+            except Exception:
+                return {}
+        return {}
+
+    # --- Utility Methods ---
+
+    def extract_all_links(self, page: Adaptor, pattern: str = None) -> List[str]:
+        """
+        Extract all links from page, optionally filtered by pattern.
+
+        Args:
+            page: Scrapling Adaptor object
+            pattern: Regex pattern to filter URLs
+
+        Returns:
+            List of URLs
+        """
+        links = []
+        for a in page.css("a[href]"):
+            href = self.get_attr(a, "href")
+            if href and not href.startswith(("#", "javascript:")):
+                if pattern is None or re.search(pattern, href):
+                    links.append(href)
+        return list(set(links))  # Deduplicate
+
+    def extract_images(self, page: Adaptor, pattern: str = None) -> List[str]:
+        """
+        Extract all image URLs from page.
+
+        Args:
+            page: Scrapling Adaptor object
+            pattern: Regex pattern to filter image URLs
+
+        Returns:
+            List of image URLs
+        """
+        images = []
+        for img in page.css("img[src], img[data-src]"):
+            src = self.get_attr(img, "src") or self.get_attr(img, "data-src")
+            if src and not src.startswith("data:"):
+                if pattern is None or re.search(pattern, src):
+                    images.append(src)
+        return list(set(images))
+
+    def generate_content_hash(self, page: Adaptor, selector: str = None) -> str:
+        """
+        Generate hash of page content for change detection.
+
+        Args:
+            page: Scrapling Adaptor object
+            selector: Optional CSS selector to hash only specific content
+
+        Returns:
+            MD5 hash of content
+        """
+        if selector:
+            element = self.css_first(page, selector)
+            content = self.get_text(element) if element else ""
+        else:
+            content = page.text if hasattr(page, 'text') else str(page)
+
+        return hashlib.md5(content.encode()).hexdigest()

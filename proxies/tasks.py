@@ -1,12 +1,15 @@
 import json
 import logging
+import os
 import re
 import shlex
 import subprocess
 import tempfile
+import time
 from pathlib import Path
-from typing import Any, Dict, List
+from typing import Any, Dict, List, Optional
 
+import redis
 from celery import group
 
 from celery_app import celery_app
@@ -15,6 +18,23 @@ from proxies.anonymity_checker import enrich_proxy_with_anonymity, get_real_ip
 from proxies.quality_checker import enrich_proxy_with_quality
 
 logger = logging.getLogger(__name__)
+
+# Redis client singleton for progress tracking
+_redis_client: Optional[redis.Redis] = None
+PROGRESS_KEY_TTL = 3600  # 1 hour TTL for progress keys
+
+
+def get_redis_client() -> redis.Redis:
+    """Get shared Redis client instance for progress tracking."""
+    global _redis_client
+    if _redis_client is None:
+        _redis_client = redis.Redis(
+            host=os.getenv("REDIS_HOST", "localhost"),
+            port=int(os.getenv("REDIS_PORT", "6379")),
+            db=int(os.getenv("REDIS_BROKER_DB", "0")),
+            decode_responses=True,
+        )
+    return _redis_client
 
 
 @celery_app.task
@@ -60,13 +80,17 @@ def scrape_new_proxies_task(_previous_result=None):
         raise
 
 
-@celery_app.task
-def check_scraped_proxies_task(_previous_result=None):
+@celery_app.task(bind=True)
+def check_scraped_proxies_task(self, _previous_result=None):
     """
     Dispatcher task that splits the scraped proxy list into chunks
     and sends them to worker tasks to be checked in parallel.
+
+    Uses Redis for progress tracking (see spec 107).
     """
-    logger.info("Starting parallel proxy check dispatcher...")
+    job_id = self.request.id
+    logger.info(f"Starting parallel proxy check dispatcher (job_id: {job_id})...")
+
     psc_output_file = PROXY_CHECKER_DIR / "out" / "proxies_pretty.json"
     if not psc_output_file.exists() or psc_output_file.stat().st_size == 0:
         raise FileNotFoundError("Scraped proxy file not found or is empty.")
@@ -76,25 +100,42 @@ def check_scraped_proxies_task(_previous_result=None):
 
     chunk_size = 100  # Process 100 proxies per task
     proxy_chunks = [all_proxies[i : i + chunk_size] for i in range(0, len(all_proxies), chunk_size)]
-    logger.info(f"Split {len(all_proxies)} proxies into {len(proxy_chunks)} chunks of {chunk_size}.")
+    total_chunks = len(proxy_chunks)
+    logger.info(f"Split {len(all_proxies)} proxies into {total_chunks} chunks of {chunk_size}.")
 
-    # Create a group of parallel tasks
-    parallel_tasks = group(check_proxy_chunk_task.s(chunk) for chunk in proxy_chunks)
+    # Set up Redis progress tracking
+    try:
+        r = get_redis_client()
+        r.setex(f"proxy_refresh:{job_id}:total_chunks", PROGRESS_KEY_TTL, total_chunks)
+        r.setex(f"proxy_refresh:{job_id}:completed_chunks", PROGRESS_KEY_TTL, 0)
+        r.setex(f"proxy_refresh:{job_id}:status", PROGRESS_KEY_TTL, "DISPATCHED")
+        r.setex(f"proxy_refresh:{job_id}:started_at", PROGRESS_KEY_TTL, int(time.time()))
+        logger.info(f"Redis progress tracking initialized for job {job_id}")
+    except Exception as e:
+        logger.warning(f"Failed to set up Redis progress tracking: {e}")
+
+    # Create a group of parallel tasks - pass job_id for progress tracking
+    parallel_tasks = group(check_proxy_chunk_task.s(chunk, job_id) for chunk in proxy_chunks)
 
     # Execute the group and define a callback task to process the results
-    callback = process_check_results_task.s()
-    # This creates a chain: group runs in parallel, then callback runs with results
-    (parallel_tasks | callback).delay()
+    callback = process_check_results_task.s(job_id)
+    # This creates a chord: group runs in parallel, then callback runs with results
+    # Use apply_async() to get chord result for event-based completion tracking
+    chord_result = (parallel_tasks | callback).apply_async()
 
-    logger.info("Dispatched all proxy check chunks to workers.")
-    return f"Dispatched {len(proxy_chunks)} chunks for processing."
+    logger.info(f"Dispatched all proxy check chunks to workers. chord_id: {chord_result.id}")
+    return {"job_id": job_id, "chord_id": chord_result.id, "total_chunks": total_chunks, "status": "DISPATCHED"}
 
 
 @celery_app.task
-def check_proxy_chunk_task(proxy_chunk: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
+def check_proxy_chunk_task(proxy_chunk: List[Dict[str, Any]], job_id: str = "") -> List[Dict[str, Any]]:
     """
     Worker task that checks a small chunk of proxies for liveness and returns the live ones.
     Uses mubeng binary for fast parallel liveness checking.
+
+    Args:
+        proxy_chunk: List of proxy dicts to check
+        job_id: Job ID for Redis progress tracking (from dispatcher)
     """
     live_proxies_in_chunk = []
     chunk_size = len(proxy_chunk)
@@ -203,19 +244,33 @@ def check_proxy_chunk_task(proxy_chunk: List[Dict[str, Any]]) -> List[Dict[str, 
         temp_input_path.unlink(missing_ok=True)
         temp_output_path.unlink(missing_ok=True)
 
+    # Increment completed chunks counter for progress tracking
+    if job_id:
+        try:
+            r = get_redis_client()
+            completed = r.incr(f"proxy_refresh:{job_id}:completed_chunks")
+            r.setex(f"proxy_refresh:{job_id}:status", PROGRESS_KEY_TTL, "PROCESSING")
+            logger.debug(f"Job {job_id}: chunk completed ({completed} total)")
+        except Exception as e:
+            logger.warning(f"Failed to update Redis progress: {e}")
+
     return live_proxies_in_chunk
 
 
 @celery_app.task
-def process_check_results_task(results: List[List[Dict[str, Any]]]):
+def process_check_results_task(results: List[List[Dict[str, Any]]], job_id: str = ""):
     """
     Callback task that collects results from all chunk tasks,
     combines them, and saves the final master list.
 
     Logs quality check statistics but does not filter by quality.
     Users can filter the live_proxies.json file based on ip_check_passed/target_passed fields.
+
+    Args:
+        results: List of results from all chunk tasks
+        job_id: Job ID for Redis progress tracking (from dispatcher)
     """
-    logger.info("Processing results from all proxy check workers...")
+    logger.info(f"Processing results from all proxy check workers (job_id: {job_id})...")
     all_live_proxies = [proxy for chunk_result in results for proxy in chunk_result if proxy]
 
     # Filter out Transparent proxies (anonymity level 1) - they don't hide your IP
@@ -230,6 +285,15 @@ def process_check_results_task(results: List[List[Dict[str, Any]]]):
 
     if not all_live_proxies:
         logger.warning("No live proxies were found across all chunks.")
+        # Mark job as complete even with no results
+        if job_id:
+            try:
+                r = get_redis_client()
+                r.setex(f"proxy_refresh:{job_id}:status", PROGRESS_KEY_TTL, "COMPLETE")
+                r.setex(f"proxy_refresh:{job_id}:completed_at", PROGRESS_KEY_TTL, int(time.time()))
+                r.setex(f"proxy_refresh:{job_id}:result_count", PROGRESS_KEY_TTL, 0)
+            except Exception as e:
+                logger.warning(f"Failed to update Redis completion status: {e}")
         return "Completed: No live proxies found."
 
     # Log quality check statistics (if quality checks were performed)
@@ -265,6 +329,18 @@ def process_check_results_task(results: List[List[Dict[str, Any]]]):
             f.write(f"{protocol}://{proxy['host']}:{proxy['port']}\n")
 
     logger.info(f"Successfully saved {len(all_live_proxies)} live proxies from all workers.")
+
+    # Mark job as complete with result count
+    if job_id:
+        try:
+            r = get_redis_client()
+            r.setex(f"proxy_refresh:{job_id}:status", PROGRESS_KEY_TTL, "COMPLETE")
+            r.setex(f"proxy_refresh:{job_id}:completed_at", PROGRESS_KEY_TTL, int(time.time()))
+            r.setex(f"proxy_refresh:{job_id}:result_count", PROGRESS_KEY_TTL, len(all_live_proxies))
+            logger.info(f"Job {job_id} marked as COMPLETE with {len(all_live_proxies)} proxies")
+        except Exception as e:
+            logger.warning(f"Failed to update Redis completion status: {e}")
+
     return f"Completed: Saved {len(all_live_proxies)} live proxies."
 
 

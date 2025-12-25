@@ -62,23 +62,35 @@ if [[ "$FILE_PATH" == */tmp/* || "$FILE_PATH" == /tmp/* ]]; then
     exit 0
 fi
 
-# Run Python validator
-VALIDATOR="$SCRIPT_DIR/validate_file_placement.py"
+# Run file placement validator
+PLACEMENT_VALIDATOR="$SCRIPT_DIR/validate_file_placement.py"
 
-if [[ ! -f "$VALIDATOR" ]]; then
-    echo "WARNING: Validator script not found at $VALIDATOR" >&2
-    exit 0
-fi
-
-# Pass file path to validator
-if python3 "$VALIDATOR" --file-path "$FILE_PATH"; then
-    exit 0
-else
-    EXIT_CODE=$?
-    if [[ $EXIT_CODE -eq 2 ]]; then
-        # Blocked - validator already printed message
-        exit 2
+if [[ -f "$PLACEMENT_VALIDATOR" ]]; then
+    if ! python3 "$PLACEMENT_VALIDATOR" --file-path "$FILE_PATH"; then
+        EXIT_CODE=$?
+        if [[ $EXIT_CODE -eq 2 ]]; then
+            # Blocked - validator already printed message
+            exit 2
+        fi
     fi
-    # Other errors - warn but allow
-    exit 0
+else
+    echo "WARNING: File placement validator not found at $PLACEMENT_VALIDATOR" >&2
 fi
+
+# Run function length validator (Python files only)
+LENGTH_VALIDATOR="$SCRIPT_DIR/validate_function_length.py"
+
+if [[ "$FILE_PATH" == *.py && -f "$LENGTH_VALIDATOR" ]]; then
+    # For Edit operations, we need to simulate the result
+    # For now, validate the file as it will be after the write
+    # The validator will check the current file + warn about existing issues
+    if ! python3 "$LENGTH_VALIDATOR" --file-path "$FILE_PATH"; then
+        EXIT_CODE=$?
+        if [[ $EXIT_CODE -eq 2 ]]; then
+            # Blocked - validator already printed message
+            exit 2
+        fi
+    fi
+fi
+
+exit 0

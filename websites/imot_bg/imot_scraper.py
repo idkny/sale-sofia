@@ -153,12 +153,6 @@ class ImotBgScraper(BaseSiteScraper):
         """
         Detect if this is the last page of search results.
 
-        Detection methods (in order):
-        1. Check for "no results" message
-        2. Check if no listings found
-        3. Check if next page link is missing/disabled
-        4. Compare current page to total pages
-
         Args:
             html: Search results page HTML
             current_page: Current page number (1-indexed)
@@ -169,57 +163,55 @@ class ImotBgScraper(BaseSiteScraper):
         soup = BeautifulSoup(html, "html.parser")
         page_text = soup.get_text(separator=" ", strip=True).lower()
 
-        # Method 1: Check for "no results" message
+        if self._has_no_results_message(page_text):
+            logger.debug("Last page detected: found 'no results' message")
+            return True
+        if self._has_no_listings(soup):
+            logger.debug("Last page detected: no listings found")
+            return True
+        if not self._has_next_page_link(soup, current_page):
+            logger.debug(f"Last page detected: no link to page {current_page + 1}")
+            return True
+        if self._is_past_total_pages(page_text, current_page):
+            logger.debug("Last page detected: current page at or past total")
+            return True
+        return False
+
+    def _has_no_results_message(self, page_text: str) -> bool:
+        """Check if page contains 'no results' message."""
         for pattern in sel.NO_RESULTS_PATTERNS:
             if pattern.lower() in page_text:
-                logger.debug(f"Last page detected: found '{pattern}'")
                 return True
+        return False
 
-        # Method 2: Check if no listings on page
-        listing_urls = []
+    def _has_no_listings(self, soup: BeautifulSoup) -> bool:
+        """Check if no listing links found on page."""
         for link in soup.find_all("a", href=True):
             href = link["href"]
             if all(p in href for p in sel.LISTING_LINK_CONTAINS):
-                listing_urls.append(href)
+                return False  # Found at least one listing
+        return True  # No listings found
 
-        if len(listing_urls) == 0:
-            logger.debug("Last page detected: no listings found")
-            return True
-
-        # Method 3: Check for next page link
-        # imot.bg uses "стр. X" pattern and shows all page numbers
-        # Look for a link to page current_page + 1
-        next_page_num = current_page + 1
-        next_page_found = False
-
+    def _has_next_page_link(self, soup: BeautifulSoup, current_page: int) -> bool:
+        """Check if link to next page exists."""
+        next_page = current_page + 1
         for link in soup.find_all("a", href=True):
             href = link["href"]
-            # Check if link points to next page
-            if f"/p-{next_page_num}" in href:
-                next_page_found = True
-                break
-            # Also check link text for page number
-            link_text = link.get_text(strip=True)
-            if link_text == str(next_page_num):
-                next_page_found = True
-                break
+            if f"/p-{next_page}" in href:
+                return True
+            if link.get_text(strip=True) == str(next_page):
+                return True
+        return False
 
-        if not next_page_found:
-            logger.debug(f"Last page detected: no link to page {next_page_num}")
-            return True
-
-        # Method 4: Try to extract total pages from pagination
-        # Look for pattern like "стр. 1 от 15" or "1/15"
+    def _is_past_total_pages(self, page_text: str, current_page: int) -> bool:
+        """Check if current page is at or past total pages."""
         total_match = re.search(r"(?:от|/)\s*(\d+)\s*(?:стр|page)?", page_text)
         if total_match:
             try:
                 total_pages = int(total_match.group(1))
-                if current_page >= total_pages:
-                    logger.debug(f"Last page detected: page {current_page} >= total {total_pages}")
-                    return True
+                return current_page >= total_pages
             except ValueError:
                 pass
-
         return False
 
     def get_next_page_url(self, current_url: str, current_page: int) -> str:

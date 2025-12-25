@@ -88,28 +88,100 @@ archive/research/  archive/specs/          (code supersedes)
 
 ## Session History
 
-### 2025-12-25 (Session 3 - Automated File Placement Enforcement)
+### 2025-12-25 (Session 4 - Scrapling Integration & Crawler Plan)
 
 | Task | Status |
 |------|--------|
-| Explore ZohoCentral enforcement system | Complete |
-| Design manifest + validation for sale-sofia | Complete |
-| Implement project_structure_manifest.json | Complete |
-| Create validate_file_placement.py | Complete |
-| Create pre_write_validate.sh hook | Complete |
-| Configure Claude Code hooks (.claude/settings.json) | Complete |
-| Update CLAUDE.md with automation reference | Complete |
+| Create crawler validation plan (Spec 106) | Complete |
+| Add Scrapling integration (Phase 0) to spec | Complete |
+| Install Scrapling v0.2.99 | Complete |
+| Create `websites/scrapling_base.py` adapter | Complete |
+| Test Scrapling with imot.bg | Complete |
+| Migrate imot_scraper.py to Scrapling | Not Started |
 
-**Summary**: Implemented automated file placement enforcement based on ZohoCentral's system. Created manifest.json (source of truth), Python validator, and shell hook wrapper. Hooks now run BEFORE every Write/Edit to block wrong placements with helpful error messages.
+**Summary**: Created comprehensive 5-phase crawler plan in Spec 106. Integrated Scrapling library for adaptive scraping with auto-encoding detection. Built and tested `scrapling_base.py` adapter that handles Bulgarian windows-1251 encoding automatically. Successfully extracted data from imot.bg (price: 170400 EUR, area: 71 sqm, floor: 4/6, building: brick).
+
+**Why Scrapling?**
+- **Adaptive scraping**: Auto-relocates selectors when sites change HTML
+- **Anti-bot bypass**: StealthyFetcher with Camoufox (fingerprint spoofing)
+- **774x faster** than BeautifulSoup for parsing
+- **LLM integration**: MCP server for AI extraction (Ollama)
 
 **Files Created**:
-- `admin/config/project_structure_manifest.json` - File placement rules (manifest)
+- `websites/scrapling_base.py` - Scrapling adapter with:
+  - `detect_encoding()` - Auto-detects windows-1251, UTF-8 from headers/meta/chardet
+  - `fetch_with_encoding()` - Fetches with proper Bulgarian text handling
+  - `ScraplingMixin` class with `fetch()`, `css()`, `css_first()`, `get_page_text()`
+  - StealthyFetcher integration for anti-bot bypass
+- `docs/specs/106_CRAWLER_VALIDATION_PLAN.md` - Comprehensive 5-phase plan:
+  - Phase 0: Scrapling Integration (partially complete)
+  - Phase 1: Scraper Validation
+  - Phase 2: Description Extraction (regex + LLM)
+  - Phase 3: Change Detection & History (tracks ALL field changes)
+  - Phase 3.5: Cross-Site Duplicate Detection & Merging
+  - Phase 4: Rate Limiting & Async Orchestration
+  - Phase 5: Full Pipeline Integration
+
+**Key Decisions Made**:
+1. **Encoding is flexible** - windows-1251 is Cyrillic (Bulgarian), auto-detected per site
+2. **Change tracking** - Track ALL field changes, not just price (new `listing_changes` table)
+3. **Cross-site merging** - Same property on multiple sites → merge data, track sources
+4. **LLM for descriptions** - Use Ollama locally for extracting structured data
+
+**What Works**:
+```python
+from websites.scrapling_base import ScraplingMixin
+
+class MyScraper(ScraplingMixin):
+    def __init__(self):
+        self.site_name = 'imot.bg'
+        super().__init__()
+
+scraper = MyScraper()
+page = scraper.fetch("https://www.imot.bg/...")  # Auto-detects encoding
+text = scraper.get_page_text(page)  # Clean text for regex extraction
+```
+
+**To Continue (Next Session)**:
+1. Migrate `websites/imot_bg/imot_scraper.py` to use ScraplingMixin
+2. Migrate `websites/bazar_bg/bazar_scraper.py` to use ScraplingMixin
+3. Test StealthyFetcher with mubeng proxy
+4. Enable adaptive mode (`auto_save=True`, `auto_match=True`)
+
+**Dependencies Added**:
+- `scrapling[all]>=0.2.9` (already installed in venv)
+- `chardet` (for encoding detection, installed)
+
+---
+
+### 2025-12-25 (Session 3 - File Enforcement, Docs Reorg, Git Init)
+
+| Task | Status |
+|------|--------|
+| Implement file placement enforcement (ZohoCentral-style) | Complete |
+| Add max_depth (3) and block_root_files rules | Complete |
+| Split ARCHITECTURE.md into focused documents | Complete |
+| Initialize git repository | Complete |
+| Create initial commit (253 files) | Complete |
+
+**Summary**: Implemented automated file placement enforcement with manifest.json, Python validator, and Claude hooks. Added rules to block files in docs/ root and limit depth to 3. Split 821-line ARCHITECTURE.md into 5 focused docs (131 lines core + 4 detailed docs). Initialized git with comprehensive .gitignore.
+
+**Files Created**:
+- `admin/config/project_structure_manifest.json` - File placement rules
 - `admin/scripts/hooks/validate_file_placement.py` - Validation logic
 - `admin/scripts/hooks/pre_write_validate.sh` - Hook wrapper
 - `.claude/settings.json` - Hook configuration
+- `docs/architecture/DESIGN_PATTERNS.md` - 8 design patterns
+- `docs/architecture/DATA_FLOW.md` - Pipeline diagrams
+- `docs/architecture/ADDING_COMPONENTS.md` - Extension guides
+- `docs/architecture/CONVENTIONS.md` - Coding standards
 
 **Files Modified**:
-- `CLAUDE.md` - Updated FILE PLACEMENT RULES to reference automation
+- `CLAUDE.md` - FILE PLACEMENT RULES section
+- `.gitignore` - Enhanced with proxy/db/log exclusions
+- `docs/architecture/ARCHITECTURE.md` - Slimmed to 131 lines with links
+
+**Git**: Initialized on `main` branch, 2 commits
 
 ---
 
@@ -129,21 +201,6 @@ archive/research/  archive/specs/          (code supersedes)
 - `docs/architecture/ARCHITECTURE.md` - Full architecture guide
 - `docs/architecture/FILE_STRUCTURE.md` - File placement rules
 - `CLAUDE.md` - Added FILE PLACEMENT RULES section
-
----
-
-### 2025-12-24 (Session 1 - Project Cleanup & Multi-Instance Setup)
-
-| Task | Status |
-|------|--------|
-| Clean root directory (move misplaced files) | Complete |
-| Create scripts/, docs/tasks/ folders | Complete |
-| Create README.md and .gitignore | Complete |
-| Implement multi-instance coordination system | Complete |
-| Implement research → specs → code workflow | Complete |
-| Create /lss and /ess commands | Complete |
-
-**Summary**: Major project reorganization. Cleaned root directory, created multi-instance coordination (TASKS.md, instance files), implemented research/specs/code workflow with archiving.
 
 ---
 

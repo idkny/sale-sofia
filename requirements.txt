@@ -27,3 +27,4 @@ PyYAML
 # Dashboard
 streamlit>=1.29.0
 pandas>=2.0.0
+chardet>=5.0

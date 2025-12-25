@@ -20,16 +20,30 @@ import signal
 import socket
 import subprocess
 import sys
+import threading
 import time
+from dataclasses import dataclass
 from pathlib import Path
-from typing import Optional
+from typing import Any, Dict, Optional
 
+import redis
 from loguru import logger
 
 from paths import LOGS_DIR, PROXIES_DIR, ROOT_DIR
 
 # Celery log file for debugging
 CELERY_LOG_FILE = LOGS_DIR / "celery_worker.log"
+
+
+@dataclass
+class DispatchResult:
+    """Result from waiting for chain dispatch to complete."""
+
+    job_id: Optional[str] = None
+    chord_id: Optional[str] = None
+    total_chunks: int = 0
+    success: bool = True
+    error: Optional[str] = None
 
 
 class Orchestrator:
@@ -40,6 +54,57 @@ class Orchestrator:
         self.celery_process: Optional[subprocess.Popen] = None
         self.celery_log_handle = None
         self._shutdown_registered = False
+        self._redis_client: Optional[redis.Redis] = None
+
+    def _get_redis_client(self) -> redis.Redis:
+        """Get Redis client for progress tracking."""
+        if self._redis_client is None:
+            self._redis_client = redis.Redis(
+                host=os.getenv("REDIS_HOST", "localhost"),
+                port=int(os.getenv("REDIS_PORT", "6379")),
+                db=int(os.getenv("REDIS_BROKER_DB", "0")),
+                decode_responses=True,
+            )
+        return self._redis_client
+
+    def get_refresh_progress(self, job_id: str) -> Dict[str, Any]:
+        """
+        Get progress of a proxy refresh job from Redis.
+
+        Args:
+            job_id: The job ID (dispatcher task ID)
+
+        Returns:
+            Dict with: job_id, total_chunks, completed_chunks, status, progress_pct
+        """
+        try:
+            r = self._get_redis_client()
+            total = r.get(f"proxy_refresh:{job_id}:total_chunks")
+            completed = r.get(f"proxy_refresh:{job_id}:completed_chunks")
+            status = r.get(f"proxy_refresh:{job_id}:status")
+            result_count = r.get(f"proxy_refresh:{job_id}:result_count")
+
+            total_int = int(total) if total else 0
+            completed_int = int(completed) if completed else 0
+
+            return {
+                "job_id": job_id,
+                "total_chunks": total_int,
+                "completed_chunks": completed_int,
+                "status": status if status else "UNKNOWN",
+                "progress_pct": (completed_int / total_int * 100) if total_int > 0 else 0,
+                "result_count": int(result_count) if result_count else None,
+            }
+        except Exception as e:
+            logger.warning(f"Failed to get refresh progress for {job_id}: {e}")
+            return {
+                "job_id": job_id,
+                "total_chunks": 0,
+                "completed_chunks": 0,
+                "status": "ERROR",
+                "progress_pct": 0,
+                "result_count": None,
+            }
 
     def __enter__(self):
         """Context manager entry."""
@@ -400,95 +465,269 @@ class Orchestrator:
         self,
         mtime_before: float,
         min_count: int = 5,
-        timeout: int = 0,  # 0 = no timeout, wait forever
+        timeout: int = 0,
         task_id: Optional[str] = None,
     ) -> bool:
         """
-        Wait for a proxy refresh to complete by monitoring task state and file modification time.
+        Wait for a proxy refresh to complete.
 
-        This is used after pre-flight check failure when we KNOW current proxies are bad
-        and need to wait for actually NEW proxies, not just check the count.
+        Tries multiple strategies in order:
+        1. Chord-based wait (most reliable)
+        2. Redis progress polling (fallback)
+        3. File modification monitoring (last resort)
 
         Args:
-            mtime_before: The file mtime before refresh was triggered.
-            min_count: Minimum number of usable proxies required.
-            timeout: Maximum seconds to wait (0 = wait forever until task completes).
-            task_id: Optional Celery task ID to track state (more reliable than mtime).
+            mtime_before: File mtime before refresh (for fallback).
+            min_count: Minimum usable proxies required.
+            timeout: Max seconds to wait (0 = forever).
+            task_id: Celery chain task ID to track.
 
         Returns:
-            True if new proxies available, False if failure.
+            True if sufficient proxies available, False on failure.
         """
         start_time = time.time()
-        check_interval = 15  # seconds
-        pending_warn_threshold = 120  # Warn if PENDING for > 2 min (queue issue)
+        check_interval = 15
 
         print("[INFO] Waiting for proxy refresh to complete...")
-        print("[INFO] proxy-scraper-checker typically takes 5-15 minutes. Will wait until done.")
+
+        # Phase 1: Wait for chain dispatch to get job_id/chord_id
+        dispatch = self._wait_for_chain_dispatch(task_id, start_time, check_interval)
+        if not dispatch.success:
+            return False
+
+        # Phase 2: Try chord-based wait (preferred)
+        if dispatch.chord_id:
+            return self._wait_via_chord(
+                dispatch.chord_id, dispatch.job_id, start_time, timeout, min_count, check_interval
+            )
+
+        # Phase 3: Try Redis progress polling
+        if dispatch.job_id:
+            return self._wait_via_redis_polling(
+                dispatch.job_id, start_time, timeout, min_count, check_interval
+            )
+
+        # Phase 4: File-based fallback
+        return self._wait_via_file_monitoring(
+            mtime_before, start_time, timeout, min_count, check_interval
+        )
+
+    def _wait_for_chain_dispatch(
+        self, task_id: Optional[str], start_time: float, check_interval: int
+    ) -> DispatchResult:
+        """Wait for chain task to complete and extract job_id/chord_id."""
+        import ast
+
+        if not task_id:
+            return DispatchResult()  # No task to wait for
+
+        pending_warn_threshold = 120
 
         while True:
-            # Check if Celery is still alive (restart if died)
+            if not self.restart_celery_if_dead():
+                return DispatchResult(success=False, error="Celery failed to restart")
+
+            elapsed = int(time.time() - start_time)
+            mins, secs = elapsed // 60, elapsed % 60
+            task_state, task_result = self.get_task_state(task_id)
+
+            if task_state == "FAILURE":
+                logger.error(f"Refresh task failed: {task_result}")
+                print(f"[ERROR] Refresh task failed: {task_result}")
+                return DispatchResult(success=False, error=str(task_result))
+
+            if task_state == "SUCCESS":
+                return self._parse_dispatch_result(task_result)
+
+            if task_state == "PENDING" and elapsed > pending_warn_threshold:
+                print(f"[WARNING] Chain task still PENDING after {mins}m {secs}s")
+
+            if task_state in ("STARTED", "PENDING"):
+                print(f"[WAIT] Scrape/dispatch in progress... ({mins}m {secs}s, task: {task_state})")
+
+            time.sleep(check_interval)
+
+    def _parse_dispatch_result(self, task_result: Any) -> DispatchResult:
+        """Parse dispatcher result to extract job_id and chord_id."""
+        import ast
+
+        logger.info(f"Dispatcher completed: {task_result}")
+        try:
+            result_dict = ast.literal_eval(task_result) if isinstance(task_result, str) else task_result
+            if isinstance(result_dict, dict) and "job_id" in result_dict:
+                job_id = result_dict["job_id"]
+                chord_id = result_dict.get("chord_id")
+                total_chunks = result_dict.get("total_chunks", 0)
+                print(f"[INFO] Dispatcher done. Job {job_id} ({total_chunks} chunks)")
+                if chord_id:
+                    print(f"[INFO] Using chord_id {chord_id} for event-based wait")
+                else:
+                    print("[INFO] No chord_id - falling back to Redis progress tracking")
+                return DispatchResult(job_id=job_id, chord_id=chord_id, total_chunks=total_chunks)
+        except Exception as e:
+            logger.warning(f"Failed to parse dispatcher result: {e}")
+
+        logger.warning("Dispatcher returned old format, using file-based fallback")
+        return DispatchResult()
+
+    def _wait_via_chord(
+        self,
+        chord_id: str,
+        job_id: Optional[str],
+        start_time: float,
+        timeout: int,
+        min_count: int,
+        check_interval: int,
+    ) -> bool:
+        """Wait for chord completion using Celery's event-based tracking."""
+        from celery.result import AsyncResult
+        from celery_app import celery_app
+
+        print("[INFO] Blocking on chord completion...")
+        chord_result = AsyncResult(chord_id, app=celery_app)
+
+        stop_progress = threading.Event()
+        progress_thread = self._start_progress_thread(
+            stop_progress, job_id, start_time, check_interval
+        )
+
+        try:
+            timeout_val = timeout if timeout > 0 else None
+            final_result = chord_result.get(timeout=timeout_val, propagate=False)
+            self._stop_progress_thread(stop_progress, progress_thread)
+
+            elapsed = int(time.time() - start_time)
+            mins, secs = elapsed // 60, elapsed % 60
+
+            if chord_result.failed():
+                logger.error(f"Chord failed: {final_result}")
+                print(f"[ERROR] Chord failed: {final_result}")
+                return False
+
+            usable_count = self.get_usable_proxy_count()
+            print(f"[SUCCESS] Chord complete! {usable_count} usable proxies after {mins}m {secs}s")
+            logger.info(f"Chord {chord_id} completed, {usable_count} usable proxies")
+            return usable_count >= min_count
+
+        except Exception as e:
+            self._stop_progress_thread(stop_progress, progress_thread)
+            return self._handle_chord_error(e, start_time, timeout)
+
+    def _start_progress_thread(
+        self, stop_event: threading.Event, job_id: Optional[str], start_time: float, interval: int
+    ) -> threading.Thread:
+        """Start background thread to show progress during chord wait."""
+
+        def show_progress():
+            while not stop_event.is_set():
+                if not self.restart_celery_if_dead():
+                    return
+                elapsed = int(time.time() - start_time)
+                mins, secs = elapsed // 60, elapsed % 60
+                if job_id:
+                    progress = self.get_refresh_progress(job_id)
+                    print(f"[PROGRESS] {progress['completed_chunks']}/{progress['total_chunks']} "
+                          f"chunks ({progress['progress_pct']:.0f}%) - {mins}m {secs}s")
+                else:
+                    print(f"[WAIT] Waiting for chord... ({mins}m {secs}s)")
+                stop_event.wait(interval)
+
+        thread = threading.Thread(target=show_progress, daemon=True)
+        thread.start()
+        return thread
+
+    def _stop_progress_thread(self, stop_event: threading.Event, thread: threading.Thread) -> None:
+        """Stop the progress display thread."""
+        stop_event.set()
+        thread.join(timeout=2)
+
+    def _handle_chord_error(self, error: Exception, start_time: float, timeout: int) -> bool:
+        """Handle errors during chord wait."""
+        elapsed = int(time.time() - start_time)
+        mins, secs = elapsed // 60, elapsed % 60
+
+        if "TimeoutError" in type(error).__name__ or "timeout" in str(error).lower():
+            logger.error(f"Timeout waiting for chord after {timeout}s")
+            print(f"[ERROR] Timeout after {mins}m {secs}s")
+        else:
+            logger.error(f"Error waiting for chord: {error}")
+            print(f"[ERROR] Chord wait failed: {error}")
+        return False
+
+    def _wait_via_redis_polling(
+        self, job_id: str, start_time: float, timeout: int, min_count: int, check_interval: int
+    ) -> bool:
+        """Wait for job completion by polling Redis progress."""
+        print("[INFO] Falling back to Redis progress tracking...")
+
+        while True:
             if not self.restart_celery_if_dead():
                 logger.error("Celery failed to restart")
                 print("[ERROR] Celery worker cannot be restarted")
                 return False
 
             elapsed = int(time.time() - start_time)
+            mins, secs = elapsed // 60, elapsed % 60
 
-            # Check task state if we have a task_id
-            task_state = None
-            if task_id:
-                task_state, task_result = self.get_task_state(task_id)
-                if task_state == "FAILURE":
-                    logger.error(f"Refresh task failed: {task_result}")
-                    print(f"[ERROR] Refresh task failed: {task_result}")
-                    return False
-                elif task_state == "SUCCESS":
-                    logger.info(f"Refresh task completed: {task_result}")
-                    # Task done - check proxy count
-                    usable_count = self.get_usable_proxy_count()
-                    if usable_count >= min_count:
-                        print(f"[SUCCESS] Refresh complete! {usable_count} usable proxies after {elapsed}s")
-                        return True
-                    else:
-                        print(f"[WARNING] Task completed but only {usable_count} usable proxies (need {min_count})")
-                        # Don't return False - maybe more proxies are coming from chunk tasks
-                        # Wait a bit more for process_check_results_task to finish
-                        time.sleep(30)
-                        usable_count = self.get_usable_proxy_count()
-                        if usable_count >= min_count:
-                            print(f"[SUCCESS] Refresh complete! {usable_count} usable proxies after waiting")
-                            return True
-                        return False
-                elif task_state == "PENDING" and elapsed > pending_warn_threshold:
-                    # Task stuck in PENDING - likely queue issue
-                    print(f"[WARNING] Task still PENDING after {elapsed}s - possible queue issue")
-                    print("[INFO] Check: celery worker might not be consuming from correct queue")
+            progress = self.get_refresh_progress(job_id)
+            status = progress["status"]
 
-            # Fallback: Check if file has been updated (for when task_id not available)
-            current_mtime = self.get_proxy_file_mtime()
-            if current_mtime > mtime_before:
-                # File was updated - check if we have enough proxies
+            if status == "COMPLETE":
                 usable_count = self.get_usable_proxy_count()
-                if usable_count >= min_count:
-                    print(f"[SUCCESS] Refresh complete! {usable_count} new usable proxies after {elapsed}s")
-                    return True
-                else:
-                    print(f"[INFO] File updated but only {usable_count} usable proxies so far (need {min_count})")
-                    # Continue waiting - chunk tasks may still be running
-                    mtime_before = current_mtime
+                print(f"[SUCCESS] Refresh complete! {usable_count} usable proxies after {mins}m {secs}s")
+                logger.info(f"Job {job_id} completed, {usable_count} usable")
+                return usable_count >= min_count
 
-            # Show progress with task state
-            celery_status = "alive" if self.is_celery_alive() else "DEAD"
-            task_info = f", task: {task_state}" if task_state else ""
-            mins = elapsed // 60
-            secs = elapsed % 60
-            print(f"[WAIT] Refresh in progress... ({mins}m {secs}s elapsed, celery: {celery_status}{task_info})")
+            if status == "FAILED":
+                print(f"[ERROR] Refresh job {job_id} failed")
+                return False
+
+            if status in ("DISPATCHED", "PROCESSING"):
+                celery_status = "alive" if self.is_celery_alive() else "DEAD"
+                print(f"[PROGRESS] {progress['completed_chunks']}/{progress['total_chunks']} "
+                      f"({progress['progress_pct']:.0f}%) - {mins}m {secs}s - celery: {celery_status}")
+            else:
+                print(f"[WAIT] Job status: {status} - {mins}m {secs}s")
+
             time.sleep(check_interval)
 
-            # Optional timeout (if set > 0)
             if timeout > 0 and elapsed >= timeout:
                 logger.error(f"Timeout waiting for proxy refresh after {timeout}s")
-                print(f"[ERROR] Timeout waiting for proxy refresh after {timeout}s")
+                print(f"[ERROR] Timeout after {mins}m {secs}s")
+                return False
+
+    def _wait_via_file_monitoring(
+        self, mtime_before: float, start_time: float, timeout: int, min_count: int, check_interval: int
+    ) -> bool:
+        """Wait for proxy file to be updated (last resort fallback)."""
+        print("[INFO] No job tracking available, using file-based fallback...")
+
+        while True:
+            if not self.restart_celery_if_dead():
+                logger.error("Celery failed to restart")
+                print("[ERROR] Celery worker cannot be restarted")
+                return False
+
+            elapsed = int(time.time() - start_time)
+            mins, secs = elapsed // 60, elapsed % 60
+
+            current_mtime = self.get_proxy_file_mtime()
+            if current_mtime > mtime_before:
+                usable_count = self.get_usable_proxy_count()
+                if usable_count >= min_count:
+                    print(f"[SUCCESS] Refresh complete! {usable_count} usable proxies after {mins}m {secs}s")
+                    return True
+                print(f"[INFO] File updated, {usable_count} usable proxies so far...")
+                mtime_before = current_mtime
+            else:
+                celery_status = "alive" if self.is_celery_alive() else "DEAD"
+                print(f"[WAIT] Waiting for results... ({mins}m {secs}s, celery: {celery_status})")
+
+            time.sleep(check_interval)
+
+            if timeout > 0 and elapsed >= timeout:
+                logger.error(f"Timeout waiting for proxy refresh after {timeout}s")
+                print(f"[ERROR] Timeout after {mins}m {secs}s")
                 return False
 
     def stop_all(self):
