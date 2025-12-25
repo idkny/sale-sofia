@@ -1,0 +1,49 @@
+# Start URLs for automated crawling
+# Add URLs here and run: python3 main.py
+#
+# New format (per-site config):
+#   site_name:
+#     config:
+#       limit: 100      # Max listings per start URL
+#       delay: 6        # Seconds between requests
+#       timeout: 30     # Page load timeout
+#     urls:
+#       - url1
+#       - url2
+#
+# Old format still supported (uses defaults):
+#   site_name:
+#     - url1
+#     - url2
+#
+# URLs should be search result pages (not individual listings)
+
+imot.bg:
+  config:
+    limit: 100
+    delay: 6
+    timeout: 30
+  urls:
+    # 3-room apartments in Sofia, 200-270k EUR
+    - https://www.imot.bg/obiavi/prodazhbi/grad-sofiya/tristaen/?priceBuy_min=200000&priceBuy_max=270000
+    # 4-room apartments in Sofia, 200-270k EUR
+    - https://www.imot.bg/obiavi/prodazhbi/grad-sofiya/chetiristaen/?priceBuy_min=200000&priceBuy_max=270000
+    # 5+ room apartments in Sofia, 200-270k EUR
+    - https://www.imot.bg/obiavi/prodazhbi/grad-sofiya/mnogostaen/?priceBuy_min=200000&priceBuy_max=270000
+
+bazar.bg:
+  config:
+    limit: 100
+    delay: 6
+    timeout: 30
+  urls:
+    # 3-room apartments in Sofia (tristaini = 3-room)
+    - https://bazar.bg/obiavi/apartamenti/tristaini/sofia
+    # 4-room apartments in Sofia (chetiristaini = 4-room)
+    - https://bazar.bg/obiavi/apartamenti/chetiristaini/sofia
+    # 5+ room apartments in Sofia (mnogostaini = multi-room)
+    - https://bazar.bg/obiavi/apartamenti/mnogostaini/sofia
+
+# Future sites (uncomment when implemented):
+# homes.bg:
+#   - https://www.homes.bg/...

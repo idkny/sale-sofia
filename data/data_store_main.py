@@ -1,0 +1,639 @@
+# data/data_store_main.py
+"""
+SQLite database for storing apartment listings with full evaluation support.
+"""
+
+import json
+import sqlite3
+from datetime import datetime
+from typing import Any, Dict, List, Optional
+
+from loguru import logger
+
+from paths import DB_PATH
+
+
+def get_db_connection() -> sqlite3.Connection:
+    """Get database connection with foreign keys enabled."""
+    conn = sqlite3.connect(DB_PATH)
+    conn.row_factory = sqlite3.Row
+    conn.execute("PRAGMA foreign_keys = ON")
+    return conn
+
+
+def init_db():
+    """Initialize database with listings table."""
+    conn = get_db_connection()
+
+    conn.execute("""
+        CREATE TABLE IF NOT EXISTS listings (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+
+            -- Identifiers
+            external_id TEXT NOT NULL,
+            url TEXT UNIQUE NOT NULL,
+            source_site TEXT NOT NULL,
+
+            -- Basic info
+            title TEXT,
+            description TEXT,
+
+            -- Price (EUR only)
+            price_eur REAL,
+            price_per_sqm_eur REAL,
+
+            -- Size
+            sqm_total REAL,
+            sqm_net REAL,
+
+            -- Layout
+            rooms_count INTEGER,
+            bathrooms_count INTEGER,
+
+            -- Floor
+            floor_number INTEGER,
+            floor_total INTEGER,
+            has_elevator BOOLEAN,
+
+            -- Building
+            building_type TEXT,
+            construction_year INTEGER,
+            act_status TEXT,
+
+            -- Location
+            district TEXT,
+            neighborhood TEXT,
+            address TEXT,
+            metro_station TEXT,
+            metro_distance_m INTEGER,
+
+            -- Features
+            orientation TEXT,
+            has_balcony BOOLEAN,
+            has_garden BOOLEAN,
+            has_parking BOOLEAN,
+            has_storage BOOLEAN,
+            heating_type TEXT,
+            condition TEXT,
+
+            -- Media
+            main_image_url TEXT,
+            image_urls TEXT,  -- JSON array
+
+            -- Contact
+            agency TEXT,
+            agent_phone TEXT,
+
+            -- Metadata
+            listing_date TEXT,
+            scraped_at TEXT DEFAULT CURRENT_TIMESTAMP,
+            updated_at TEXT DEFAULT CURRENT_TIMESTAMP,
+            is_active BOOLEAN DEFAULT 1
+        )
+    """)
+
+    # Index for common queries
+    conn.execute("CREATE INDEX IF NOT EXISTS idx_listings_district ON listings(district)")
+    conn.execute("CREATE INDEX IF NOT EXISTS idx_listings_price ON listings(price_eur)")
+    conn.execute("CREATE INDEX IF NOT EXISTS idx_listings_source ON listings(source_site)")
+
+    conn.commit()
+    conn.close()
+    logger.info("Database initialized")
+
+
+def migrate_listings_schema():
+    """
+    Add new columns to listings table for evaluation features.
+    SQLite supports ALTER TABLE ADD COLUMN, so we add each missing column.
+    """
+    conn = get_db_connection()
+
+    # Get existing columns
+    cursor = conn.execute("PRAGMA table_info(listings)")
+    existing_columns = {row[1] for row in cursor.fetchall()}
+
+    # New columns to add with their definitions
+    new_columns = [
+        # User Evaluation
+        ("status", "TEXT DEFAULT 'New'"),  # New/Contacted/Viewed/Rejected/Shortlist
+        ("date_found", "TEXT"),
+        ("decision", "TEXT"),  # Reject/Maybe/Shortlist/Offer Made
+        ("decision_reason", "TEXT"),
+        ("follow_up_actions", "TEXT"),
+
+        # Budget
+        ("estimated_renovation_eur", "REAL"),
+
+        # Media
+        ("floor_plan_url", "TEXT"),
+
+        # Legal
+        ("has_legal_issues", "BOOLEAN DEFAULT 0"),
+
+        # Extended Building Features
+        ("has_security_entrance", "BOOLEAN"),
+        ("building_condition_notes", "TEXT"),
+
+        # Extended Apartment Features
+        ("has_ac_preinstalled", "BOOLEAN"),
+        ("has_central_heating", "BOOLEAN"),
+        ("has_gas_heating", "BOOLEAN"),
+        ("has_double_glazing", "BOOLEAN"),
+        ("has_security_door", "BOOLEAN"),
+        ("has_video_intercom", "BOOLEAN"),
+        ("has_separate_kitchen", "BOOLEAN"),
+
+        # Furnishing & Appliances
+        ("is_furnished", "BOOLEAN"),
+        ("has_builtin_wardrobes", "BOOLEAN"),
+        ("has_appliances", "BOOLEAN"),
+        ("is_recently_renovated", "BOOLEAN"),
+
+        # Outdoor Features
+        ("has_terrace", "BOOLEAN"),
+        ("has_multiple_balconies", "BOOLEAN"),
+        ("has_laundry_space", "BOOLEAN"),
+        ("has_garage", "BOOLEAN"),
+
+        # Location Amenities
+        ("near_park", "BOOLEAN"),
+        ("near_schools", "BOOLEAN"),
+        ("near_supermarket", "BOOLEAN"),
+        ("near_restaurants", "BOOLEAN"),
+        ("is_quiet_street", "BOOLEAN"),
+
+        # Notes
+        ("user_notes", "TEXT"),
+    ]
+
+    added = 0
+    for col_name, col_def in new_columns:
+        if col_name not in existing_columns:
+            try:
+                conn.execute(f"ALTER TABLE listings ADD COLUMN {col_name} {col_def}")
+                logger.debug(f"Added column: {col_name}")
+                added += 1
+            except sqlite3.Error as e:
+                logger.error(f"Error adding column {col_name}: {e}")
+
+    if added > 0:
+        conn.commit()
+        logger.info(f"Migration complete: added {added} new columns to listings")
+    else:
+        logger.debug("No new columns to add")
+
+    conn.close()
+
+
+def init_viewings_table():
+    """Create listing_viewings table for tracking property viewings."""
+    conn = get_db_connection()
+
+    conn.execute("""
+        CREATE TABLE IF NOT EXISTS listing_viewings (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            listing_id INTEGER NOT NULL REFERENCES listings(id) ON DELETE CASCADE,
+
+            -- Viewing info
+            date_viewed TEXT NOT NULL,
+            agent_contact TEXT,
+
+            -- Notes
+            first_impressions TEXT,
+            positives TEXT,  -- JSON array
+            negatives TEXT,  -- JSON array
+            questions TEXT,
+            answers TEXT,
+
+            -- Metadata
+            created_at TEXT DEFAULT CURRENT_TIMESTAMP,
+            updated_at TEXT DEFAULT CURRENT_TIMESTAMP
+        )
+    """)
+
+    conn.execute("CREATE INDEX IF NOT EXISTS idx_viewings_listing ON listing_viewings(listing_id)")
+    conn.commit()
+    conn.close()
+    logger.info("Viewings table initialized")
+
+
+def save_listing(listing) -> Optional[int]:
+    """
+    Save a listing to the database.
+
+    Args:
+        listing: ListingData object from scraper
+
+    Returns:
+        Listing ID or None if failed
+    """
+    conn = get_db_connection()
+
+    try:
+        # Convert image_urls list to JSON string
+        import json
+        image_urls_json = json.dumps(listing.image_urls) if listing.image_urls else None
+
+        cursor = conn.execute("""
+            INSERT INTO listings (
+                external_id, url, source_site, title, description,
+                price_eur, price_per_sqm_eur, sqm_total, sqm_net,
+                rooms_count, bathrooms_count, floor_number, floor_total, has_elevator,
+                building_type, construction_year, act_status,
+                district, neighborhood, address, metro_station, metro_distance_m,
+                orientation, has_balcony, has_garden, has_parking, has_storage,
+                heating_type, condition, main_image_url, image_urls,
+                agency, agent_phone, listing_date
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            ON CONFLICT(url) DO UPDATE SET
+                price_eur = excluded.price_eur,
+                is_active = 1,
+                updated_at = CURRENT_TIMESTAMP
+        """, (
+            listing.external_id, listing.url, listing.source_site,
+            listing.title, listing.description,
+            listing.price_eur, listing.price_per_sqm_eur,
+            listing.sqm_total, listing.sqm_net,
+            listing.rooms_count, listing.bathrooms_count,
+            listing.floor_number, listing.floor_total, listing.has_elevator,
+            listing.building_type, listing.construction_year, listing.act_status,
+            listing.district, listing.neighborhood, listing.address,
+            listing.metro_station, listing.metro_distance_m,
+            listing.orientation, listing.has_balcony, listing.has_garden,
+            listing.has_parking, listing.has_storage,
+            listing.heating_type, listing.condition,
+            listing.main_image_url, image_urls_json,
+            listing.agency, listing.agent_phone,
+            listing.listing_date.isoformat() if listing.listing_date else None
+        ))
+
+        conn.commit()
+        listing_id = cursor.lastrowid
+        logger.info(f"Saved listing {listing.external_id} from {listing.source_site}")
+        return listing_id
+
+    except sqlite3.Error as e:
+        logger.error(f"Database error saving listing: {e}")
+        return None
+    finally:
+        conn.close()
+
+
+def get_listing_by_url(url: str) -> Optional[sqlite3.Row]:
+    """Get a listing by URL."""
+    conn = get_db_connection()
+    cursor = conn.execute("SELECT * FROM listings WHERE url = ?", (url,))
+    row = cursor.fetchone()
+    conn.close()
+    return row
+
+
+def get_listings(
+    district: Optional[str] = None,
+    min_price: Optional[int] = None,
+    max_price: Optional[int] = None,
+    min_rooms: Optional[int] = None,
+    limit: int = 100
+) -> List[sqlite3.Row]:
+    """
+    Get listings with optional filters.
+    """
+    conn = get_db_connection()
+
+    query = "SELECT * FROM listings WHERE is_active = 1"
+    params = []
+
+    if district:
+        query += " AND district LIKE ?"
+        params.append(f"%{district}%")
+
+    if min_price:
+        query += " AND price_eur >= ?"
+        params.append(min_price)
+
+    if max_price:
+        query += " AND price_eur <= ?"
+        params.append(max_price)
+
+    if min_rooms:
+        query += " AND rooms_count >= ?"
+        params.append(min_rooms)
+
+    query += " ORDER BY scraped_at DESC LIMIT ?"
+    params.append(limit)
+
+    cursor = conn.execute(query, params)
+    rows = cursor.fetchall()
+    conn.close()
+    return rows
+
+
+def get_listing_count() -> int:
+    """Get total number of active listings."""
+    conn = get_db_connection()
+    cursor = conn.execute("SELECT COUNT(*) FROM listings WHERE is_active = 1")
+    count = cursor.fetchone()[0]
+    conn.close()
+    return count
+
+
+def mark_listing_inactive(url: str):
+    """Mark a listing as inactive (removed from site)."""
+    conn = get_db_connection()
+    conn.execute(
+        "UPDATE listings SET is_active = 0, updated_at = CURRENT_TIMESTAMP WHERE url = ?",
+        (url,)
+    )
+    conn.commit()
+    conn.close()
+
+
+def get_listing_by_id(listing_id: int) -> Optional[sqlite3.Row]:
+    """Get a listing by ID."""
+    conn = get_db_connection()
+    cursor = conn.execute("SELECT * FROM listings WHERE id = ?", (listing_id,))
+    row = cursor.fetchone()
+    conn.close()
+    return row
+
+
+def update_listing_evaluation(
+    listing_id: int,
+    status: Optional[str] = None,
+    decision: Optional[str] = None,
+    decision_reason: Optional[str] = None,
+    follow_up_actions: Optional[str] = None,
+    estimated_renovation_eur: Optional[float] = None,
+    user_notes: Optional[str] = None,
+    **kwargs
+) -> bool:
+    """
+    Update user evaluation fields for a listing.
+    Accepts additional kwargs for any column updates.
+    """
+    conn = get_db_connection()
+
+    # Build dynamic update query
+    updates = []
+    params = []
+
+    # Standard evaluation fields
+    field_map = {
+        "status": status,
+        "decision": decision,
+        "decision_reason": decision_reason,
+        "follow_up_actions": follow_up_actions,
+        "estimated_renovation_eur": estimated_renovation_eur,
+        "user_notes": user_notes,
+    }
+
+    # Add any kwargs (for feature flags, etc.)
+    field_map.update(kwargs)
+
+    for field, value in field_map.items():
+        if value is not None:
+            updates.append(f"{field} = ?")
+            params.append(value)
+
+    if not updates:
+        return False
+
+    updates.append("updated_at = CURRENT_TIMESTAMP")
+    params.append(listing_id)
+
+    query = f"UPDATE listings SET {', '.join(updates)} WHERE id = ?"
+
+    try:
+        conn.execute(query, params)
+        conn.commit()
+        return True
+    except sqlite3.Error as e:
+        logger.error(f"Error updating listing {listing_id}: {e}")
+        return False
+    finally:
+        conn.close()
+
+
+def update_listing_features(listing_id: int, features: Dict[str, Any]) -> bool:
+    """
+    Update feature boolean flags for a listing.
+
+    Args:
+        listing_id: Listing ID
+        features: Dict of feature column names to boolean values
+    """
+    return update_listing_evaluation(listing_id, **features)
+
+
+# ============================================================
+# Viewings Functions
+# ============================================================
+
+def add_viewing(
+    listing_id: int,
+    date_viewed: str,
+    agent_contact: Optional[str] = None,
+    first_impressions: Optional[str] = None,
+    positives: Optional[List[str]] = None,
+    negatives: Optional[List[str]] = None,
+    questions: Optional[str] = None,
+    answers: Optional[str] = None
+) -> Optional[int]:
+    """
+    Add a viewing record for a listing.
+
+    Returns:
+        Viewing ID or None if failed
+    """
+    conn = get_db_connection()
+
+    try:
+        cursor = conn.execute("""
+            INSERT INTO listing_viewings (
+                listing_id, date_viewed, agent_contact,
+                first_impressions, positives, negatives,
+                questions, answers
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+        """, (
+            listing_id, date_viewed, agent_contact,
+            first_impressions,
+            json.dumps(positives) if positives else None,
+            json.dumps(negatives) if negatives else None,
+            questions, answers
+        ))
+
+        conn.commit()
+        viewing_id = cursor.lastrowid
+
+        # Update listing status to Viewed
+        conn.execute(
+            "UPDATE listings SET status = 'Viewed', updated_at = CURRENT_TIMESTAMP WHERE id = ?",
+            (listing_id,)
+        )
+        conn.commit()
+
+        logger.info(f"Added viewing for listing {listing_id}")
+        return viewing_id
+
+    except sqlite3.Error as e:
+        logger.error(f"Error adding viewing: {e}")
+        return None
+    finally:
+        conn.close()
+
+
+def get_viewings_for_listing(listing_id: int) -> List[sqlite3.Row]:
+    """Get all viewings for a listing."""
+    conn = get_db_connection()
+    cursor = conn.execute(
+        "SELECT * FROM listing_viewings WHERE listing_id = ? ORDER BY date_viewed DESC",
+        (listing_id,)
+    )
+    rows = cursor.fetchall()
+    conn.close()
+    return rows
+
+
+def update_viewing(
+    viewing_id: int,
+    first_impressions: Optional[str] = None,
+    positives: Optional[List[str]] = None,
+    negatives: Optional[List[str]] = None,
+    questions: Optional[str] = None,
+    answers: Optional[str] = None
+) -> bool:
+    """Update a viewing record."""
+    conn = get_db_connection()
+
+    updates = []
+    params = []
+
+    if first_impressions is not None:
+        updates.append("first_impressions = ?")
+        params.append(first_impressions)
+    if positives is not None:
+        updates.append("positives = ?")
+        params.append(json.dumps(positives))
+    if negatives is not None:
+        updates.append("negatives = ?")
+        params.append(json.dumps(negatives))
+    if questions is not None:
+        updates.append("questions = ?")
+        params.append(questions)
+    if answers is not None:
+        updates.append("answers = ?")
+        params.append(answers)
+
+    if not updates:
+        return False
+
+    updates.append("updated_at = CURRENT_TIMESTAMP")
+    params.append(viewing_id)
+
+    query = f"UPDATE listing_viewings SET {', '.join(updates)} WHERE id = ?"
+
+    try:
+        conn.execute(query, params)
+        conn.commit()
+        return True
+    except sqlite3.Error as e:
+        logger.error(f"Error updating viewing {viewing_id}: {e}")
+        return False
+    finally:
+        conn.close()
+
+
+def delete_viewing(viewing_id: int) -> bool:
+    """Delete a viewing record."""
+    conn = get_db_connection()
+    try:
+        conn.execute("DELETE FROM listing_viewings WHERE id = ?", (viewing_id,))
+        conn.commit()
+        return True
+    except sqlite3.Error as e:
+        logger.error(f"Error deleting viewing {viewing_id}: {e}")
+        return False
+    finally:
+        conn.close()
+
+
+# ============================================================
+# Statistics Functions (for Streamlit dashboard)
+# ============================================================
+
+def get_listings_stats() -> Dict[str, Any]:
+    """Get aggregate statistics for dashboard."""
+    conn = get_db_connection()
+
+    stats = {}
+
+    # Total counts
+    cursor = conn.execute("SELECT COUNT(*) FROM listings WHERE is_active = 1")
+    stats["total_active"] = cursor.fetchone()[0]
+
+    # By status
+    cursor = conn.execute("""
+        SELECT status, COUNT(*) as count
+        FROM listings WHERE is_active = 1
+        GROUP BY status
+    """)
+    stats["by_status"] = {row["status"] or "New": row["count"] for row in cursor.fetchall()}
+
+    # Price stats
+    cursor = conn.execute("""
+        SELECT
+            AVG(price_eur) as avg_price,
+            MIN(price_eur) as min_price,
+            MAX(price_eur) as max_price,
+            AVG(price_per_sqm_eur) as avg_price_sqm
+        FROM listings WHERE is_active = 1 AND price_eur IS NOT NULL
+    """)
+    row = cursor.fetchone()
+    stats["price"] = {
+        "avg": row["avg_price"],
+        "min": row["min_price"],
+        "max": row["max_price"],
+        "avg_per_sqm": row["avg_price_sqm"],
+    }
+
+    # By district
+    cursor = conn.execute("""
+        SELECT district, COUNT(*) as count, AVG(price_per_sqm_eur) as avg_sqm_price
+        FROM listings WHERE is_active = 1 AND district IS NOT NULL
+        GROUP BY district ORDER BY count DESC
+    """)
+    stats["by_district"] = [
+        {"district": row["district"], "count": row["count"], "avg_sqm_price": row["avg_sqm_price"]}
+        for row in cursor.fetchall()
+    ]
+
+    # By decision
+    cursor = conn.execute("""
+        SELECT decision, COUNT(*) as count
+        FROM listings WHERE is_active = 1 AND decision IS NOT NULL
+        GROUP BY decision
+    """)
+    stats["by_decision"] = {row["decision"]: row["count"] for row in cursor.fetchall()}
+
+    conn.close()
+    return stats
+
+
+def get_shortlisted_listings() -> List[sqlite3.Row]:
+    """Get all shortlisted listings for comparison."""
+    conn = get_db_connection()
+    cursor = conn.execute("""
+        SELECT * FROM listings
+        WHERE is_active = 1 AND (decision = 'Shortlist' OR status = 'Shortlist')
+        ORDER BY price_eur ASC
+    """)
+    rows = cursor.fetchall()
+    conn.close()
+    return rows
+
+
+# Initialize database on import
+init_db()
+migrate_listings_schema()
+init_viewings_table()

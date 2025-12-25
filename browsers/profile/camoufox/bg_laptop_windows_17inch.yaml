@@ -1,0 +1,20 @@
+fonts:
+- Arial
+- Calibri
+- Segoe UI
+geolocation:
+  accuracy: 50
+  latitude: 42.6975
+  longitude: 23.3242
+locale:
+  all: bg-BG,bg
+  language: bg
+  region: BG
+os: windows
+screen:
+  height: 1080
+  width: 1920
+timezone: Europe/Sofia
+webgl:
+  renderer: Intel UHD Graphics 620
+  vendor: Intel Inc.

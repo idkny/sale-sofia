@@ -1,0 +1,20 @@
+fonts:
+- Arial
+- Verdana
+- Times New Roman
+geolocation:
+  accuracy: 50
+  latitude: 42.6975
+  longitude: 23.3242
+locale:
+  all: bg-BG,bg
+  language: bg
+  region: BG
+os: windows
+screen:
+  height: 768
+  width: 1366
+timezone: Europe/Sofia
+webgl:
+  renderer: Intel Iris Graphics
+  vendor: Intel Inc.

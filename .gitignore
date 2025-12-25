@@ -1,0 +1,68 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+venv/
+.venv/
+ENV/
+env/
+.eggs/
+*.egg-info/
+*.egg
+
+# IDE
+.idea/
+.vscode/
+*.swp
+*.swo
+*~
+
+# Environment & Secrets
+.env
+.env.*
+*.pem
+*.key
+*secret*
+*credential*
+*password*
+
+# Runtime artifacts
+celerybeat-schedule*
+*.pid
+*.log
+
+# Proxy files (contain IPs, potentially sensitive)
+proxies/tmp*.txt
+proxies/live_proxies.txt
+proxies/live_proxies.json
+proxies/scraped_*.json
+proxies/external/proxy-scraper-checker/proxies/
+
+# Database
+data/*.db
+data/*.sqlite
+data/*.sqlite3
+
+# Logs
+data/logs/
+
+# Testing
+.pytest_cache/
+.coverage
+htmlcov/
+tests/stress/*_results.md
+tests/debug/*_output.txt
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Claude Code (local settings only)
+.claude/settings.local.json
+
+# Temp files
+*.tmp
+*.temp
+admin/tmp/

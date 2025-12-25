@@ -1,0 +1,250 @@
+{
+  "version": "1.1",
+  "description": "File placement rules for sale-sofia project",
+  "created_at": "2025-12-25",
+  "updated_at": "2025-12-25",
+
+  "global_rules": {
+    "max_depth": 3,
+    "max_depth_reason": "Keeps project structure flat and navigable"
+  },
+
+  "allowed_root_files": {
+    "exact": [
+      "main.py",
+      "orchestrator.py",
+      "celery_app.py",
+      "paths.py",
+      "requirements.txt",
+      "README.md",
+      "CLAUDE.md",
+      ".gitignore",
+      ".env",
+      "pytest.ini",
+      "setup.sh"
+    ],
+    "patterns": [],
+    "reason": "Root should only contain core entry points and essential config"
+  },
+
+  "forbidden_at_root": {
+    "extensions": [".log", ".db", ".sqlite", ".sqlite3"],
+    "patterns": [
+      "test_*.py",
+      "*_results.*",
+      "*_test.*"
+    ],
+    "except": ["README.md", "CLAUDE.md"],
+    "reason": "Keeps root clean - move to appropriate subdirectory"
+  },
+
+  "directories": {
+    "app/": {
+      "purpose": "Streamlit dashboard (presentation layer)",
+      "allowed_extensions": [".py"],
+      "allowed_subdirs": ["pages"],
+      "block_new_subdirs": true
+    },
+
+    "browsers/": {
+      "purpose": "Browser automation",
+      "allowed_extensions": [".py"],
+      "allowed_subdirs": ["strategies", "profile"],
+      "block_new_subdirs": true
+    },
+
+    "config/": {
+      "purpose": "Configuration files",
+      "allowed_extensions": [".yaml", ".yml", ".json", ".py"],
+      "allowed_subdirs": [],
+      "block_new_subdirs": true
+    },
+
+    "data/": {
+      "purpose": "Data storage (databases, logs)",
+      "allowed_extensions": [".py", ".db", ".sqlite"],
+      "allowed_subdirs": ["logs"],
+      "block_new_subdirs": true
+    },
+
+    "data/logs/": {
+      "purpose": "Application logs",
+      "allowed_extensions": [".log", ".txt"],
+      "allowed_subdirs": [],
+      "block_new_subdirs": true
+    },
+
+    "proxies/": {
+      "purpose": "Proxy management",
+      "allowed_extensions": [".py", ".json", ".txt", ".md"],
+      "allowed_subdirs": ["external"],
+      "block_new_subdirs": false
+    },
+
+    "websites/": {
+      "purpose": "Scraper implementations",
+      "allowed_extensions": [".py"],
+      "allowed_subdirs": ["imot_bg", "bazar_bg", "homes_bg"],
+      "block_new_subdirs": false,
+      "naming_pattern": "<site>_bg/"
+    },
+
+    "tests/": {
+      "purpose": "All test files",
+      "allowed_extensions": [".py", ".sh", ".md", ".json"],
+      "allowed_subdirs": ["debug", "stress"],
+      "block_new_subdirs": false
+    },
+
+    "scripts/": {
+      "purpose": "Utility scripts",
+      "allowed_extensions": [".py", ".sh"],
+      "allowed_subdirs": [],
+      "block_new_subdirs": true
+    },
+
+    "admin/": {
+      "purpose": "Project administration (scripts, config)",
+      "allowed_extensions": [".py", ".sh", ".json", ".md"],
+      "allowed_subdirs": ["scripts", "config"],
+      "block_new_subdirs": true
+    },
+
+    "admin/scripts/": {
+      "purpose": "Admin scripts (hooks, utilities)",
+      "allowed_extensions": [".py", ".sh"],
+      "allowed_subdirs": ["hooks"],
+      "block_new_subdirs": true
+    },
+
+    "admin/scripts/hooks/": {
+      "purpose": "Claude Code hooks",
+      "allowed_extensions": [".py", ".sh"],
+      "allowed_subdirs": [],
+      "block_new_subdirs": true
+    },
+
+    "admin/config/": {
+      "purpose": "Admin configuration",
+      "allowed_extensions": [".json", ".yaml", ".yml"],
+      "allowed_subdirs": [],
+      "block_new_subdirs": true
+    },
+
+    "docs/": {
+      "purpose": "Documentation (markdown only) - NO FILES HERE, only subdirs",
+      "allowed_extensions": [],
+      "allowed_subdirs": ["architecture", "research", "specs", "tasks"],
+      "block_new_subdirs": true,
+      "block_root_files": true,
+      "require_subdir": true
+    },
+
+    "docs/architecture/": {
+      "purpose": "Architecture documentation",
+      "allowed_extensions": [".md"],
+      "allowed_subdirs": [],
+      "block_new_subdirs": true
+    },
+
+    "docs/research/": {
+      "purpose": "Active research (archive when done)",
+      "allowed_extensions": [".md"],
+      "allowed_subdirs": [],
+      "block_new_subdirs": true,
+      "workflow": "archive_when_done"
+    },
+
+    "docs/specs/": {
+      "purpose": "Active specs (archive when implemented)",
+      "allowed_extensions": [".md"],
+      "allowed_subdirs": [],
+      "block_new_subdirs": true,
+      "workflow": "archive_when_implemented"
+    },
+
+    "docs/tasks/": {
+      "purpose": "Task tracking (TASKS.md, instance files)",
+      "allowed_extensions": [".md"],
+      "allowed_subdirs": [],
+      "block_new_subdirs": true
+    },
+
+    "research/": {
+      "purpose": "Domain research (neighborhoods, criteria)",
+      "allowed_extensions": [".md"],
+      "allowed_subdirs": [],
+      "block_new_subdirs": true
+    },
+
+    "archive/": {
+      "purpose": "Historical/completed files",
+      "allowed_extensions": [".md", ".py", ".json"],
+      "allowed_subdirs": ["docs", "research", "specs", "sessions", "extraction"],
+      "block_new_subdirs": true
+    },
+
+    ".claude/": {
+      "purpose": "Claude Code configuration",
+      "allowed_extensions": [".json", ".md"],
+      "allowed_subdirs": ["commands", "agents"],
+      "block_new_subdirs": true,
+      "protected": true
+    }
+  },
+
+  "validations": {
+    "pre_write": {
+      "enabled": true,
+      "validate_location": true,
+      "validate_extension": true,
+      "block_root_files": true,
+      "block_wrong_extension": true,
+      "warn_implicit_mkdir": true
+    }
+  },
+
+  "file_type_routing": {
+    ".md": {
+      "default": "docs/",
+      "exceptions": {
+        "README.md": "ROOT",
+        "CLAUDE.md": "ROOT",
+        "test_*.md": "tests/",
+        "*_results.md": "tests/"
+      }
+    },
+    ".py": {
+      "default": "CONTEXT_DEPENDENT",
+      "exceptions": {
+        "test_*.py": "tests/",
+        "main.py": "ROOT",
+        "orchestrator.py": "ROOT",
+        "celery_app.py": "ROOT",
+        "paths.py": "ROOT"
+      }
+    },
+    ".json": {
+      "default": "config/",
+      "exceptions": {
+        "live_proxies.json": "proxies/",
+        "*.local.json": ".claude/"
+      }
+    },
+    ".log": {
+      "default": "data/logs/",
+      "exceptions": {}
+    },
+    ".db": {
+      "default": "data/",
+      "exceptions": {}
+    }
+  },
+
+  "error_messages": {
+    "root_file_blocked": "File not allowed at root. Only these files are allowed: {allowed_files}. Move to: {suggested_location}",
+    "wrong_extension": "Extension {ext} not allowed in {directory}. Allowed: {allowed}",
+    "implicit_mkdir": "Would create new directory {new_dir}. This directory is not in manifest. Ask user to confirm or use existing directory.",
+    "protected_file": "This file is protected. Modifications require explicit user request."
+  }
+}

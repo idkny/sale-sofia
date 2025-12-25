@@ -1,0 +1,29 @@
+black
+Brotli==1.1.0
+camoufox[geoip]
+celery==5.4.0
+python-dotenv
+emunium
+geoip2==5.1.0
+httpx>=0.28.1
+isort
+loguru
+nest_asyncio # For allowing nested asyncio event loops, used in crawler_controller
+playwright
+playwright-stealth
+proxyz==0.2.0
+psutil==7.0.0
+pytest
+pytest-asyncio
+redis==5.0.7
+ruff
+scrapling==0.2.99
+socksio==1.0.0
+tldextract==5.1.2
+pydantic
+pyvirtualdisplay
+PyYAML
+
+# Dashboard
+streamlit>=1.29.0
+pandas>=2.0.0
