@@ -2,6 +2,7 @@
 """Unit tests for imot.bg scraper - is_last_page detection helpers."""
 
 import pytest
+
 from websites.imot_bg.imot_scraper import ImotBgScraper
 
 
@@ -47,9 +48,8 @@ class TestHasNoListings:
             <a href="/contact">Contact</a>
         </body></html>
         """
-        from bs4 import BeautifulSoup
-        soup = BeautifulSoup(html, "html.parser")
-        assert scraper._has_no_listings(soup) is True
+        page = scraper.parse(html)
+        assert scraper._has_no_listings(page) is True
 
     def test_has_listing_links(self, scraper):
         """Should return False when listing links exist."""
@@ -59,9 +59,8 @@ class TestHasNoListings:
             <a href="/obiava-def456-prodava-apartament">Listing 2</a>
         </body></html>
         """
-        from bs4 import BeautifulSoup
-        soup = BeautifulSoup(html, "html.parser")
-        assert scraper._has_no_listings(soup) is False
+        page = scraper.parse(html)
+        assert scraper._has_no_listings(page) is False
 
     def test_partial_match_not_listing(self, scraper):
         """Links with only partial pattern shouldn't count."""
@@ -71,9 +70,8 @@ class TestHasNoListings:
             <a href="/some-prodava-link">Missing obiava</a>
         </body></html>
         """
-        from bs4 import BeautifulSoup
-        soup = BeautifulSoup(html, "html.parser")
-        assert scraper._has_no_listings(soup) is True
+        page = scraper.parse(html)
+        assert scraper._has_no_listings(page) is True
 
 
 class TestHasNextPageLink:
@@ -87,11 +85,10 @@ class TestHasNextPageLink:
             <a href="/search/p-3">Page 3</a>
         </body></html>
         """
-        from bs4 import BeautifulSoup
-        soup = BeautifulSoup(html, "html.parser")
-        assert scraper._has_next_page_link(soup, current_page=1) is True
-        assert scraper._has_next_page_link(soup, current_page=2) is True
-        assert scraper._has_next_page_link(soup, current_page=3) is False
+        page = scraper.parse(html)
+        assert scraper._has_next_page_link(page, current_page=1) is True
+        assert scraper._has_next_page_link(page, current_page=2) is True
+        assert scraper._has_next_page_link(page, current_page=3) is False
 
     def test_next_page_in_link_text(self, scraper):
         """Should find next page when number is in link text."""
@@ -102,11 +99,10 @@ class TestHasNextPageLink:
             <a href="/search">3</a>
         </body></html>
         """
-        from bs4 import BeautifulSoup
-        soup = BeautifulSoup(html, "html.parser")
-        assert scraper._has_next_page_link(soup, current_page=1) is True
-        assert scraper._has_next_page_link(soup, current_page=2) is True
-        assert scraper._has_next_page_link(soup, current_page=3) is False
+        page = scraper.parse(html)
+        assert scraper._has_next_page_link(page, current_page=1) is True
+        assert scraper._has_next_page_link(page, current_page=2) is True
+        assert scraper._has_next_page_link(page, current_page=3) is False
 
     def test_no_next_page(self, scraper):
         """Should return False when no next page link."""
@@ -115,9 +111,8 @@ class TestHasNextPageLink:
             <a href="/search/p-1">Page 1</a>
         </body></html>
         """
-        from bs4 import BeautifulSoup
-        soup = BeautifulSoup(html, "html.parser")
-        assert scraper._has_next_page_link(soup, current_page=1) is False
+        page = scraper.parse(html)
+        assert scraper._has_next_page_link(page, current_page=1) is False
 
 
 class TestIsPastTotalPages:

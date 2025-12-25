@@ -10,14 +10,15 @@ Site structure:
 import re
 from typing import List, Optional
 
-from bs4 import BeautifulSoup
 from loguru import logger
+from scrapling import Adaptor
 
 from ..base_scraper import BaseSiteScraper, ListingData
+from ..scrapling_base import ScraplingMixin
 from . import selectors as sel
 
 
-class BazarBgScraper(BaseSiteScraper):
+class BazarBgScraper(ScraplingMixin, BaseSiteScraper):
     """Scraper for bazar.bg - Bulgarian classifieds site."""
 
     def __init__(self):
@@ -41,7 +42,7 @@ class BazarBgScraper(BaseSiteScraper):
         Returns:
             ListingData object or None if extraction failed
         """
-        soup = BeautifulSoup(html, "html.parser")
+        page = self.parse(html, url)
 
         # Extract ID from URL
         external_id = self._extract_id_from_url(url)
@@ -50,7 +51,7 @@ class BazarBgScraper(BaseSiteScraper):
             return None
 
         # Get page text for regex extraction
-        page_text = soup.get_text(separator=" ", strip=True)
+        page_text = self.get_page_text(page)
 
         # Extract all fields
         price_eur = self._extract_price_eur(html, page_text)
@@ -76,10 +77,10 @@ class BazarBgScraper(BaseSiteScraper):
 
         orientation = self._extract_orientation(page_text)
         heating_type = self._extract_heating(page_text)
-        image_urls = self._extract_images(soup)
-        title = self._extract_title(soup, url)
-        description = self._extract_description(soup)
-        agency, agent_name, agent_phone = self._extract_contact(soup, page_text)
+        image_urls = self._extract_images(page)
+        title = self._extract_title(page, url)
+        description = self._extract_description(page)
+        agency, agent_name, agent_phone = self._extract_contact(page, page_text)
 
         listing = ListingData(
             external_id=external_id,
@@ -129,12 +130,12 @@ class BazarBgScraper(BaseSiteScraper):
         Returns:
             List of listing URLs
         """
-        soup = BeautifulSoup(html, "html.parser")
+        page = self.parse(html)
         listing_urls = []
 
         # Find all listing links using the CSS selector
-        for link in soup.select(sel.LISTING_LINK):
-            href = link.get(sel.LISTING_URL_ATTR)
+        for link in self.css(page, sel.LISTING_LINK):
+            href = self.get_attr(link, sel.LISTING_URL_ATTR)
             if not href:
                 continue
 
@@ -164,8 +165,8 @@ class BazarBgScraper(BaseSiteScraper):
         Returns:
             True if this is the last page
         """
-        soup = BeautifulSoup(html, "html.parser")
-        page_text = soup.get_text(separator=" ", strip=True)
+        page = self.parse(html)
+        page_text = self.get_page_text(page)
 
         # Method 1: Check for "no results" message
         for pattern in sel.NO_RESULTS_PATTERNS:
@@ -174,7 +175,7 @@ class BazarBgScraper(BaseSiteScraper):
                 return True
 
         # Method 2: Check if no listings on page
-        listing_links = soup.select(sel.LISTING_LINK)
+        listing_links = self.css(page, sel.LISTING_LINK)
         if len(listing_links) == 0:
             logger.debug("Last page detected: no listings found")
             return True
@@ -510,13 +511,13 @@ class BazarBgScraper(BaseSiteScraper):
 
         return None
 
-    def _extract_images(self, soup: BeautifulSoup) -> List[str]:
+    def _extract_images(self, page: Adaptor) -> List[str]:
         """Extract image URLs from the page."""
         images = []
 
         # Look for images in img tags
-        for img in soup.find_all("img"):
-            src = img.get("src") or img.get("data-src") or ""
+        for img in self.css(page, "img"):
+            src = self.get_attr(img, "src") or self.get_attr(img, "data-src") or ""
 
             if re.search(sel.IMAGE_HOST_PATTERN, src):
                 if src.startswith("//"):
@@ -525,8 +526,8 @@ class BazarBgScraper(BaseSiteScraper):
                     images.append(src)
 
         # Also look in anchor tags (carousel/lightbox)
-        for link in soup.find_all("a", href=True):
-            href = link["href"]
+        for link in self.css(page, "a[href]"):
+            href = self.get_attr(link, "href")
             if re.search(sel.IMAGE_HOST_PATTERN, href):
                 if any(ext in href.lower() for ext in sel.IMAGE_EXTENSIONS):
                     if href.startswith("//"):
@@ -536,26 +537,26 @@ class BazarBgScraper(BaseSiteScraper):
 
         return images
 
-    def _extract_title(self, soup: BeautifulSoup, url: str) -> Optional[str]:
+    def _extract_title(self, page: Adaptor, url: str) -> Optional[str]:
         """Extract listing title."""
         # Try meta title
-        title_tag = soup.find("title")
+        title_tag = self.css_first(page, "title")
         if title_tag:
-            return title_tag.get_text(strip=True)
+            return self.get_text(title_tag)
 
         # Try h1
-        h1 = soup.find("h1")
+        h1 = self.css_first(page, "h1")
         if h1:
-            return h1.get_text(strip=True)
+            return self.get_text(h1)
 
         # Generate from URL
         return url.split("/")[-1].replace("-", " ").title()
 
-    def _extract_description(self, soup: BeautifulSoup) -> Optional[str]:
+    def _extract_description(self, page: Adaptor) -> Optional[str]:
         """Extract listing description."""
         # Find text blocks containing property keywords
-        for div in soup.find_all("div"):
-            text = div.get_text(strip=True)
+        for div in self.css(page, "div"):
+            text = self.get_text(div)
             if len(text) > 100 and len(text) < 5000:
                 if any(kw in text.lower() for kw in sel.DESCRIPTION_KEYWORDS):
                     return text
@@ -563,7 +564,7 @@ class BazarBgScraper(BaseSiteScraper):
         return None
 
     def _extract_contact(
-        self, soup: BeautifulSoup, text: str
+        self, page: Adaptor, text: str
     ) -> tuple[Optional[str], Optional[str], Optional[str]]:
         """Extract agency, agent name, and phone."""
         agency = None

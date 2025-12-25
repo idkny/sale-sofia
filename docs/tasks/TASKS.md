@@ -136,8 +136,8 @@ Test only waited 5 minutes → FAIL
   - `get_page_text()` for clean text extraction
   - CSS/XPath selectors with auto_match support
 - [x] Test with imot.bg (price: 170400 EUR, area: 71 sqm, floor: 4/6)
-- [ ] Migrate imot_scraper.py to Scrapling
-- [ ] Migrate bazar_scraper.py to Scrapling
+- [x] Migrate imot_scraper.py to Scrapling (2025-12-25, 17 tests pass)
+- [x] Migrate bazar_scraper.py to Scrapling (2025-12-25)
 - [ ] Enable adaptive mode with baseline selectors
 - [ ] Test StealthyFetcher with mubeng proxy
 - [ ] Set up Ollama LLM for description extraction

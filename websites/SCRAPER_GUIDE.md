@@ -10,6 +10,7 @@ This guide explains how to create a new website scraper for the sale-sofia proje
 websites/
 ├── __init__.py              # Registry + get_scraper() factory
 ├── base_scraper.py          # BaseSiteScraper ABC + ListingData dataclass
+├── scrapling_base.py        # ScraplingMixin - fast parsing with encoding support
 ├── http_client.py           # [TODO] Shared HTTP wrapper
 ├── SCRAPER_GUIDE.md         # This file
 └── {site_name}/
@@ -18,6 +19,14 @@ websites/
     ├── selectors.py            # [Optional] CSS/XPath selectors
     └── tests/               # [Optional] Test HTML fixtures
 ```
+
+### Scrapling vs BeautifulSoup
+
+We use **Scrapling** instead of BeautifulSoup for:
+- **774x faster** parsing performance
+- **Auto-encoding detection** (windows-1251, UTF-8 for Bulgarian sites)
+- **Adaptive selectors** that survive site changes
+- **StealthyFetcher** for anti-bot bypass
 
 ---
 
@@ -105,13 +114,14 @@ Site structure:
 
 import re
 from typing import List, Optional
-from bs4 import BeautifulSoup
+from scrapling import Adaptor
 from loguru import logger
 
 from ..base_scraper import BaseSiteScraper, ListingData
+from ..scrapling_base import ScraplingMixin
 
 
-class {SiteName}Scraper(BaseSiteScraper):
+class {SiteName}Scraper(ScraplingMixin, BaseSiteScraper):
     """{Site description}."""
 
     def __init__(self):
@@ -126,7 +136,8 @@ class {SiteName}Scraper(BaseSiteScraper):
 
     async def extract_listing(self, html: str, url: str) -> Optional[ListingData]:
         """Extract listing data from a single property page."""
-        soup = BeautifulSoup(html, "html.parser")
+        page = self.parse(html, url)  # Scrapling Adaptor
+        text = self.get_page_text(page)  # Full page text for regex
 
         # 1. Extract external ID from URL
         external_id = self._extract_id_from_url(url)
@@ -146,12 +157,14 @@ class {SiteName}Scraper(BaseSiteScraper):
 
     async def extract_search_results(self, html: str) -> List[str]:
         """Extract listing URLs from search results page."""
-        soup = BeautifulSoup(html, "html.parser")
+        page = self.parse(html)
         listing_urls = []
 
-        # TODO: Find all listing links
-        # for link in soup.select("CSS_SELECTOR_HERE"):
-        #     ...
+        # Find all listing links using CSS selectors
+        for link in self.css(page, "CSS_SELECTOR_HERE"):
+            href = self.get_attr(link, "href")
+            if href:
+                listing_urls.append(href)
 
         logger.info(f"Found {len(listing_urls)} listings")
         return listing_urls
@@ -181,20 +194,21 @@ class {SiteName}Scraper(BaseSiteScraper):
         - Current page >= total pages shown
         - "No results" message appears
         """
-        soup = BeautifulSoup(html, "html.parser")
+        page = self.parse(html)
+        text = self.get_page_text(page)
 
         # Pattern 1: Check if next button exists
-        # next_btn = soup.select_one(".pagination .next")
-        # if not next_btn or "disabled" in next_btn.get("class", []):
+        # next_btn = self.css_first(page, ".pagination .next")
+        # if not next_btn:
         #     return True
 
         # Pattern 2: Check if results are empty
-        # listings = soup.select(".listing-card")
+        # listings = self.css(page, ".listing-card")
         # if len(listings) == 0:
         #     return True
 
         # Pattern 3: Compare current page to total
-        # total_pages = self._extract_total_pages(soup)
+        # total_pages = self._extract_total_pages(text)
         # if current_page >= total_pages:
         #     return True
 
@@ -213,7 +227,20 @@ class {SiteName}Scraper(BaseSiteScraper):
     # Add more _extract_* methods as needed...
 ```
 
-### 3.2 Required Methods Checklist
+### 3.2 ScraplingMixin Methods Reference
+
+| Method | Purpose | Example |
+|--------|---------|---------|
+| `self.parse(html, url)` | Parse HTML → Adaptor | `page = self.parse(html, url)` |
+| `self.css(page, sel)` | Select multiple elements | `links = self.css(page, "a.listing")` |
+| `self.css_first(page, sel)` | Select first element | `title = self.css_first(page, "h1")` |
+| `self.get_text(el)` | Get element text | `text = self.get_text(title)` |
+| `self.get_attr(el, attr)` | Get attribute | `href = self.get_attr(link, "href")` |
+| `self.get_page_text(page)` | Full page text | `text = self.get_page_text(page)` |
+| `self.fetch(url, proxy)` | Fetch with encoding | `page = self.fetch(url)` |
+| `self.fetch_stealth(url)` | Anti-bot fetch | `page = self.fetch_stealth(url)` |
+
+### 3.3 Required Methods Checklist
 
 ```
 [ ] extract_listing(html, url) -> ListingData
@@ -666,20 +693,21 @@ DEPLOYMENT PHASE
 
 ## TODO / Missing Components
 
-1. **HTTP Client wrapper** (`http_client.py`)
+1. ~~**Scrapling integration**~~ ✅ DONE (2025-12-25)
+   - `scrapling_base.py` with ScraplingMixin
+   - Auto-encoding detection for Bulgarian sites
+   - 774x faster parsing than BeautifulSoup
+
+2. **HTTP Client wrapper** (`http_client.py`)
    - Standardized response handling
    - Automatic retry logic
    - Proxy integration
    - Block detection
 
-2. **Orchestrator integration**
+3. **Orchestrator integration**
    - How scrapers connect to Celery tasks
    - Progress reporting
    - Error aggregation
-
-3. **Browser automation option**
-   - For JS-heavy sites
-   - Playwright/Selenium wrapper
 
 4. **Rate limiter**
    - Per-site configuration
