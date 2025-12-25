@@ -33,12 +33,25 @@
 | Category | Technology |
 |----------|------------|
 | Language | Python 3.12+ |
+| HTML Parsing | Scrapling (774x faster than BeautifulSoup) |
 | Browser | Playwright |
 | Task Queue | Celery + Redis |
 | Database | SQLite |
 | Dashboard | Streamlit |
 | Proxy Rotation | Mubeng (Go) |
 | Proxy Scraping | proxy-scraper-checker (Rust) |
+
+### Scrapling (HTML Parser)
+
+We use [Scrapling](https://github.com/D4Vinci/Scrapling) instead of BeautifulSoup for:
+- **774x faster** parsing performance
+- **Auto-encoding** detection (windows-1251, UTF-8 for Bulgarian sites)
+- **Adaptive selectors** that survive site HTML changes
+
+**Key files:**
+- `websites/scrapling_base.py` - ScraplingMixin class
+- `websites/SCRAPER_GUIDE.md` - Usage documentation
+- `data/scrapling_selectors/` - Saved element signatures for adaptive matching
 
 ---
 

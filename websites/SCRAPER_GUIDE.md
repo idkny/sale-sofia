@@ -240,7 +240,51 @@ class {SiteName}Scraper(ScraplingMixin, BaseSiteScraper):
 | `self.fetch(url, proxy)` | Fetch with encoding | `page = self.fetch(url)` |
 | `self.fetch_stealth(url)` | Anti-bot fetch | `page = self.fetch_stealth(url)` |
 
-### 3.3 Required Methods Checklist
+### 3.3 Adaptive Mode (Selector Resilience)
+
+Scrapling's adaptive mode allows selectors to auto-heal when site HTML structure changes.
+
+**How it works:**
+1. **First run**: `auto_save=True` saves element signatures to `data/scrapling_selectors/`
+2. **Subsequent runs**: `auto_match=True` finds elements even if CSS selectors break
+3. **Toggle**: `scraper.adaptive_mode = True/False`
+
+**Usage in selectors:**
+
+```python
+class MyScraper(ScraplingMixin, BaseSiteScraper):
+    def __init__(self):
+        super().__init__()
+        self.adaptive_mode = True  # Enable adaptive matching
+
+    def _extract_title(self, page: Adaptor) -> str:
+        # With adaptive mode - selector can survive site changes
+        title = self.css_first(
+            page,
+            "h1.listing-title",
+            identifier="mysite_title",      # Unique ID for this selector
+            auto_save=True,                  # Save signature on first run
+            auto_match=self.adaptive_mode,   # Use fuzzy matching when enabled
+        )
+        return self.get_text(title) if title else ""
+```
+
+**Key parameters:**
+| Parameter | Purpose |
+|-----------|---------|
+| `identifier` | Unique ID for this selector (e.g., "imot_title") |
+| `auto_save` | Save element signature for future matching |
+| `auto_match` | Enable fuzzy matching when selector breaks |
+
+**Current adaptive selectors:**
+- `imot_scraper.py`: 8 selectors (listing_links, pagination, images, title, h1, description, contact_links, image_links)
+- `bazar_scraper.py`: 7 selectors (listing_links, pagination, images, title, h1, description, image_links)
+
+**Selector storage location:** `data/scrapling_selectors/{site_name}_selectors.json`
+
+---
+
+### 3.4 Required Methods Checklist
 
 ```
 [ ] extract_listing(html, url) -> ListingData

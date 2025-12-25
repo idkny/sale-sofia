@@ -174,6 +174,42 @@ class SiteConfig:
 
 ---
 
+## 9. Mixin Pattern (ScraplingMixin)
+
+Adds Scrapling parsing capabilities to scrapers via composition.
+
+```python
+# Mixin class (websites/scrapling_base.py)
+class ScraplingMixin:
+    """Adds fast parsing with adaptive selectors."""
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.adaptive_mode = True
+
+    def parse(self, html: str, url: str = "") -> Adaptor: ...
+    def css(self, page, selector, identifier="", auto_save=False, auto_match=False) -> List: ...
+    def css_first(self, page, selector, ...) -> Optional[Element]: ...
+    def get_text(self, element) -> str: ...
+    def get_attr(self, element, attr) -> str: ...
+
+# Usage in scraper (websites/imot_bg/imot_scraper.py)
+class ImotBgScraper(ScraplingMixin, BaseSiteScraper):
+    """Inherits both parsing capabilities and scraper interface."""
+```
+
+**Adaptive Mode** (selector resilience):
+- First run: `auto_save=True` saves element signatures to `data/scrapling_selectors/`
+- Subsequent runs: `auto_match=True` finds elements even if CSS selectors break
+- Toggle via: `scraper.adaptive_mode = True/False`
+
+**Benefits over BeautifulSoup**:
+- 774x faster parsing
+- Auto-encoding detection (windows-1251, UTF-8 for Bulgarian sites)
+- Adaptive selectors survive site HTML changes
+
+---
+
 ## Key Components Using Patterns
 
 | Pattern | Location | Key Classes/Functions |
@@ -185,3 +221,4 @@ class SiteConfig:
 | Orchestrator | `orchestrator.py` | `Orchestrator` class |
 | Registry | `browsers/browsers_main.py` | `_strategy_registry` |
 | DTO | `websites/base_scraper.py` | `ListingData` |
+| Mixin | `websites/scrapling_base.py` | `ScraplingMixin` |

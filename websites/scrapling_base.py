@@ -162,11 +162,38 @@ class ScraplingMixin:
     """
     Mixin class to add Scrapling capabilities to scrapers.
 
-    Provides:
+    Benefits over BeautifulSoup:
+    - 774x faster parsing performance
+    - Auto-encoding detection (windows-1251, UTF-8 for Bulgarian sites)
+    - Adaptive selectors that survive site HTML changes
+
+    Core Methods:
     - parse(): Parse HTML with Scrapling Adaptor
     - css()/css_first(): Select elements with adaptive matching
+    - get_text()/get_attr(): Safe element data extraction
     - fetch_stealth(): Fetch with anti-bot bypass
     - fetch_fast(): Fast HTTP fetch without JS
+
+    Adaptive Mode (selector resilience):
+    - First run: auto_save=True saves element signatures to data/scrapling_selectors/
+    - Subsequent runs: auto_match=True finds elements even if CSS selectors break
+    - Toggle via: scraper.adaptive_mode = True/False
+
+    Usage:
+        class MyScraper(ScraplingMixin, BaseSiteScraper):
+            def __init__(self):
+                super().__init__()
+                self.adaptive_mode = True
+
+            def extract(self, html):
+                page = self.parse(html)
+                title = self.css_first(page, "h1", identifier="my_title",
+                                       auto_save=True, auto_match=self.adaptive_mode)
+                return self.get_text(title)
+
+    See also:
+    - websites/SCRAPER_GUIDE.md - Full usage documentation
+    - docs/architecture/DESIGN_PATTERNS.md - Mixin pattern explanation
     """
 
     def __init__(self, *args, **kwargs):
