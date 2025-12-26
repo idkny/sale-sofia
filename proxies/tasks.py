@@ -161,10 +161,10 @@ def _run_mubeng_liveness_check(proxy_chunk: List[Dict[str, Any]]) -> List[Dict[s
             str(MUBENG_EXECUTABLE_PATH), "--check",
             "-f", str(temp_input_path),
             "-o", str(temp_output_path),
-            "-t", "10s",
+            "-t", "45s",  # 45 second timeout per proxy for slow proxies
         ]
         cmd = ["script", "-q", "/dev/null", "-c", shlex.join(mubeng_cmd)]
-        result = subprocess.run(cmd, capture_output=True, text=True, timeout=120, check=False)
+        result = subprocess.run(cmd, capture_output=True, text=True, timeout=300, check=False)  # 5 min for 45s/proxy
 
         if result.returncode != 0 and result.stderr:
             logger.warning(f"Mubeng returned non-zero ({result.returncode}): {result.stderr[:200]}")
@@ -184,7 +184,7 @@ def _run_mubeng_liveness_check(proxy_chunk: List[Dict[str, Any]]) -> List[Dict[s
         logger.info(f"Chunk liveness check: {len(live_proxies)}/{chunk_size} proxies alive")
 
     except subprocess.TimeoutExpired:
-        logger.error(f"Mubeng check timed out after 120s for chunk of {chunk_size} proxies")
+        logger.error(f"Mubeng check timed out after 300s for chunk of {chunk_size} proxies")
     except Exception as e:
         logger.error(f"Mubeng check failed for a chunk: {e}")
     finally:

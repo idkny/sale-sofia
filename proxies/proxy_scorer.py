@@ -65,7 +65,7 @@ class ScoredProxyPool:
         self.scores_file = self.proxies_file.parent / "proxy_scores.json"
         self.proxies: list[dict] = []
         self.scores: dict[str, dict] = {}
-        self.lock = threading.Lock()
+        self.lock = threading.RLock()  # Use RLock to allow reentrant locking (record_result -> remove_proxy)
 
         # Solution F: Proxy order tracking for X-Proxy-Offset header
         self._proxy_order: list[str] = []  # Ordered list of proxy keys matching mubeng file

@@ -34,6 +34,9 @@ from utils.log_config import setup_logging
 # Default mubeng proxy endpoint - ALWAYS use proxy for scraping
 MUBENG_PROXY = "http://localhost:8089"
 
+# Maximum retries per URL when proxy fails
+MAX_PROXY_RETRIES = 3
+
 
 async def _collect_listing_urls(
     scraper,
@@ -58,39 +61,63 @@ async def _collect_listing_urls(
     while len(all_listing_urls) < limit:
         logger.info(f"[Page {current_page}] Loading: {current_url}")
 
-        try:
-            # Use fast Fetcher for search pages (no JS needed)
-            response = Fetcher.fetch(
-                url=current_url,
-                proxy=proxy or MUBENG_PROXY,
-                timeout=15000
-            )
-            html = response.html_content
+        # Retry loop for proxy failures
+        page_success = False
+        html = None
+        for attempt in range(MAX_PROXY_RETRIES):
+            # Select specific proxy for this attempt (Solution F - X-Proxy-Offset)
+            proxy_key = None
+            headers = {}
+            if proxy_pool:
+                proxy_dict = proxy_pool.select_proxy()
+                if proxy_dict:
+                    proxy_key = f"{proxy_dict['host']}:{proxy_dict['port']}"
+                    index = proxy_pool.get_proxy_index(proxy_key)
+                    if index is not None:
+                        headers = {"X-Proxy-Offset": str(index)}
 
-            # Check if this is the last page
-            if hasattr(scraper, "is_last_page") and scraper.is_last_page(html, current_page):
-                logger.info(f"Last page detected at page {current_page}")
-                listing_urls = await scraper.extract_search_results(html)
-                if listing_urls:
-                    new_urls = [u for u in listing_urls if u not in all_listing_urls]
-                    all_listing_urls.extend(new_urls)
-                    logger.info(f"Found {len(new_urls)} new listings on last page (total: {len(all_listing_urls)})")
-                break
+            try:
+                # Use fast Fetcher for search pages (no JS needed)
+                response = Fetcher.get(
+                    url=current_url,
+                    proxy=proxy or MUBENG_PROXY,
+                    timeout=15,  # Fetcher.get uses seconds, not milliseconds
+                    headers=headers
+                )
+                html = response.html_content
+                if proxy_pool and proxy_key:
+                    proxy_pool.record_result(proxy_key, success=True)
+                page_success = True
+                break  # Exit retry loop on success
 
+            except Exception as e:
+                logger.warning(f"  -> Page attempt {attempt + 1}/{MAX_PROXY_RETRIES} failed: {e}")
+                if proxy_pool and proxy_key:
+                    proxy_pool.record_result(proxy_key, success=False)
+                # Continue to next attempt (try different proxy)
+
+        if not page_success:
+            logger.error(f"All {MAX_PROXY_RETRIES} attempts failed for page {current_page}")
+            break  # Stop pagination on failure
+
+        # Check if this is the last page
+        if hasattr(scraper, "is_last_page") and scraper.is_last_page(html, current_page):
+            logger.info(f"Last page detected at page {current_page}")
             listing_urls = await scraper.extract_search_results(html)
-            if not listing_urls:
-                logger.info(f"No more listings found on page {current_page}")
-                break
-
-            new_urls = [u for u in listing_urls if u not in all_listing_urls]
-            all_listing_urls.extend(new_urls)
-            logger.info(f"Found {len(new_urls)} new listings (total: {len(all_listing_urls)})")
-
-        except Exception as e:
-            logger.error(f"Error loading search page {current_page}: {e}")
-            if proxy_pool and proxy:
-                proxy_pool.record_result(proxy, success=False)
+            if listing_urls:
+                new_urls = [u for u in listing_urls if u not in all_listing_urls]
+                all_listing_urls.extend(new_urls)
+                logger.info(f"Found {len(new_urls)} new listings on last page (total: {len(all_listing_urls)})")
             break
+
+        listing_urls = await scraper.extract_search_results(html)
+        if not listing_urls:
+            logger.info(f"No more listings found on page {current_page}")
+            break
+
+        new_urls = [u for u in listing_urls if u not in all_listing_urls]
+        all_listing_urls.extend(new_urls)
+        logger.info(f"Found {len(new_urls)} new listings (total: {len(all_listing_urls)})")
 
         if len(all_listing_urls) >= limit:
             break
@@ -128,37 +155,61 @@ async def _scrape_listings(
         logger.info(f"[{i}/{len(urls)}] {url}")
         stats["total_attempts"] += 1
 
-        try:
-            # Use StealthyFetcher for listings (anti-bot bypass)
-            response = StealthyFetcher.fetch(
-                url=url,
-                proxy=proxy or MUBENG_PROXY,
-                humanize=True,
-                block_webrtc=True,
-                network_idle=True,
-                timeout=30000
-            )
-            html = response.html_content
+        url_result = None  # None=pending, True=success, False=failed
+        for attempt in range(MAX_PROXY_RETRIES):
+            # Select specific proxy for this attempt (Solution F - X-Proxy-Offset)
+            proxy_key = None
+            extra_headers = {}
+            if proxy_pool:
+                proxy_dict = proxy_pool.select_proxy()
+                if proxy_dict:
+                    proxy_key = f"{proxy_dict['host']}:{proxy_dict['port']}"
+                    index = proxy_pool.get_proxy_index(proxy_key)
+                    if index is not None:
+                        extra_headers = {"X-Proxy-Offset": str(index)}
 
-            listing = await scraper.extract_listing(html, url)
-            if listing:
-                data_store_main.save_listing(listing)
-                stats["scraped"] += 1
-                logger.info(f"  -> Saved: {listing.price_eur} EUR, {listing.sqm_total} sqm")
-                if proxy_pool and proxy:
-                    proxy_pool.record_result(proxy, success=True)
-            else:
-                stats["failed"] += 1
-                logger.warning(f"  -> Failed to extract listing data")
-                if proxy_pool and proxy:
-                    proxy_pool.record_result(proxy, success=False)
+            try:
+                # Use StealthyFetcher for listings (anti-bot bypass)
+                response = StealthyFetcher.fetch(
+                    url=url,
+                    proxy=proxy or MUBENG_PROXY,
+                    extra_headers=extra_headers,
+                    humanize=True,
+                    block_webrtc=True,
+                    network_idle=True,
+                    timeout=30000
+                )
+                html = response.html_content
 
-        except Exception as e:
+                # If we get here, request succeeded
+                listing = await scraper.extract_listing(html, url)
+                if listing:
+                    data_store_main.save_listing(listing)
+                    stats["scraped"] += 1
+                    logger.info(f"  -> Saved: {listing.price_eur} EUR, {listing.sqm_total} sqm")
+                    if proxy_pool and proxy_key:
+                        proxy_pool.record_result(proxy_key, success=True)
+                    url_result = True
+                    break  # Exit retry loop on success
+                else:
+                    # Extraction failed but request succeeded - don't retry
+                    stats["failed"] += 1
+                    logger.warning(f"  -> Failed to extract listing data")
+                    if proxy_pool and proxy_key:
+                        proxy_pool.record_result(proxy_key, success=False)
+                    url_result = False
+                    break  # Don't retry extraction failures
+
+            except Exception as e:
+                logger.warning(f"  -> Attempt {attempt + 1}/{MAX_PROXY_RETRIES} failed: {e}")
+                if proxy_pool and proxy_key:
+                    proxy_pool.record_result(proxy_key, success=False)
+                # Continue to next attempt (try different proxy)
+
+        # All retries exhausted without success or explicit failure
+        if url_result is None:
             stats["failed"] += 1
-            logger.error(f"Error scraping {url}: {e}")
-            if proxy_pool and proxy:
-                proxy_pool.record_result(proxy, success=False)
-            continue
+            logger.error(f"  -> All {MAX_PROXY_RETRIES} proxy attempts failed for {url}")
 
         time.sleep(delay)
 
