@@ -9,6 +9,7 @@ This module provides:
 Reference: ZohoCentral's implementation at /home/wow/Documents/ZohoCentral/autobiz/tools/ai/_llm.py
 """
 
+import hashlib
 import json
 import logging
 import re
@@ -18,6 +19,7 @@ import time
 from pathlib import Path
 from typing import Optional, Type, TypeVar
 
+import redis
 import requests
 import yaml
 
@@ -30,6 +32,17 @@ logger = logging.getLogger(__name__)
 CONFIG_PATH = Path(__file__).parent.parent / "config" / "ollama.yaml"
 
 T = TypeVar("T", MappedFields, ExtractedDescription)
+
+# Metrics tracking
+_metrics = {
+    "extractions_total": 0,
+    "extractions_success": 0,
+    "extractions_failed": 0,
+    "cache_hits": 0,
+    "cache_misses": 0,
+    "total_time_ms": 0.0,
+    "total_confidence": 0.0,
+}
 
 
 class OllamaClient:
@@ -322,8 +335,9 @@ class OllamaClient:
         return data
 
 
-# Module-level singleton for convenience
+# Module-level singletons
 _client: Optional[OllamaClient] = None
+_redis_client: Optional[redis.Redis] = None
 
 
 def _get_client() -> OllamaClient:
@@ -334,6 +348,50 @@ def _get_client() -> OllamaClient:
     return _client
 
 
+def _get_redis_client() -> Optional[redis.Redis]:
+    """Get or create singleton Redis client. Returns None on connection failure."""
+    global _redis_client
+    if _redis_client is None:
+        try:
+            _redis_client = redis.Redis(host="localhost", port=6379, decode_responses=True)
+            _redis_client.ping()
+        except redis.RedisError as e:
+            logger.warning(f"Redis connection failed, cache disabled: {e}")
+            return None
+    return _redis_client
+
+
+def _cache_key(text: str) -> str:
+    """Generate cache key from text using MD5 hash."""
+    config = _get_client().config["ollama"].get("cache", {})
+    prefix = config.get("key_prefix", "llm:extract:")
+    text_hash = hashlib.md5(text.encode()).hexdigest()
+    return f"{prefix}{text_hash}"
+
+
+def _get_cached(key: str) -> Optional[dict]:
+    """Get cached extraction result. Returns None if not found or error."""
+    client = _get_redis_client()
+    if not client:
+        return None
+    try:
+        data = client.get(key)
+        return json.loads(data) if data else None
+    except (redis.RedisError, json.JSONDecodeError):
+        return None
+
+
+def _set_cached(key: str, data: dict, ttl_days: int) -> None:
+    """Store extraction result in cache with TTL."""
+    client = _get_redis_client()
+    if not client:
+        return
+    try:
+        client.setex(key, ttl_days * 86400, json.dumps(data))
+    except redis.RedisError:
+        pass  # Fail silently, cache is optional
+
+
 def ensure_ollama_ready() -> bool:
     """Ensure Ollama server is running and ready.
 
@@ -341,6 +399,46 @@ def ensure_ollama_ready() -> bool:
         True if server is healthy, False otherwise
     """
     return _get_client().ensure_ready()
+
+
+def get_confidence_threshold() -> float:
+    """Get minimum confidence threshold from config.
+
+    Returns:
+        Confidence threshold (default 0.7)
+    """
+    return _get_client().config["ollama"].get("confidence_threshold", 0.7)
+
+
+def get_metrics() -> dict:
+    """Get extraction metrics.
+
+    Returns:
+        Dict with:
+        - extractions_total: Total extraction calls
+        - extractions_success: Successful extractions (confidence > 0)
+        - extractions_failed: Failed extractions
+        - cache_hits: Cache hit count
+        - cache_misses: Cache miss count
+        - avg_time_ms: Average extraction time
+        - avg_confidence: Average confidence score
+        - cache_hit_rate: Cache hit percentage
+    """
+    total = _metrics["extractions_total"]
+    cache_total = _metrics["cache_hits"] + _metrics["cache_misses"]
+
+    return {
+        **_metrics,
+        "avg_time_ms": _metrics["total_time_ms"] / max(1, total),
+        "avg_confidence": _metrics["total_confidence"] / max(1, _metrics["extractions_success"]),
+        "cache_hit_rate": _metrics["cache_hits"] / max(1, cache_total),
+    }
+
+
+def reset_metrics() -> None:
+    """Reset all metrics to zero."""
+    for key in _metrics:
+        _metrics[key] = 0.0 if "time" in key or "confidence" in key else 0
 
 
 def map_fields(content: str) -> MappedFields:
@@ -377,10 +475,27 @@ def extract_description(description: str) -> ExtractedDescription:
     Returns:
         ExtractedDescription with extracted data, confidence=0.0 if failed
     """
+    start_time = time.time()
+    _metrics["extractions_total"] += 1
+
     client = _get_client()
+    cache_config = client.config["ollama"].get("cache", {})
+
+    # Check cache first
+    if cache_config.get("enabled", False):
+        cache_key = _cache_key(description)
+        cached = _get_cached(cache_key)
+        if cached:
+            _metrics["cache_hits"] += 1
+            _metrics["extractions_success"] += 1
+            _metrics["total_confidence"] += cached.get("confidence", 0.0)
+            logger.debug(f"Cache hit for extraction: {cache_key[:20]}...")
+            return ExtractedDescription(**cached)
+        _metrics["cache_misses"] += 1
 
     if not client.ensure_ready():
         logger.error("Ollama not available for description extraction")
+        _metrics["extractions_failed"] += 1
         return ExtractedDescription(confidence=0.0)
 
     # Scan text for Bulgarian keywords and build dynamic hints
@@ -398,5 +513,19 @@ def extract_description(description: str) -> ExtractedDescription:
     for field, value in pre_extracted.items():
         if value is not None and hasattr(result, field):
             setattr(result, field, value)
+
+    # Track metrics
+    elapsed_ms = (time.time() - start_time) * 1000
+    _metrics["total_time_ms"] += elapsed_ms
+    if result.confidence > 0:
+        _metrics["extractions_success"] += 1
+        _metrics["total_confidence"] += result.confidence
+    else:
+        _metrics["extractions_failed"] += 1
+
+    # Cache successful extractions
+    if cache_config.get("enabled", False) and result.confidence > 0:
+        ttl_days = cache_config.get("ttl_days", 7)
+        _set_cached(cache_key, result.model_dump(), ttl_days)
 
     return result

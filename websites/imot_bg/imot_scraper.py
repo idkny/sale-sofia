@@ -19,10 +19,11 @@ from . import selectors as sel
 
 # LLM integration (optional - enabled via use_llm flag)
 try:
-    from llm import extract_description as llm_extract
+    from llm import extract_description as llm_extract, get_confidence_threshold
     LLM_AVAILABLE = True
 except ImportError:
     LLM_AVAILABLE = False
+    def get_confidence_threshold(): return 0.7  # Fallback if LLM not available
 
 
 class ImotBgScraper(ScraplingMixin, BaseSiteScraper):
@@ -93,7 +94,7 @@ class ImotBgScraper(ScraplingMixin, BaseSiteScraper):
         if self.use_llm and LLM_AVAILABLE and description:
             try:
                 llm_result = llm_extract(description)
-                if llm_result.confidence >= 0.7:
+                if llm_result.confidence >= get_confidence_threshold():
                     # Fill gaps - only override if CSS returned None
                     if rooms_count is None and llm_result.rooms:
                         rooms_count = llm_result.rooms

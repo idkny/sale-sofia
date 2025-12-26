@@ -8,6 +8,11 @@ ollama:
   startup_wait: 3              # seconds after starting
   max_restart_attempts: 2
   keep_alive: 1h               # Keep model loaded for batch processing (default: 5m)
+  confidence_threshold: 0.7    # Min confidence to accept LLM extraction results
+  cache:
+    enabled: true
+    ttl_days: 7
+    key_prefix: "llm:extract:"
 
 models:
   qwen2.5:1.5b:

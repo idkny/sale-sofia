@@ -120,6 +120,14 @@ from loguru import logger
 from ..base_scraper import BaseSiteScraper, ListingData
 from ..scrapling_base import ScraplingMixin
 
+# LLM integration (optional - enabled via use_llm flag)
+try:
+    from llm import extract_description as llm_extract, get_confidence_threshold
+    LLM_AVAILABLE = True
+except ImportError:
+    LLM_AVAILABLE = False
+    def get_confidence_threshold(): return 0.7  # Fallback
+
 
 class {SiteName}Scraper(ScraplingMixin, BaseSiteScraper):
     """{Site description}."""
@@ -129,6 +137,7 @@ class {SiteName}Scraper(ScraplingMixin, BaseSiteScraper):
         self.site_name = "{site_name}"
         self.base_url = "https://www.{site_domain}"
         self.search_base = "https://www.{site_domain}/{search_path}"
+        self.use_llm = False  # Set True to enable LLM gap-filling
 
     # =========================================
     # REQUIRED: Implement these abstract methods
@@ -284,7 +293,97 @@ class MyScraper(ScraplingMixin, BaseSiteScraper):
 
 ---
 
-### 3.4 Required Methods Checklist
+### 3.4 LLM Integration (Optional)
+
+The LLM module can fill gaps in CSS extraction by analyzing the description text. This is useful when CSS selectors can't extract certain fields.
+
+**How it works:**
+1. CSS extraction runs first (fast, reliable)
+2. If `use_llm = True` and description exists, LLM analyzes description
+3. LLM fills gaps - only overrides fields that CSS returned `None`
+4. Confidence threshold prevents bad extractions from being used
+
+**Enable LLM in your scraper:**
+
+```python
+class MyScraper(ScraplingMixin, BaseSiteScraper):
+    def __init__(self):
+        super().__init__()
+        self.use_llm = True  # Enable LLM gap-filling
+```
+
+**Use LLM in extract_listing():**
+
+```python
+async def extract_listing(self, html: str, url: str) -> Optional[ListingData]:
+    # ... CSS extraction first ...
+    rooms_count = self._extract_rooms(page_text)
+    orientation = self._extract_orientation(page_text)
+    description = self._extract_description(page)
+
+    # LLM enrichment: fill gaps in CSS extraction
+    if self.use_llm and LLM_AVAILABLE and description:
+        try:
+            llm_result = llm_extract(description)
+            if llm_result.confidence >= get_confidence_threshold():
+                # Fill gaps - only override if CSS returned None
+                if rooms_count is None and llm_result.rooms:
+                    rooms_count = llm_result.rooms
+                if orientation is None and llm_result.orientation:
+                    orientation = llm_result.orientation
+                # ... more fields ...
+                logger.debug(f"LLM enriched listing (confidence: {llm_result.confidence:.2f})")
+        except Exception as e:
+            logger.warning(f"LLM extraction failed: {e}")
+
+    return ListingData(...)
+```
+
+**LLM Configuration:**
+
+The confidence threshold is configurable in `config/ollama.yaml`:
+
+```yaml
+ollama:
+  confidence_threshold: 0.7  # Min confidence to accept LLM results
+```
+
+**LLM Metrics:**
+
+Track extraction performance with:
+
+```python
+from llm import get_metrics, reset_metrics
+
+metrics = get_metrics()
+# Returns:
+#   extractions_total: int
+#   extractions_success: int
+#   cache_hits: int
+#   avg_time_ms: float
+#   avg_confidence: float
+#   cache_hit_rate: float
+```
+
+**LLM-extracted fields:**
+- rooms, bedrooms, bathrooms
+- orientation, heating_type, condition
+- has_elevator, has_parking, has_balcony, has_storage
+- furnishing, has_view, view_type, parking_type
+
+**When to use LLM:**
+- Bulgarian descriptions with complex formatting
+- Fields that can't be reliably extracted with CSS/regex
+- Sites with inconsistent HTML structure
+
+**When NOT to use LLM:**
+- Fields available via structured CSS (price, sqm)
+- High-frequency scraping (LLM adds ~2-5s per listing)
+- When CSS extraction is reliable
+
+---
+
+### 3.5 Required Methods Checklist
 
 ```
 [ ] extract_listing(html, url) -> ListingData
@@ -717,6 +816,9 @@ IMPLEMENTATION PHASE
 [ ] Implemented get_search_url()
 [ ] Implemented get_next_page_url()
 [ ] Implemented is_last_page()
+[ ] Added LLM import (optional)
+[ ] Set use_llm flag (optional)
+[ ] Added LLM gap-filling in extract_listing() (optional)
 [ ] Added to AVAILABLE_SITES registry
 [ ] Added to get_scraper() factory
 
@@ -742,21 +844,29 @@ DEPLOYMENT PHASE
    - Auto-encoding detection for Bulgarian sites
    - 774x faster parsing than BeautifulSoup
 
-2. **HTTP Client wrapper** (`http_client.py`)
+2. ~~**LLM integration**~~ ✅ DONE (2025-12-26)
+   - `llm/` module with Ollama client
+   - `use_llm` flag in ScraplingMixin
+   - Gap-filling for fields CSS can't extract
+   - Redis cache (7-day TTL, 3700+ extractions/sec on hit)
+   - Configurable confidence threshold (`config/ollama.yaml`)
+   - Metrics tracking (`get_metrics()`, `reset_metrics()`)
+
+3. **HTTP Client wrapper** (`http_client.py`)
    - Standardized response handling
    - Automatic retry logic
    - Proxy integration
    - Block detection
 
-3. **Orchestrator integration**
+4. **Orchestrator integration**
    - How scrapers connect to Celery tasks
    - Progress reporting
    - Error aggregation
 
-4. **Rate limiter**
+5. **Rate limiter**
    - Per-site configuration
    - Adaptive delays
 
-5. **Deduplication**
+6. **Deduplication**
    - Fingerprint generation
    - Cross-site duplicate detection

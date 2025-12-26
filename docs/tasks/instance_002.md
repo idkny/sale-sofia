@@ -88,6 +88,32 @@ archive/research/  archive/specs/          (code supersedes)
 
 ## Session History
 
+### 2025-12-26 (Session 22 - Ollama Phase 5 Complete)
+
+| Task | Status |
+|------|--------|
+| Add extraction cache | Complete |
+| Add confidence threshold to config | Complete |
+| Add metrics logging | Complete |
+| Performance test (100 listings) | Complete |
+| Research page change detection | Complete |
+| Create Spec 111 | Complete |
+| Update SCRAPER_GUIDE.md | Complete |
+
+**Summary**: Completed Ollama Phase 5 (Production Hardening). Added Redis-based extraction cache (7-day TTL, 3700+ extractions/sec on cache hit), configurable confidence threshold, and metrics logging API. Researched page change detection from autobiz project, created Spec 111 for future implementation. Updated SCRAPER_GUIDE.md with LLM integration documentation.
+
+**Files Modified**:
+- `config/ollama.yaml:11` - added `confidence_threshold: 0.7`
+- `llm/llm_main.py:36-45, 393-441` - metrics tracking, get_confidence_threshold()
+- `llm/__init__.py` - exported new functions
+- `websites/imot_bg/imot_scraper.py:22,97` - use configurable threshold
+- `tests/llm/test_performance.py` - new performance test
+- `docs/research/page_change_detection.md` - new research
+- `docs/specs/111_PAGE_CHANGE_DETECTION.md` - new spec
+- `websites/SCRAPER_GUIDE.md` - added LLM integration section
+
+---
+
 ### 2025-12-26 (Session 17 - Scrapling Integration)
 
 | Task | Status |
@@ -122,34 +148,6 @@ archive/research/  archive/specs/          (code supersedes)
 - Net effect was negative on overall accuracy
 
 **Decision**: Skip Phase 2. Remaining options: Phase 3 (temperature=0), Phase 4 (hybrid CSS/LLM), Phase 5 (field-specific prompts).
-
----
-
-### 2025-12-26 (Session 9 - Verify & Fix Dictionary Implementation)
-
-| Task | Status |
-|------|--------|
-| Verify Session 8 implementation | Complete |
-| Fix `heating` → `heating_type` field mismatch | Complete |
-| Fix single-letter false positives (И, Ю, С, З) | Complete |
-| Fix `парк` matching in `паркомясто` | Complete |
-| Run accuracy test | Complete (**97.4%**) |
-| Update TASKS.md Phase 1 as complete | Complete |
-
-**Summary**: Verified and fixed Session 8's dictionary implementation. Found field name mismatch (`heating` in YAML vs `heating_type` in schema/prompt) that caused hints to have wrong field names. Also found single-letter abbreviations (И/Ю/С/З) causing false positives, and `парк` substring matching in `паркомясто`.
-
-**Results**:
-- Baseline: 69%
-- After fixes: **97.4%** (exceeds 95% target)
-- 14/15 fields at 100% accuracy
-- Remaining issue: `has_elevator` (0%, 1 sample) - LLM ignores correct hint
-
-**Files Modified**:
-- `config/bulgarian_dictionary.yaml` - `heating` → `heating_type`, removed single-letter abbreviations
-- `llm/dictionary.py` - Updated field name to `heating_type`
-- `tests/llm/test_extraction_accuracy.py` - Fixed incorrect test expectation
-
-**Phase 1 Complete**: Dynamic dictionary approach validated and working.
 
 ---
 

@@ -15,6 +15,8 @@
 | 2 | Available |
 | 3 | Available |
 
+**Session 22 (2025-12-26)**: Instance 2 - Completed Ollama Phase 5 (Production Hardening). Added extraction cache (Redis, 7-day TTL), confidence threshold config, metrics logging (get_metrics/reset_metrics), performance test. Researched page change detection from autobiz, created Spec 111. Updated SCRAPER_GUIDE.md with LLM documentation.
+
 **Session 21 (2025-12-26)**: Instance 3 - Completed Solution F Phase 6 (Integration Testing). Created 6 integration tests, all pass. Fixed deadlock bug (Lock→RLock). Also increased mubeng liveness timeout 10s→45s for slow proxies. Solution F Phases 0-6 complete. Next: Phase 7 (edge cases).
 
 **Session 20 (2025-12-26)**: Instance 1 - Implemented automatic service lifecycle management (cleanup_stale_processes, health checks). Fixed TimeLimitExceeded bug: quality timeout 60s→45s, task time_limit 8min→15min. Both chords completed (38/38, 33/33). Pre-flight still failing - proxies pass liveness but fail HTTP.
@@ -520,7 +522,7 @@ Test only waited 5 minutes → FAIL
 ## Page Change Detection (P2)
 
 **Spec**: [111_PAGE_CHANGE_DETECTION.md](../specs/111_PAGE_CHANGE_DETECTION.md)
-**Research**: [page_change_detection.md](../research/page_change_detection.md)
+**Research**: [page_change_detection.md](../../archive/research/page_change_detection.md) *(archived)*
 
 **Problem**: Every scrape re-processes all listings, even if unchanged. Wastes bandwidth/CPU/proxies.
 
