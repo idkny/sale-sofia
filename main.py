@@ -37,6 +37,9 @@ MUBENG_PROXY = "http://localhost:8089"
 # Maximum retries per URL when proxy fails
 MAX_PROXY_RETRIES = 3
 
+# Minimum proxies before triggering refresh
+MIN_PROXIES = 5
+
 
 async def _collect_listing_urls(
     scraper,
@@ -424,7 +427,53 @@ def _run_preflight_level3(orch, proxy_pool: Optional[ScoredProxyPool]) -> tuple[
     return False, new_process, proxy_url, new_temp_file, ordered_proxy_keys
 
 
-def _crawl_all_sites(start_urls: dict, proxy_url: str, proxy_pool: Optional[ScoredProxyPool]) -> dict:
+def _ensure_min_proxies(
+    proxy_pool: Optional[ScoredProxyPool],
+    orch,
+    min_count: int = MIN_PROXIES
+) -> bool:
+    """
+    Check proxy count and trigger refresh if below threshold.
+
+    Returns True if we have enough proxies, False if refresh failed.
+    """
+    if not proxy_pool:
+        return True  # No pool, skip check
+
+    stats = proxy_pool.get_stats()
+    current_count = stats['total_proxies']
+
+    if current_count >= min_count:
+        return True  # Enough proxies
+
+    logger.warning(
+        f"Proxy count low ({current_count} < {min_count}), triggering refresh..."
+    )
+    print(f"[WARNING] Proxy count low ({current_count} < {min_count}), refreshing...")
+
+    mtime_before, task_id = orch.trigger_proxy_refresh()
+    refresh_ok = orch.wait_for_refresh_completion(
+        mtime_before, min_count=min_count, task_id=task_id
+    )
+    if not refresh_ok:
+        logger.error("Proxy refresh failed during MIN_PROXIES check")
+        return False
+
+    # Reload proxy pool after refresh
+    proxy_pool.reload_proxies()
+    new_stats = proxy_pool.get_stats()
+    logger.info(f"Proxy pool reloaded: {new_stats['total_proxies']} proxies")
+    print(f"[SUCCESS] Proxy pool reloaded: {new_stats['total_proxies']} proxies")
+
+    return True
+
+
+def _crawl_all_sites(
+    start_urls: dict,
+    proxy_url: str,
+    proxy_pool: Optional[ScoredProxyPool],
+    orch
+) -> dict:
     """Crawl all configured sites. Returns aggregated stats."""
     from config.loader import get_site_config
     from websites import get_scraper
@@ -435,6 +484,11 @@ def _crawl_all_sites(start_urls: dict, proxy_url: str, proxy_pool: Optional[Scor
     print("=" * 60)
 
     total_stats = {"scraped": 0, "failed": 0, "total_attempts": 0}
+
+    # Check proxy count before starting
+    if not _ensure_min_proxies(proxy_pool, orch):
+        logger.error("Failed to ensure minimum proxies before crawl")
+        return total_stats
 
     for site, urls in start_urls.items():
         scraper = get_scraper(site)
@@ -469,6 +523,11 @@ def _crawl_all_sites(start_urls: dict, proxy_url: str, proxy_pool: Optional[Scor
                 logger.error(f"Error crawling {url}: {e}")
                 print(f"[ERROR] Failed to crawl {url}: {e}")
                 continue
+
+        # Check proxy count after each site
+        if not _ensure_min_proxies(proxy_pool, orch):
+            logger.error("Failed to ensure minimum proxies between sites")
+            return total_stats
 
     return total_stats
 
@@ -546,7 +605,7 @@ def run_auto_mode() -> None:
             return
 
         try:
-            stats = _crawl_all_sites(start_urls, proxy_url, proxy_pool)
+            stats = _crawl_all_sites(start_urls, proxy_url, proxy_pool, orch)
             _print_summary(stats, proxy_pool)
         finally:
             print()

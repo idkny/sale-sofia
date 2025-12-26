@@ -79,6 +79,25 @@ archive/research/  archive/specs/          (code supersedes)
 
 ## Session History
 
+### 2025-12-26 (Session 5 - Solution F Phase 7 Complete)
+
+| Task | Status |
+|------|--------|
+| 7.1: Add MIN_PROXIES check before scraping | ✅ Complete |
+| 7.2: Add file locking for concurrent access | ✅ Complete |
+| 7.3: Add delay after file write (200ms) | ✅ Complete |
+| 7.4: Add hook for proxy refresh | ✅ Complete |
+
+**Summary**: Completed Solution F Phase 7 (Edge Cases & Hardening). All 4 sub-tasks implemented. All 15 Solution F tests pass. Solution F is now fully complete.
+
+**Files Modified**:
+- `main.py` - Added `MIN_PROXIES=5`, `_ensure_min_proxies()` function, check before/between sites
+- `proxies/proxy_scorer.py` - Added `fcntl.flock()` locking, 200ms delay after file write, `reload_proxies()` hook
+
+**Solution F Complete**: All 7 phases implemented and tested.
+
+---
+
 ### 2025-12-26 (Session 4 - Solution F Phases 0-3 Implementation)
 
 | Task | Status |
@@ -164,190 +183,6 @@ Launched 3 parallel research agents:
 3. Start with **Phase 0.1**: Create test script `tests/debug/test_mubeng_features.py`
 4. Test mubeng `--watch` and `X-Proxy-Offset` before any code changes
 5. Proceed through phases in order
-
----
-
-### 2025-12-26 (Session 2 - Solution F Design) - COMPREHENSIVE
-
-| Task | Status |
-|------|--------|
-| Investigate mubeng benefits | ✅ Complete |
-| Check if mubeng exposes proxy used | ✅ Complete |
-| Analyze current proxy flow | ✅ Complete |
-| Explore alternatives to bypass | ✅ Complete |
-| Design Solution F | ✅ Complete |
-| Document in TASKS.md | ✅ Complete |
-
----
-
-#### THE PROBLEM WE'RE SOLVING
-
-Two critical bugs found in Session 1 make proxy scoring non-functional:
-
-**Bug 1: Wrong Proxy Tracked**
-```python
-# main.py currently does:
-proxy = "http://localhost:8089"  # MUBENG_PROXY
-response = StealthyFetcher.fetch(url, proxy=proxy)
-proxy_pool.record_result(proxy, success=True)  # Records "localhost:8089"!
-
-# But proxy_scorer.py expects:
-# "1.2.3.4:8080" - actual proxy from live_proxies.json
-```
-Result: Scoring system tracks mubeng URL which doesn't exist in scores → does nothing.
-
-**Bug 2: Removal Doesn't Persist**
-```python
-# proxy_scorer.py:remove_proxy() does:
-del self.scores[proxy_key]      # ✅ Removes from memory
-self.proxies = [filtered]       # ✅ Removes from list
-self.save_scores()              # ✅ Saves proxy_scores.json
-# ❌ MISSING: Does NOT update live_proxies.json!
-```
-Result: Bad proxies return on next session reload.
-
-**Why This Matters**: These bugs block ALL downstream features:
-- Automatic threshold-based proxy refresh
-- Just-in-time proxy validation
-- Retry with different proxy on failure
-
----
-
-#### WHY WE REJECTED OTHER SOLUTIONS
-
-**Solution A: Bypass Mubeng Completely**
-- Problem: User asked "are we losing mubeng error handling?"
-- Mubeng provides: timeout handling, SSL/TLS, connection management
-- Concern: Don't want to reimplement these features
-
-**Solution B: Get Proxy from Mubeng Headers**
-- Research showed: Mubeng does NOT expose which proxy it used in response headers
-- Dead end
-
-**Solution C: Dual Mode (Mubeng for checking, direct for scraping)**
-- Too complex: Two different proxy usage patterns
-- Maintenance burden
-
-**Solution D: Fix Persistence Only**
-- Partial fix: Still tracks wrong proxy (Bug 1 unsolved)
-- Only half the problem
-
-**Solution E: Use X-Proxy-Offset Header**
-- Initial idea: Use `X-Proxy-Offset: N` to select specific proxy
-- Problem discovered: `--rotate-on-error` conflicts!
-  - We send X-Proxy-Offset: 5 (want proxy 5)
-  - Proxy 5 fails → mubeng silently rotates to proxy 6
-  - Response succeeds → we think proxy 5 worked (WRONG!)
-- Also: List synchronization issue when removing proxies mid-session
-
----
-
-#### WHY SOLUTION F WORKS
-
-**Key Discovery**: Mubeng has TWO features we can combine:
-
-1. **`--watch` flag**: Auto-reload proxy file when it changes on disk
-   - Source: [Mubeng README](https://github.com/mubeng/mubeng)
-   - When we update the proxy file, mubeng reloads automatically
-   - Lists stay in sync without restarting mubeng!
-
-2. **`X-Proxy-Offset: N` header**: Select specific proxy by index
-   - Source: [GitHub Issue #82](https://github.com/kitabisa/mubeng/issues/82)
-   - Client sends header, mubeng uses `N % proxy_count` to select
-   - We control exactly which proxy is used
-
-3. **Omit `--rotate-on-error`**: Disable silent rotation
-   - Without this flag, mubeng does NOT auto-retry on failure
-   - We handle retries ourselves → know exactly which proxy failed
-
-**How It Solves Each Bug**:
-
-| Problem | How Solution F Fixes It |
-|---------|------------------------|
-| Wrong proxy tracked | X-Proxy-Offset selects exact proxy, we pass key to record_result() |
-| Removal doesn't persist | Update proxy file → mubeng reloads via --watch |
-| No retry logic | We control retries, select different proxy each attempt |
-| List sync issues | --watch keeps mubeng in sync with file changes |
-
----
-
-#### IMPLEMENTATION DETAILS
-
-**Files to Modify**:
-
-1. `proxies/mubeng_manager.py` (line 46-60):
-   - Add `-w` or `--watch` flag to mubeng_command
-   - REMOVE `--rotate-on-error` from mubeng_command
-   - Keep: `-t 15s`, `-s`, `-m random`
-
-2. `proxies/proxies_main.py` (line 94-102):
-   - When creating temp proxy file, also store ordered list
-   - Return ordered list alongside proxy_url and process
-   - This list maps index → proxy_key for X-Proxy-Offset
-
-3. `proxies/proxy_scorer.py`:
-   - Add `get_proxy_index(proxy_key)` method
-   - Add `_save_proxies()` method to persist to live_proxies.json
-   - Call `_save_proxies()` inside `remove_proxy()`
-
-4. `main.py` (line 133-140, 148-160):
-   - Get proxy via `proxy_pool.select_proxy()`
-   - Get index via `proxy_pool.get_proxy_index(proxy_key)`
-   - Add `headers={"X-Proxy-Offset": str(index)}` to fetch
-   - Add retry loop (max 3 proxies per URL)
-
-**Current Mubeng Command** (`mubeng_manager.py:46-60`):
-```python
-mubeng_command = [
-    str(MUBENG_EXECUTABLE_PATH),
-    "-a", f"localhost:{desired_port}",
-    "-f", str(live_proxy_file),
-    "--rotate-on-error",  # ❌ REMOVE THIS
-    "--max-errors", str(max_errors),
-    "-m", "random",
-    "-t", mubeng_timeout,
-    "-s",
-]
-```
-
-**New Mubeng Command**:
-```python
-mubeng_command = [
-    str(MUBENG_EXECUTABLE_PATH),
-    "-a", f"localhost:{desired_port}",
-    "-f", str(live_proxy_file),
-    "-w",  # ✅ ADD: Watch for file changes
-    # REMOVED: --rotate-on-error
-    "-m", "random",
-    "-t", mubeng_timeout,
-    "-s",
-]
-```
-
----
-
-#### REFERENCES
-
-- [TASKS.md - Solution F Section](TASKS.md#chosen-solution-solution-f---mubeng-with---watch--x-proxy-offset)
-- [Mubeng GitHub](https://github.com/mubeng/mubeng)
-- [Mubeng README](https://github.com/mubeng/mubeng/blob/master/README.md)
-- [X-Proxy-Offset Issue #82](https://github.com/kitabisa/mubeng/issues/82)
-
-**Key Files**:
-- `proxies/mubeng_manager.py` - Mubeng command construction
-- `proxies/proxies_main.py` - Proxy file creation + mubeng setup
-- `proxies/proxy_scorer.py` - Scoring, selection, removal
-- `main.py` - Scraping flow that uses proxies
-
----
-
-#### RESUME INSTRUCTIONS FOR NEXT SESSION
-
-1. Read this session history
-2. Check TASKS.md for Phase 1 tasks (claimed by Instance 3)
-3. Start with `mubeng_manager.py`: Add `-w`, remove `--rotate-on-error`
-4. Test that mubeng starts correctly with new flags
-5. Continue with remaining Phase 1 tasks
 
 ---
 

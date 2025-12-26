@@ -15,6 +15,8 @@
 | 2 | Available |
 | 3 | Available |
 
+**Session 23 (2025-12-26)**: Instance 3 - Completed Solution F Phase 7 (Edge Cases & Hardening). Added MIN_PROXIES check with auto-refresh, fcntl file locking, 200ms delay after file write, reload_proxies() hook for order sync. All 15 Solution F tests pass. Solution F complete.
+
 **Session 22 (2025-12-26)**: Instance 2 - Completed Ollama Phase 5 (Production Hardening). Added extraction cache (Redis, 7-day TTL), confidence threshold config, metrics logging (get_metrics/reset_metrics), performance test. Researched page change detection from autobiz, created Spec 111. Updated SCRAPER_GUIDE.md with LLM documentation.
 
 **Session 21 (2025-12-26)**: Instance 3 - Completed Solution F Phase 6 (Integration Testing). Created 6 integration tests, all pass. Fixed deadlock bug (Lock→RLock). Also increased mubeng liveness timeout 10s→45s for slow proxies. Solution F Phases 0-6 complete. Next: Phase 7 (edge cases).
@@ -311,21 +313,21 @@ Each step is atomic and testable. Must complete in order.
 
 **Goal**: Handle edge cases to prevent bugs in production.
 
-- [ ] **7.1** Add MIN_PROXIES check before scraping
-  - If `len(proxy_pool) < 5`, trigger refresh
-  - Prevents running out of proxies mid-session
+- [x] **7.1** Add MIN_PROXIES check before scraping
+  - Added `MIN_PROXIES = 5` constant and `_ensure_min_proxies()` function
+  - Called before crawl starts and after each site completes
 
-- [ ] **7.2** Add file locking for concurrent access
-  - Use `fcntl.flock()` when writing proxy file
+- [x] **7.2** Add file locking for concurrent access
+  - Added `fcntl.flock(LOCK_EX/LOCK_UN)` in `_save_proxy_file()`
   - Prevents race condition with Celery refresh
 
-- [ ] **7.3** Add delay after file write
-  - Wait 200ms after `_save_proxy_file()` before next request
+- [x] **7.3** Add delay after file write
+  - Added `time.sleep(0.2)` after `_save_proxy_file()` in `remove_proxy()`
   - Gives mubeng time to detect and reload
 
-- [ ] **7.4** Add hook for proxy refresh
-  - After Celery refresh completes, call `set_proxy_order(new_list)`
-  - Keeps index map synchronized
+- [x] **7.4** Add hook for proxy refresh
+  - Updated `reload_proxies()` to rebuild `_proxy_order` and `_index_map`
+  - Keeps index map synchronized after Celery refresh
 
 ---
 

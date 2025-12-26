@@ -19,6 +19,7 @@ Usage:
         pool.record_result(proxy["url"], success=False)
 """
 
+import fcntl
 import json
 import logging
 import random
@@ -355,6 +356,8 @@ class ScoredProxyPool:
                 # Solution F: Persist to mubeng proxy file (triggers --watch reload)
                 if self._mubeng_proxy_file:
                     self._save_proxy_file()
+                    # Give mubeng time to detect file change and reload
+                    time.sleep(0.2)
 
         # Save updated scores (outside lock to avoid holding during I/O)
         self.save_scores()
@@ -406,6 +409,7 @@ class ScoredProxyPool:
 
         Useful when the proxy pool has been refreshed by Celery tasks.
         Thread-safe: acquires lock during reload.
+        Also updates _proxy_order for X-Proxy-Offset synchronization.
         """
         with self.lock:
             old_count = len(self.proxies)
@@ -413,7 +417,12 @@ class ScoredProxyPool:
             self._initialize_scores()
             new_count = len(self.proxies)
 
-            logger.info(f"Reloaded proxy pool: {old_count} -> {new_count} proxies")
+            # Rebuild proxy order for X-Proxy-Offset (Solution F hook)
+            new_order = [f"{p['host']}:{p['port']}" for p in self.proxies]
+            self._proxy_order = new_order
+            self._index_map = {key: idx for idx, key in enumerate(new_order)}
+
+            logger.info(f"Reloaded proxy pool: {old_count} -> {new_count} proxies, order updated")
 
     # =========================================================================
     # Solution F: Proxy Order Tracking for X-Proxy-Offset
@@ -487,11 +496,15 @@ class ScoredProxyPool:
             return False
 
         try:
-            # Write proxy URLs to file (one per line)
+            # Write proxy URLs to file with exclusive lock
             with open(self._mubeng_proxy_file, 'w') as f:
-                for proxy_key in self._proxy_order:
-                    # Convert "host:port" to "http://host:port" for mubeng
-                    f.write(f"http://{proxy_key}\n")
+                fcntl.flock(f, fcntl.LOCK_EX)  # Exclusive lock
+                try:
+                    for proxy_key in self._proxy_order:
+                        # Convert "host:port" to "http://host:port" for mubeng
+                        f.write(f"http://{proxy_key}\n")
+                finally:
+                    fcntl.flock(f, fcntl.LOCK_UN)  # Release lock
 
             logger.info(
                 f"Updated mubeng proxy file: {len(self._proxy_order)} proxies "
