@@ -11,10 +11,14 @@
 
 | Instance | Current Task |
 |----------|--------------|
-| 1 | Available |
+| 1 | Fix wait_for_proxies blind polling bug |
 | 2 | Available |
 
-**Session 8 (2025-12-25)**: Event-based completion DONE. Tested full pipeline: 3,873→87 proxies, PASS. Timing bug (spec 105) fully resolved.
+**Session 11 (2025-12-26)**: Fixed false positive fallback msg + proxy overwrite bug. Found new bug: `wait_for_proxies` uses blind polling instead of chord wait.
+
+**Session 10 (2025-12-26)**: Verified chord timeout fix works. Chord completes successfully, no hangs.
+
+**Session 9 (2025-12-26)**: Fixed chord.get() infinite block bug. Added dynamic timeout calculation + Redis fallback.
 
 **Claim**: Add `[Instance N]` next to task before starting
 **Complete**: Add `[x]` and remove `[Instance N]` when done
@@ -77,6 +81,22 @@ Test only waited 5 minutes → FAIL
 - [x] Test full pipeline end-to-end with event-based completion
   - test_orchestrator_event_based.py: 35 chunks, 21min, chord_id verified
   - Proof: `[INFO] Using chord_id ... for event-based wait`
+- [x] Fix chord.get() infinite block bug (Session 9)
+  - Bug: `chord_result.get(timeout=None)` blocked forever if any chunk failed
+  - Fix: Dynamic timeout calculation + fallback to Redis polling
+  - `orchestrator.py:504-514` - fallback logic
+  - `orchestrator.py:607-622` - dynamic timeout: `max((chunks/8)*90*1.5, 600)`
+- [x] Verify chord timeout fix with full live test (Session 10)
+  - Verified: Dynamic timeout active, chord completes without hanging
+- [x] Fix false positive fallback message (Session 11, commit 5b71300)
+  - Changed `_wait_via_chord` return: `None`=timeout, `True/False`=completed
+- [x] Fix proxy file overwrite bug (Session 11, commit 9d5d3ad)
+  - `_save_proxy_files` now merges instead of overwrites
+- [ ] Fix `wait_for_proxies` blind polling bug (NEW - Session 11)
+  - Bug: `wait_for_proxies` polls file every 15s, ignores chord progress
+  - `main.py:246` sets 600s timeout, but refresh takes 15-20 min
+  - Fix: Use `wait_for_refresh_completion(task_id)` instead of blind polling
+  - Details in `docs/tasks/instance_001.md` Session 11
 
 ---
 
@@ -124,26 +144,94 @@ Test only waited 5 minutes → FAIL
 
 ---
 
+## Ollama Integration (P1)
+
+**Spec**: [107_OLLAMA_INTEGRATION.md](../specs/107_OLLAMA_INTEGRATION.md)
+**Reference**: ZohoCentral `/home/wow/Documents/ZohoCentral/autobiz/tools/ai/`
+**Pattern**: Same as `proxies/proxies_main.py` (facade with 4 files)
+
+**Use Cases**:
+1. Page content → DB field mapping
+2. Description text → structured data extraction
+
+### Phase 1: Foundation + Health Check
+- [x] Update manifest.json and FILE_STRUCTURE.md for `llm/` folder
+- [x] Create `llm/` with 4 files (\_\_init\_\_.py, llm_main.py, prompts.py, schemas.py)
+- [x] Create `config/ollama.yaml`
+- [x] Implement OllamaClient in llm_main.py (check_health, kill_port, start_server, ensure_ready)
+- [x] Test: Ollama start/stop/restart
+- [x] Pull model: `ollama pull qwen2.5:1.5b` (already installed)
+
+### Phase 2: API + Field Mapping
+- [x] Implement `_call_ollama()` REST API
+- [x] Implement `_parse_response()` JSON extraction
+- [x] Add FIELD_MAPPING_PROMPT to prompts.py
+- [x] Add MappedFields to schemas.py
+- [x] Implement `map_fields()` public function
+- [x] Test: Map 5 imot.bg pages - **100% extraction** (price, area, floor, construction)
+
+### Phase 3: Description Extraction
+- [x] Add EXTRACTION_PROMPT to prompts.py
+- [x] Add ExtractedDescription to schemas.py
+- [x] Implement `extract_description()` public function
+- [x] Test: Extract from 5 descriptions - **78% extraction** (7/9 fields avg)
+
+### Phase 3.5: Research - Model & Extraction Improvements
+
+**Question**: Why do we need translation when qwen2.5:1.5b supports 200 languages including Bulgarian?
+
+#### Research Tasks
+- [ ] Investigate why model returns Bulgarian despite English prompt constraints
+  - Check if model is set correctly (temperature, system prompt, format)
+  - Test with explicit `system` role vs `prompt` only
+  - Compare qwen2.5:1.5b vs qwen2.5:3b for Bulgarian accuracy
+- [ ] Research Ollama's `format: json` behavior with non-English languages
+- [ ] Test if prompt language affects output language (Bulgarian prompt → English output?)
+
+#### If Translation Still Needed - Vocabulary Approach
+- [ ] Create `llm/vocabulary.py` with comprehensive Bulgarian→English mappings
+  - Real estate terms (тухла, панел, ЕПК, ТЕЦ, etc.)
+  - Stop words (и, или, в, на, за, etc.)
+  - Neighborhood names
+  - Features (асансьор, тераса, мазе, etc.)
+- [ ] Implement regex pre-filter: extract known words from description
+- [ ] Pass only matched vocabulary to LLM for final verdict
+- [ ] Test: Compare accuracy with/without vocabulary pre-filter
+
+#### Scrapling + LLM Synergy
+- [ ] Research: Can Scrapling's element detection help LLM?
+  - Scrapling knows which CSS selector contains price, area, etc.
+  - Pass element context to LLM: "This element (.price) contains: 125000 EUR"
+  - LLM validates/parses rather than discovers
+- [ ] Test: Element-aware prompts vs raw text prompts
+- [ ] Implement hybrid extraction: Scrapling CSS → LLM fallback
+
+### Phase 4: Scrapling Integration
+- [ ] Add `use_llm` flag to ScraplingMixin
+- [ ] Add LLM calls in extraction flow
+- [ ] Add CSS selector fallback when confidence < 0.7
+- [ ] Test: End-to-end scrape → LLM → save to DB
+
+### Phase 5: Production Hardening
+- [ ] Add extraction cache
+- [ ] Add confidence threshold to config
+- [ ] Add metrics logging
+- [ ] Performance test: 100 listings batch
+
+---
+
 ## Crawler Validation & Enhancement (P1)
 
 **Spec**: [106_CRAWLER_VALIDATION_PLAN.md](../specs/106_CRAWLER_VALIDATION_PLAN.md)
 
-### Phase 0: Scrapling Integration (NEW - Foundation Upgrade)
+### Phase 0: Scrapling Integration (Complete)
 - [x] Install Scrapling and verify setup (v0.2.99)
 - [x] Create `websites/scrapling_base.py` adapter
-  - Auto-encoding detection (windows-1251, UTF-8, etc.)
-  - `fetch()` with proper Bulgarian text handling
-  - `get_page_text()` for clean text extraction
-  - CSS/XPath selectors with auto_match support
 - [x] Test with imot.bg (price: 170400 EUR, area: 71 sqm, floor: 4/6)
 - [x] Migrate imot_scraper.py to Scrapling (2025-12-25, 17 tests pass)
 - [x] Migrate bazar_scraper.py to Scrapling (2025-12-25)
 - [x] Enable adaptive mode with baseline selectors (2025-12-25)
 - [x] Test StealthyFetcher with mubeng proxy (2025-12-25)
-  - StealthyFetcher works (215KB from imot.bg)
-  - HTTPS + mubeng has SSL issues (proxy cert conflict)
-  - Recommendation: Use StealthyFetcher without proxy for HTTPS sites
-- [ ] Set up Ollama LLM for description extraction
 
 ### Phase 1: Scraper Validation
 - [ ] Create test harness (`tests/scrapers/`)

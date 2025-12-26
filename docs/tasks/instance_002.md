@@ -88,6 +88,75 @@ archive/research/  archive/specs/          (code supersedes)
 
 ## Session History
 
+### 2025-12-26 (Session 6 - Ollama Implementation + Testing)
+
+| Task | Status |
+|------|--------|
+| Create `llm/` directory with 4 files | Complete |
+| Create `config/ollama.yaml` | Complete |
+| Implement OllamaClient in llm_main.py | Complete |
+| Test Ollama start/stop/restart | Complete |
+| Test map_fields() on 5 imot.bg pages | Complete (100%) |
+| Test extract_description() on 5 descriptions | Complete (78%) |
+
+**Summary**: Implemented full Ollama integration with parallel agent execution. Created 5 files (4 in llm/ + 1 config). Added Bulgarian→English translation layer for LLM responses. Tested with real imot.bg listings and synthetic descriptions.
+
+**Test Results**:
+- `map_fields()`: 100% extraction rate (price, area, floor, construction)
+- `extract_description()`: 78% extraction rate (7/9 fields average)
+
+**Files Created**:
+- `llm/__init__.py` - Module exports
+- `llm/llm_main.py` - OllamaClient facade (~280 lines)
+- `llm/prompts.py` - Bulgarian prompts with English value constraints
+- `llm/schemas.py` - Pydantic models (MappedFields, ExtractedDescription)
+- `config/ollama.yaml` - Model and task configuration
+
+**Key Implementation Details**:
+- Singleton OllamaClient with health check + auto-restart
+- Bulgarian→English translation in `_translate_values()`
+- Prompts specify exact English enum values with Bulgarian explanations
+- REST API calls to Ollama's `/api/generate` endpoint
+
+**Parallel Agents Used**: 4 agents for independent files, 1 sequential for facade
+
+---
+
+### 2025-12-26 (Session 5 - Ollama Integration Planning)
+
+| Task | Status |
+|------|--------|
+| Research ZohoCentral Ollama implementation | Complete |
+| Create Spec 107 (Ollama Integration) | Complete |
+| Review project architecture patterns | Complete |
+| Simplify spec architecture (12→5 files) | Complete |
+| Update manifest.json for `llm/` folder | Complete |
+| Update FILE_STRUCTURE.md for `llm/` folder | Complete |
+| Remove duplicate tasks from spec (single source of truth) | Complete |
+
+**Summary**: Researched ZohoCentral's Ollama integration (health check, port killer, model selection). Created Spec 107 for Ollama integration with 5-phase plan. Simplified architecture from 12 files to 5 files following `proxies/proxies_main.py` facade pattern. Updated project structure documentation.
+
+**Key Decisions**:
+- **Pattern**: `llm/` folder with facade pattern (same as `proxies/`)
+- **Files**: 4 files only (`__init__.py`, `llm_main.py`, `prompts.py`, `schemas.py`)
+- **Model**: `qwen2.5:1.5b` (1.2GB VRAM, good for Bulgarian/Cyrillic)
+- **Use cases**: Page content → DB field mapping, Description → structured data
+
+**Files Created/Modified**:
+- `docs/specs/107_OLLAMA_INTEGRATION.md` - Full integration spec
+- `admin/config/project_structure_manifest.json` - Added `llm/` folder rule
+- `docs/architecture/FILE_STRUCTURE.md` - Added `llm/` documentation
+- `docs/tasks/TASKS.md` - Added Ollama integration phases
+
+**To Continue (Next Session)**:
+1. Create `llm/` directory with 4 files
+2. Create `config/ollama.yaml`
+3. Implement OllamaClient (port from ZohoCentral)
+4. Test Ollama start/stop/restart
+5. Pull model: `ollama pull qwen2.5:1.5b`
+
+---
+
 ### 2025-12-25 (Session 4 - Scrapling Integration & Crawler Plan)
 
 | Task | Status |
@@ -151,56 +220,6 @@ text = scraper.get_page_text(page)  # Clean text for regex extraction
 **Dependencies Added**:
 - `scrapling[all]>=0.2.9` (already installed in venv)
 - `chardet` (for encoding detection, installed)
-
----
-
-### 2025-12-25 (Session 3 - File Enforcement, Docs Reorg, Git Init)
-
-| Task | Status |
-|------|--------|
-| Implement file placement enforcement (ZohoCentral-style) | Complete |
-| Add max_depth (3) and block_root_files rules | Complete |
-| Split ARCHITECTURE.md into focused documents | Complete |
-| Initialize git repository | Complete |
-| Create initial commit (253 files) | Complete |
-
-**Summary**: Implemented automated file placement enforcement with manifest.json, Python validator, and Claude hooks. Added rules to block files in docs/ root and limit depth to 3. Split 821-line ARCHITECTURE.md into 5 focused docs (131 lines core + 4 detailed docs). Initialized git with comprehensive .gitignore.
-
-**Files Created**:
-- `admin/config/project_structure_manifest.json` - File placement rules
-- `admin/scripts/hooks/validate_file_placement.py` - Validation logic
-- `admin/scripts/hooks/pre_write_validate.sh` - Hook wrapper
-- `.claude/settings.json` - Hook configuration
-- `docs/architecture/DESIGN_PATTERNS.md` - 8 design patterns
-- `docs/architecture/DATA_FLOW.md` - Pipeline diagrams
-- `docs/architecture/ADDING_COMPONENTS.md` - Extension guides
-- `docs/architecture/CONVENTIONS.md` - Coding standards
-
-**Files Modified**:
-- `CLAUDE.md` - FILE PLACEMENT RULES section
-- `.gitignore` - Enhanced with proxy/db/log exclusions
-- `docs/architecture/ARCHITECTURE.md` - Slimmed to 131 lines with links
-
-**Git**: Initialized on `main` branch, 2 commits
-
----
-
-### 2025-12-25 (Session 2 - Architecture & File Structure Documentation)
-
-| Task | Status |
-|------|--------|
-| Document project architecture (ARCHITECTURE.md) | Complete |
-| Add Quality Checker deep dive section | Complete |
-| Create file placement rules (FILE_STRUCTURE.md) | Complete |
-| Update CLAUDE.md with file placement rules | Complete |
-| Clean up misplaced files (stress_test_results.md) | Complete |
-
-**Summary**: Created comprehensive architecture documentation (769 lines) with 8 design patterns, data flow diagrams, and component guides. Created FILE_STRUCTURE.md with decision tree for file placement. Updated CLAUDE.md with file rules to prevent future misplaced files.
-
-**Files Created/Modified**:
-- `docs/architecture/ARCHITECTURE.md` - Full architecture guide
-- `docs/architecture/FILE_STRUCTURE.md` - File placement rules
-- `CLAUDE.md` - Added FILE PLACEMENT RULES section
 
 ---
 

@@ -1,0 +1,36 @@
+# Ollama LLM Configuration
+# Used by llm/llm_main.py
+
+ollama:
+  host: localhost
+  port: 11434
+  health_check_timeout: 2      # seconds
+  startup_wait: 3              # seconds after starting
+  max_restart_attempts: 2
+
+models:
+  qwen2.5:1.5b:
+    vram_mb: 1200
+    tier: 2
+    use_cases: [field_mapping, extraction]
+  qwen2.5:0.5b:
+    vram_mb: 500
+    tier: 1
+    use_cases: [batch_extraction]
+
+tasks:
+  field_mapping:
+    primary_model: qwen2.5:1.5b
+    fallback_model: qwen2.5:0.5b
+    temperature: 0.0            # Deterministic
+    max_tokens: 500
+    format: json
+    timeout_seconds: 30
+
+  description_extraction:
+    primary_model: qwen2.5:1.5b
+    fallback_model: qwen2.5:0.5b
+    temperature: 0.1            # Slight variation OK
+    max_tokens: 500
+    format: json
+    timeout_seconds: 30
