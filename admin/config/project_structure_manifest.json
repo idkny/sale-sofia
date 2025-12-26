@@ -46,13 +46,6 @@
       "block_new_subdirs": true
     },
 
-    "browsers/": {
-      "purpose": "Browser automation",
-      "allowed_extensions": [".py"],
-      "allowed_subdirs": ["strategies", "profile"],
-      "block_new_subdirs": true
-    },
-
     "config/": {
       "purpose": "Configuration files",
       "allowed_extensions": [".yaml", ".yml", ".json", ".py"],
@@ -79,6 +72,13 @@
       "allowed_extensions": [".py", ".json", ".txt", ".md"],
       "allowed_subdirs": ["external"],
       "block_new_subdirs": false
+    },
+
+    "llm/": {
+      "purpose": "LLM integration (Ollama) for text extraction",
+      "allowed_extensions": [".py"],
+      "allowed_subdirs": [],
+      "block_new_subdirs": true
     },
 
     "websites/": {
@@ -111,9 +111,16 @@
     },
 
     "admin/scripts/": {
-      "purpose": "Admin scripts (hooks, utilities)",
+      "purpose": "Admin scripts (hooks, utilities, docs)",
       "allowed_extensions": [".py", ".sh"],
-      "allowed_subdirs": ["hooks"],
+      "allowed_subdirs": ["hooks", "docs"],
+      "block_new_subdirs": true
+    },
+
+    "admin/scripts/docs/": {
+      "purpose": "Documentation scraper scripts",
+      "allowed_extensions": [".py", ".sh", ".json"],
+      "allowed_subdirs": [],
       "block_new_subdirs": true
     },
 
@@ -134,7 +141,7 @@
     "docs/": {
       "purpose": "Documentation (markdown only) - NO FILES HERE, only subdirs",
       "allowed_extensions": [],
-      "allowed_subdirs": ["architecture", "research", "specs", "tasks"],
+      "allowed_subdirs": ["architecture", "research", "specs", "tasks", "libs"],
       "block_new_subdirs": true,
       "block_root_files": true,
       "require_subdir": true
@@ -166,6 +173,13 @@
     "docs/tasks/": {
       "purpose": "Task tracking (TASKS.md, instance files)",
       "allowed_extensions": [".md"],
+      "allowed_subdirs": [],
+      "block_new_subdirs": true
+    },
+
+    "docs/libs/": {
+      "purpose": "Library documentation (synced from GitHub)",
+      "allowed_extensions": [".md", ".json"],
       "allowed_subdirs": [],
       "block_new_subdirs": true
     },
