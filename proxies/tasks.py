@@ -276,7 +276,7 @@ def _update_redis_progress(job_id: str) -> None:
         logger.warning(f"Failed to update Redis progress: {e}")
 
 
-@celery_app.task
+@celery_app.task(soft_time_limit=420, time_limit=480)  # 7min soft, 8min hard
 def check_proxy_chunk_task(proxy_chunk: List[Dict[str, Any]], job_id: str = "") -> List[Dict[str, Any]]:
     """
     Worker task that checks a small chunk of proxies for liveness and returns the live ones.

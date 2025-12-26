@@ -593,7 +593,7 @@ class Orchestrator:
                 timeout_val = timeout
             elif total_chunks > 0:
                 workers = 8  # Match Celery concurrency
-                time_per_chunk = 90  # seconds (45-95s range from spec)
+                time_per_chunk = 400  # seconds (observed 362-399s in production)
                 buffer = 1.5  # 50% safety margin
                 rounds = (total_chunks + workers - 1) // workers
                 calculated = int(rounds * time_per_chunk * buffer)
