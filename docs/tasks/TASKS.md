@@ -12,8 +12,12 @@
 | Instance | Current Task |
 |----------|--------------|
 | 1 | Available |
-| 2 | Available |
+| 2 | Phase 4: Scrapling Integration |
 | 3 | Proxy Scoring Fix - Solution F |
+
+**Session 16 (2025-12-26)**: Instance 3 - Created detailed 7-phase implementation plan for Solution F with ~30 atomic, testable steps. Verified mubeng `--watch` flag, `X-Proxy-Offset` header, and Scrapling `extra_headers` support. Plan documented in TASKS.md.
+
+**Session 15 (2025-12-26)**: Instance 2 - Tested Phase 3 (temperature=0). No effect on accuracy (97.4% unchanged). `has_elevator` still fails - not a temperature issue.
 
 **Session 14 (2025-12-26)**: Instance 3 - Investigated proxy scoring fix options. Discovered mubeng `--watch` flag for live-reload + `X-Proxy-Offset` header for proxy selection. Designed Solution F that keeps mubeng while enabling proper tracking.
 
@@ -179,28 +183,268 @@ Mubeng supports two features that solve our problems:
 
 ### Implementation Tasks
 
-#### Phase 1: Enable Proxy Tracking
-- [ ] [Instance 3] Update `mubeng_manager.py`: Add `--watch`, remove `--rotate-on-error`
-- [ ] [Instance 3] Update `proxies_main.py`: Return ordered proxy list for index lookup
-- [ ] [Instance 3] Update `proxy_scorer.py`: Add `get_proxy_index()` method
-- [ ] [Instance 3] Update `main.py`: Add `X-Proxy-Offset` header to requests
-- [ ] Test: Verify correct proxy is tracked in logs
+**DETAILED PLAN** (Session 16, 2025-12-26)
+Each step is atomic and testable. Must complete in order.
 
-#### Phase 2: Enable Persistence
-- [ ] Update `proxy_scorer.py`: Add `_save_proxies()` method
-- [ ] Update `proxy_scorer.py`: Call `_save_proxies()` in `remove_proxy()`
-- [ ] Verify mubeng reloads when file changes (--watch)
-- [ ] Test: Remove proxy, verify it stays removed after reload
+---
 
-#### Phase 3: Add Retry Logic
-- [ ] Update `main.py`: Add retry loop (max 3 proxies per URL)
-- [ ] Update `main.py`: On failure, select different proxy and retry
-- [ ] Test: Verify retry with different proxy works
+#### Phase 0: Pre-Implementation Verification
 
-#### Phase 4: Integration Test
-- [ ] Test: Full scraping session with proxy tracking
-- [ ] Test: Bad proxy removal and persistence
-- [ ] Test: Threshold refresh triggers correctly
+**Goal**: Verify mubeng features work as documented before writing any code.
+
+- [ ] [Instance 3] **0.1** Create test script `tests/debug/test_mubeng_features.py`
+- [ ] [Instance 3] **0.2** Test `--watch` flag: Start mubeng, modify proxy file, verify reload
+  - **Verified in help**: `-w, --watch  Watch proxy file, live-reload from changes`
+  - **Test**: `mubeng -a localhost:8089 -f proxies.txt -w -m random -t 15s -s`
+  - **Expected**: Mubeng reloads when file changes
+- [ ] [Instance 3] **0.3** Test `X-Proxy-Offset` header: Send requests with specific offsets
+  - **How**: Use `curl -H "X-Proxy-Offset: 0"` through mubeng
+  - **Expected**: First proxy in list is used
+  - **Note**: Mubeng uses `offset % proxy_count` for wrapping
+- [ ] [Instance 3] **0.4** Test behavior without `--rotate-on-error`
+  - **Expected**: Mubeng returns error on failure (no silent rotation)
+  - **Critical**: This is how we know which proxy failed
+
+---
+
+#### Phase 1: Mubeng Configuration
+
+**Goal**: Update mubeng startup to enable `--watch` and disable silent rotation.
+
+- [ ] [Instance 3] **1.1** Edit `proxies/mubeng_manager.py` (lines 46-60)
+  - ADD: `-w` flag (watch for file changes)
+  - REMOVE: `--rotate-on-error` flag (we control retries)
+  - REMOVE: `--max-errors` (only works with --rotate-on-error)
+  - KEEP: `-m random`, `-t 15s`, `-s`
+
+  **Before**:
+  ```python
+  mubeng_command = [
+      str(MUBENG_EXECUTABLE_PATH),
+      "-a", f"localhost:{desired_port}",
+      "-f", str(live_proxy_file),
+      "--rotate-on-error",  # REMOVE
+      "--max-errors", str(max_errors),  # REMOVE
+      "-m", "random",
+      "-t", mubeng_timeout,
+      "-s",
+  ]
+  ```
+
+  **After**:
+  ```python
+  mubeng_command = [
+      str(MUBENG_EXECUTABLE_PATH),
+      "-a", f"localhost:{desired_port}",
+      "-f", str(live_proxy_file),
+      "-w",  # ADD: Watch for file changes
+      "-m", "random",
+      "-t", mubeng_timeout,
+      "-s",
+  ]
+  ```
+
+- [ ] [Instance 3] **1.2** Test: Start mubeng with new flags
+  - **Command**: Run `python -c "from proxies.mubeng_manager import start_mubeng_rotator_server; ..."`
+  - **Expected**: Process starts, no errors, logs show command with `-w`
+
+---
+
+#### Phase 2: Proxy Order Tracking
+
+**Goal**: Maintain ordered list matching mubeng's loaded order for X-Proxy-Offset mapping.
+
+- [ ] [Instance 3] **2.1** Edit `proxies/proxies_main.py` - Update `get_and_filter_proxies()`
+  - **Change return**: Also return the ordered list of proxy keys
+  - **New signature**: `get_and_filter_proxies() -> Tuple[Optional[Path], List[str]]`
+  - **Second return value**: `["host1:port1", "host2:port2", ...]` in file order
+
+- [ ] [Instance 3] **2.2** Edit `proxies/proxies_main.py` - Update `setup_mubeng_rotator()`
+  - **Change return**: Add ordered_proxy_list to tuple
+  - **New signature**: `-> Tuple[Optional[str], Optional[Popen], Optional[Path], List[str]]`
+
+- [ ] [Instance 3] **2.3** Edit `proxies/proxy_scorer.py` - Add proxy order methods
+  - **Add attribute**: `self._proxy_order: List[str] = []`
+  - **Add attribute**: `self._index_map: Dict[str, int] = {}`
+  - **Add method**: `set_proxy_order(ordered_list: List[str])` - Sets order and builds index map
+  - **Add method**: `get_proxy_index(proxy_key: str) -> Optional[int]` - Returns index for header
+  - **Add to `__init__`**: Initialize empty `_proxy_order` and `_index_map`
+
+- [ ] [Instance 3] **2.4** Test: Verify index mapping works
+  - **Test case**: Create pool with 5 proxies ["a:1", "b:2", "c:3", "d:4", "e:5"]
+  - **Verify**: `get_proxy_index("c:3")` returns 2
+  - **Verify**: `get_proxy_index("unknown:999")` returns None
+
+---
+
+#### Phase 3: Persistence on Removal
+
+**Goal**: When proxy is removed, update file so mubeng reloads via `--watch`.
+
+- [ ] [Instance 3] **3.1** Edit `proxies/proxy_scorer.py` - Add `_get_proxy_file_path()` method
+  - **Returns**: Path to the temp mubeng proxy file (stored as attribute)
+  - **Add attribute**: `self._mubeng_proxy_file: Optional[Path] = None`
+  - **Add method**: `set_mubeng_proxy_file(path: Path)` - Called after mubeng setup
+
+- [ ] [Instance 3] **3.2** Edit `proxies/proxy_scorer.py` - Add `_save_proxy_file()` method
+  - **Action**: Writes current `_proxy_order` to `_mubeng_proxy_file`
+  - **Format**: One proxy URL per line (same as mubeng expects)
+  - **Threading**: Must hold lock during write
+
+- [ ] [Instance 3] **3.3** Edit `proxies/proxy_scorer.py` - Update `remove_proxy()` method
+  - **Add after removing from self.proxies**:
+    1. Remove from `self._proxy_order`
+    2. Rebuild `self._index_map`
+    3. Call `self._save_proxy_file()`
+  - **Note**: Indexes shift after removal - this is expected
+
+- [ ] [Instance 3] **3.4** Test: Verify removal persists to file
+  - **Setup**: Create temp file with 5 proxies
+  - **Action**: Call `remove_proxy("c:3")`
+  - **Verify**: File now has 4 proxies
+  - **Verify**: `get_proxy_index("d:4")` returns 2 (shifted from 3)
+
+- [ ] [Instance 3] **3.5** Test: Verify mubeng reloads
+  - **Setup**: Start mubeng with `--watch`, modify proxy file
+  - **Expected**: Mubeng log shows reload OR next request uses updated list
+
+---
+
+#### Phase 4: X-Proxy-Offset Header in Requests
+
+**Goal**: Add header to all fetch requests so we know which proxy is used.
+
+- [ ] [Instance 3] **4.1** Verify Scrapling supports `extra_headers`
+  - **Verified**: `StealthyFetcher.fetch()` accepts `extra_headers` parameter ✅
+  - **Verified**: See Python inspection: `extra_headers` in parameter list
+
+- [ ] [Instance 3] **4.2** Edit `main.py` - Update `_scrape_listings()` function
+  - **Add before fetch**:
+    ```python
+    proxy_dict = proxy_pool.select_proxy()
+    proxy_key = f"{proxy_dict['host']}:{proxy_dict['port']}"
+    index = proxy_pool.get_proxy_index(proxy_key)
+    ```
+  - **Modify StealthyFetcher.fetch() call**:
+    ```python
+    response = StealthyFetcher.fetch(
+        url=url,
+        proxy=MUBENG_PROXY,
+        extra_headers={"X-Proxy-Offset": str(index)},  # NEW
+        humanize=True,
+        block_webrtc=True,
+        network_idle=True,
+        timeout=30000
+    )
+    ```
+  - **Update record_result() calls**: Pass `proxy_key` instead of `proxy`
+
+- [ ] [Instance 3] **4.3** Edit `main.py` - Update `_collect_listing_urls()` function
+  - **Same pattern**: Select proxy, get index, add header, record correct key
+  - **Note**: Fetcher might need different approach (check `custom_config`)
+
+- [ ] [Instance 3] **4.4** Test: Verify correct proxy is tracked
+  - **Run**: Single scrape with proxy_pool logging
+  - **Expected**: Logs show actual proxy key (e.g., "1.2.3.4:8080") not "localhost:8089"
+  - **Verify**: `proxy_scores.json` contains actual proxy entries
+
+---
+
+#### Phase 5: Retry Logic
+
+**Goal**: On failure, try different proxy instead of giving up immediately.
+
+- [ ] [Instance 3] **5.1** Edit `main.py` - Add retry loop to `_scrape_listings()`
+  ```python
+  MAX_PROXY_RETRIES = 3
+
+  for attempt in range(MAX_PROXY_RETRIES):
+      proxy_dict = proxy_pool.select_proxy()
+      proxy_key = f"{proxy_dict['host']}:{proxy_dict['port']}"
+      index = proxy_pool.get_proxy_index(proxy_key)
+
+      try:
+          response = StealthyFetcher.fetch(...)
+          proxy_pool.record_result(proxy_key, success=True)
+          break  # Success
+      except Exception as e:
+          proxy_pool.record_result(proxy_key, success=False)
+          logger.warning(f"Attempt {attempt+1}/{MAX_PROXY_RETRIES} failed: {e}")
+          continue  # Try different proxy
+  else:
+      # All retries failed
+      stats["failed"] += 1
+      continue
+  ```
+
+- [ ] [Instance 3] **5.2** Edit `main.py` - Add retry to `_collect_listing_urls()` similarly
+
+- [ ] [Instance 3] **5.3** Test: Verify retry with different proxy
+  - **Setup**: Pool with mix of working/failing proxies
+  - **Expected**: On first failure, different proxy selected
+  - **Verify**: Logs show retry attempts with different proxy keys
+
+---
+
+#### Phase 6: Integration Testing
+
+**Goal**: End-to-end verification of all components working together.
+
+- [ ] [Instance 3] **6.1** Create integration test: `tests/debug/test_solution_f_integration.py`
+
+- [ ] [Instance 3] **6.2** Test scenario: Mixed proxy pool
+  - **Setup**: 10 proxies (7 working, 3 failing)
+  - **Action**: Run 20 scraping requests
+  - **Verify**:
+    - [ ] `proxy_scores.json` has entries for actual proxies (not localhost)
+    - [ ] Working proxies have higher scores than initial
+    - [ ] Failing proxies have lower scores
+    - [ ] Proxies with 3+ failures are removed
+    - [ ] Mubeng proxy file updated after removals
+
+- [ ] [Instance 3] **6.3** Test scenario: Persistence across sessions
+  - **Setup**: Remove proxy, stop mubeng
+  - **Action**: Restart mubeng, reload pool
+  - **Verify**: Removed proxy stays removed
+
+- [ ] [Instance 3] **6.4** Test scenario: Index synchronization
+  - **Setup**: 5 proxies ["a", "b", "c", "d", "e"]
+  - **Action**: Remove "c"
+  - **Verify**: `get_proxy_index("d")` = 2 (was 3)
+  - **Verify**: Mubeng reloaded, request with offset 2 uses "d"
+
+---
+
+#### Phase 7: Edge Cases & Hardening
+
+**Goal**: Handle edge cases to prevent bugs in production.
+
+- [ ] **7.1** Add MIN_PROXIES check before scraping
+  - If `len(proxy_pool) < 5`, trigger refresh
+  - Prevents running out of proxies mid-session
+
+- [ ] **7.2** Add file locking for concurrent access
+  - Use `fcntl.flock()` when writing proxy file
+  - Prevents race condition with Celery refresh
+
+- [ ] **7.3** Add delay after file write
+  - Wait 200ms after `_save_proxy_file()` before next request
+  - Gives mubeng time to detect and reload
+
+- [ ] **7.4** Add hook for proxy refresh
+  - After Celery refresh completes, call `set_proxy_order(new_list)`
+  - Keeps index map synchronized
+
+---
+
+### Rollback Plan
+
+If Solution F causes regressions:
+1. Revert `mubeng_manager.py`: Re-add `--rotate-on-error`, remove `-w`
+2. Revert `main.py`: Remove `X-Proxy-Offset` header, remove retry loop
+3. Keep `proxy_scorer.py` improvements (they're additive, don't break anything)
+
+**Result**: Scraping continues as before (just without working proxy scoring)
 
 ### References
 
@@ -475,9 +719,10 @@ Test only waited 5 minutes → FAIL
 - **Reason**: Examples made model too conservative, returned null for working fields
 - **Decision**: Skip - 97.4% already exceeds 95% target, remaining options in Phase 3-5
 
-#### Phase 3: Temperature = 0 (Quick Win)
-- [ ] Change description_extraction temperature: 0.1 → 0.0
-- [ ] Re-run accuracy test
+#### Phase 3: Temperature = 0 (Quick Win) - NO EFFECT
+- [x] Change description_extraction temperature: 0.1 → 0.0
+- [x] Re-run accuracy test
+- **Result**: No change (97.4% → 97.4%). Temperature had no effect on `has_elevator` issue.
 
 #### Phase 4: Hybrid CSS/LLM (If < 95%)
 - [ ] Extract structured fields with Scrapling CSS selectors
@@ -499,10 +744,10 @@ Test only waited 5 minutes → FAIL
 - [ ] Implement hybrid extraction: Scrapling CSS → LLM fallback
 
 ### Phase 4: Scrapling Integration
-- [ ] Add `use_llm` flag to ScraplingMixin
-- [ ] Add LLM calls in extraction flow
-- [ ] Add CSS selector fallback when confidence < 0.7
-- [ ] Test: End-to-end scrape → LLM → save to DB
+- [ ] [Instance 2] Add `use_llm` flag to ScraplingMixin
+- [ ] [Instance 2] Add LLM calls in extraction flow
+- [ ] [Instance 2] Add CSS selector fallback when confidence < 0.7
+- [ ] [Instance 2] Test: End-to-end scrape → LLM → save to DB
 
 ### Phase 5: Production Hardening
 - [ ] Add extraction cache
