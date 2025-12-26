@@ -14,8 +14,17 @@ from celery import group
 
 from celery_app import celery_app
 from paths import MUBENG_EXECUTABLE_PATH, PROXIES_DIR, PROXY_CHECKER_DIR, PSC_EXECUTABLE_PATH
+from proxies import proxy_to_url
 from proxies.anonymity_checker import enrich_proxy_with_anonymity, get_real_ip
 from proxies.quality_checker import enrich_proxy_with_quality
+from proxies.redis_keys import (
+    job_completed_at_key,
+    job_completed_chunks_key,
+    job_result_count_key,
+    job_started_at_key,
+    job_status_key,
+    job_total_chunks_key,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -106,10 +115,10 @@ def check_scraped_proxies_task(self, _previous_result=None):
     # Set up Redis progress tracking
     try:
         r = get_redis_client()
-        r.setex(f"proxy_refresh:{job_id}:total_chunks", PROGRESS_KEY_TTL, total_chunks)
-        r.setex(f"proxy_refresh:{job_id}:completed_chunks", PROGRESS_KEY_TTL, 0)
-        r.setex(f"proxy_refresh:{job_id}:status", PROGRESS_KEY_TTL, "DISPATCHED")
-        r.setex(f"proxy_refresh:{job_id}:started_at", PROGRESS_KEY_TTL, int(time.time()))
+        r.setex(job_total_chunks_key(job_id), PROGRESS_KEY_TTL, total_chunks)
+        r.setex(job_completed_chunks_key(job_id), PROGRESS_KEY_TTL, 0)
+        r.setex(job_status_key(job_id), PROGRESS_KEY_TTL, "DISPATCHED")
+        r.setex(job_started_at_key(job_id), PROGRESS_KEY_TTL, int(time.time()))
         logger.info(f"Redis progress tracking initialized for job {job_id}")
     except Exception as e:
         logger.warning(f"Failed to set up Redis progress tracking: {e}")
@@ -145,7 +154,7 @@ def _run_mubeng_liveness_check(proxy_chunk: List[Dict[str, Any]]) -> List[Dict[s
         with open(temp_input_path, "w") as f:
             for proxy in proxy_chunk:
                 protocol = proxy.get("protocol", "http")
-                f.write(f"{protocol}://{proxy['host']}:{proxy['port']}\n")
+                f.write(f"{proxy_to_url(proxy['host'], proxy['port'], protocol)}\n")
 
         # Run mubeng with PTY wrapper (mubeng hangs without terminal)
         mubeng_cmd = [
@@ -260,8 +269,8 @@ def _update_redis_progress(job_id: str) -> None:
         return
     try:
         r = get_redis_client()
-        completed = r.incr(f"proxy_refresh:{job_id}:completed_chunks")
-        r.setex(f"proxy_refresh:{job_id}:status", PROGRESS_KEY_TTL, "PROCESSING")
+        completed = r.incr(job_completed_chunks_key(job_id))
+        r.setex(job_status_key(job_id), PROGRESS_KEY_TTL, "PROCESSING")
         logger.debug(f"Job {job_id}: chunk completed ({completed} total)")
     except Exception as e:
         logger.warning(f"Failed to update Redis progress: {e}")
@@ -323,19 +332,44 @@ def _log_quality_statistics(proxies: List[Dict[str, Any]]) -> None:
 
 
 def _save_proxy_files(proxies: List[Dict[str, Any]]) -> None:
-    """Save proxies to JSON and TXT files."""
+    """Save proxies to JSON and TXT files, merging with existing proxies.
+
+    Merges new proxies with existing ones by host:port key.
+    New proxies take precedence over existing ones (fresher data).
+    """
     json_output = PROXIES_DIR / "live_proxies.json"
     txt_output = PROXIES_DIR / "live_proxies.txt"
 
+    # Load existing proxies to merge
+    existing_proxies = {}
+    if json_output.exists():
+        try:
+            with open(json_output, "r") as f:
+                existing = json.load(f)
+                for p in existing:
+                    key = f"{p.get('host')}:{p.get('port')}"
+                    existing_proxies[key] = p
+        except (json.JSONDecodeError, IOError):
+            pass  # Start fresh if file is corrupted
+
+    # Merge: new proxies override existing (fresher data)
+    for p in proxies:
+        key = f"{p.get('host')}:{p.get('port')}"
+        existing_proxies[key] = p
+
+    merged = list(existing_proxies.values())
+    # Sort by timeout (fastest first)
+    merged.sort(key=lambda p: p.get("timeout", 999))
+
     with open(json_output, "w") as f:
-        json.dump(proxies, f, indent=2)
+        json.dump(merged, f, indent=2)
 
     with open(txt_output, "w") as f:
-        for proxy in proxies:
+        for proxy in merged:
             protocol = proxy.get("protocol", "http")
-            f.write(f"{protocol}://{proxy['host']}:{proxy['port']}\n")
+            f.write(f"{proxy_to_url(proxy['host'], proxy['port'], protocol)}\n")
 
-    logger.info(f"Successfully saved {len(proxies)} live proxies from all workers.")
+    logger.info(f"Successfully saved {len(merged)} live proxies (merged {len(proxies)} new with {len(existing_proxies) - len(proxies)} existing).")
 
 
 def _mark_job_complete(job_id: str, result_count: int) -> None:
@@ -345,9 +379,9 @@ def _mark_job_complete(job_id: str, result_count: int) -> None:
 
     try:
         r = get_redis_client()
-        r.setex(f"proxy_refresh:{job_id}:status", PROGRESS_KEY_TTL, "COMPLETE")
-        r.setex(f"proxy_refresh:{job_id}:completed_at", PROGRESS_KEY_TTL, int(time.time()))
-        r.setex(f"proxy_refresh:{job_id}:result_count", PROGRESS_KEY_TTL, result_count)
+        r.setex(job_status_key(job_id), PROGRESS_KEY_TTL, "COMPLETE")
+        r.setex(job_completed_at_key(job_id), PROGRESS_KEY_TTL, int(time.time()))
+        r.setex(job_result_count_key(job_id), PROGRESS_KEY_TTL, result_count)
         logger.info(f"Job {job_id} marked as COMPLETE with {result_count} proxies")
     except Exception as e:
         logger.warning(f"Failed to update Redis completion status: {e}")
