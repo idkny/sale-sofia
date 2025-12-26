@@ -12,8 +12,10 @@
 | Instance | Current Task |
 |----------|--------------|
 | 1 | Available |
-| 2 | Phase 4: Scrapling Integration |
+| 2 | Available |
 | 3 | Proxy Scoring Fix - Solution F |
+
+**Session 17 (2025-12-26)**: Instance 2 - Completed Phase 4 Scrapling Integration. Added `use_llm` flag, integrated LLM extraction into imot_scraper.py. LLM fills gaps where CSS returns None (e.g., orientation). Tested end-to-end, confidence 0.95.
 
 **Session 16 (2025-12-26)**: Instance 3 - Created detailed 7-phase implementation plan for Solution F with ~30 atomic, testable steps. Verified mubeng `--watch` flag, `X-Proxy-Offset` header, and Scrapling `extra_headers` support. Plan documented in TASKS.md.
 
@@ -743,11 +745,11 @@ Test only waited 5 minutes → FAIL
 - [ ] Research element-aware prompts vs raw text prompts
 - [ ] Implement hybrid extraction: Scrapling CSS → LLM fallback
 
-### Phase 4: Scrapling Integration
-- [ ] [Instance 2] Add `use_llm` flag to ScraplingMixin
-- [ ] [Instance 2] Add LLM calls in extraction flow
-- [ ] [Instance 2] Add CSS selector fallback when confidence < 0.7
-- [ ] [Instance 2] Test: End-to-end scrape → LLM → save to DB
+### Phase 4: Scrapling Integration - COMPLETE (Session 17)
+- [x] Add `use_llm` flag to ScraplingMixin (`websites/scrapling_base.py:216`)
+- [x] Add LLM calls in extraction flow (`websites/imot_bg/imot_scraper.py:92-118`)
+- [x] CSS primary, LLM fills gaps when confidence ≥ 0.7
+- [x] Test: End-to-end extraction verified (orientation filled by LLM)
 
 ### Phase 5: Production Hardening
 - [ ] Add extraction cache

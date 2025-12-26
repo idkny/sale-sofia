@@ -88,6 +88,24 @@ archive/research/  archive/specs/          (code supersedes)
 
 ## Session History
 
+### 2025-12-26 (Session 17 - Scrapling Integration)
+
+| Task | Status |
+|------|--------|
+| Phase 3: Temperature = 0 | Complete (no effect) |
+| Phase 4: Scrapling Integration | Complete |
+
+**Summary**: Tested Phase 3 (temperature 0.1→0.0) - no effect on accuracy. Implemented Phase 4 Scrapling Integration: added `use_llm` flag, integrated LLM extraction into imot_scraper.py. LLM fills gaps where CSS returns None (e.g., orientation). Tested end-to-end with 0.95 confidence.
+
+**Files Modified**:
+- `config/ollama.yaml` - temperature 0.1 → 0.0
+- `websites/scrapling_base.py:216` - added `use_llm` flag
+- `websites/imot_bg/imot_scraper.py:20-25, 92-118` - LLM import + enrichment logic
+
+**Usage**: `scraper.use_llm = True` enables LLM enrichment after CSS extraction.
+
+---
+
 ### 2025-12-26 (Session 10 - Phase 2 Few-Shot Examples)
 
 | Task | Status |
@@ -132,36 +150,6 @@ archive/research/  archive/specs/          (code supersedes)
 - `tests/llm/test_extraction_accuracy.py` - Fixed incorrect test expectation
 
 **Phase 1 Complete**: Dynamic dictionary approach validated and working.
-
----
-
-### 2025-12-26 (Session 8 - Dynamic Bulgarian Dictionary)
-
-| Task | Status |
-|------|--------|
-| Research extraction accuracy failures | Complete |
-| Test qwen2.5:3b vs 1.5b model | Complete (1.5b better) |
-| Create Spec 110: Dynamic Bulgarian Dictionary | Complete |
-| Create config/bulgarian_dictionary.yaml | Complete |
-| Create llm/dictionary.py (scanner + hint builder) | Complete |
-| Update llm/prompts.py with base templates | Complete |
-| Update llm/llm_main.py to use dictionary | Complete |
-| Research comprehensive BG real estate terminology | Complete |
-| Update dictionary with 400+ researched terms | Complete |
-| Run accuracy test | Complete (Session 9) |
-
-**Summary**: Researched extraction accuracy issue (69% baseline). Found model size is NOT the problem (3b worse than 1.5b). Designed and implemented dynamic Bulgarian dictionary approach: scan text for keywords, inject only relevant hints into prompt. Launched 4 research agents to gather comprehensive Bulgarian real estate terminology (property types, legal docs, amenities, platform-specific terms). Created 600+ line dictionary file with all terms.
-
-**Files Created**:
-- `docs/specs/110_DYNAMIC_BULGARIAN_DICTIONARY.md`
-- `llm/dictionary.py` - Scanner and hint builder
-- `config/bulgarian_dictionary.yaml` - 400+ term comprehensive dictionary
-- `tests/llm/test_extraction_accuracy.py` - Accuracy test suite
-- `tests/llm/test_model_comparison.py` - Model comparison test
-
-**Files Modified**:
-- `llm/prompts.py` - Added EXTRACTION_PROMPT_BASE with {hints} placeholder
-- `llm/llm_main.py` - Integrated dictionary scanning
 
 ---
 

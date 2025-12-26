@@ -31,7 +31,7 @@ tasks:
   description_extraction:
     primary_model: qwen2.5:1.5b
     fallback_model: qwen2.5:0.5b
-    temperature: 0.1            # Slight variation OK
+    temperature: 0.0            # Deterministic (was 0.1)
     max_tokens: 500
     format: json
     timeout_seconds: 30

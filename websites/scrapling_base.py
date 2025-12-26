@@ -213,6 +213,7 @@ class ScraplingMixin:
         super().__init__(*args, **kwargs)
         self._selector_storage_path = SELECTOR_STORAGE / f"{self.site_name}_selectors.json"
         self._adaptive_enabled = True
+        self.use_llm = False  # Enable LLM-powered extraction (set True in scraper)
 
     def parse(self, html: str, url: str = "") -> Adaptor:
         """

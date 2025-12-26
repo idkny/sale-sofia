@@ -17,6 +17,13 @@ from ..base_scraper import BaseSiteScraper, ListingData
 from ..scrapling_base import ScraplingMixin
 from . import selectors as sel
 
+# LLM integration (optional - enabled via use_llm flag)
+try:
+    from llm import extract_description as llm_extract
+    LLM_AVAILABLE = True
+except ImportError:
+    LLM_AVAILABLE = False
+
 
 class ImotBgScraper(ScraplingMixin, BaseSiteScraper):
     """Scraper for imot.bg - largest Bulgarian real estate portal."""
@@ -81,6 +88,34 @@ class ImotBgScraper(ScraplingMixin, BaseSiteScraper):
         title = self._extract_title(page, url)
         description = self._extract_description(page)
         agency, agent_name, agent_phone = self._extract_contact(page, page_text)
+
+        # LLM enrichment: fill gaps in CSS extraction
+        if self.use_llm and LLM_AVAILABLE and description:
+            try:
+                llm_result = llm_extract(description)
+                if llm_result.confidence >= 0.7:
+                    # Fill gaps - only override if CSS returned None
+                    if rooms_count is None and llm_result.rooms:
+                        rooms_count = llm_result.rooms
+                    if bathrooms_count is None and llm_result.bathrooms:
+                        bathrooms_count = llm_result.bathrooms
+                    if condition is None and llm_result.condition:
+                        condition = llm_result.condition
+                    if has_elevator is None and llm_result.has_elevator is not None:
+                        has_elevator = llm_result.has_elevator
+                    if has_parking is None and llm_result.has_parking is not None:
+                        has_parking = llm_result.has_parking
+                    if has_balcony is None and llm_result.has_balcony is not None:
+                        has_balcony = llm_result.has_balcony
+                    if has_storage is None and llm_result.has_storage is not None:
+                        has_storage = llm_result.has_storage
+                    if orientation is None and llm_result.orientation:
+                        orientation = llm_result.orientation
+                    if heating_type is None and llm_result.heating_type:
+                        heating_type = llm_result.heating_type
+                    logger.debug(f"LLM enriched listing {external_id} (confidence: {llm_result.confidence:.2f})")
+            except Exception as e:
+                logger.warning(f"LLM extraction failed for {external_id}: {e}")
 
         listing = ListingData(
             external_id=external_id,
