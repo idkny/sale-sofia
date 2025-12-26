@@ -88,6 +88,28 @@ archive/research/  archive/specs/          (code supersedes)
 
 ## Session History
 
+### 2025-12-27 (Session 24 - Page Change Detection Phases 1-2)
+
+| Task | Status |
+|------|--------|
+| Create data/change_detector.py | Complete |
+| Add 5 DB columns (migration) | Complete |
+| Update save_listing() | Complete |
+| Integrate into main.py | Complete |
+| Create unit tests (24 tests) | Complete |
+
+**Summary**: Implemented Page Change Detection (Spec 111) Phases 1-2. Created `data/change_detector.py` with compute_hash (SHA256 of key fields), has_changed (comparison), and track_price_change (history with 10-entry max). Added 5 DB columns. Integrated via `_check_and_save_listing()` in main.py. Unchanged listings now skipped, price changes logged.
+
+**Files Created**:
+- `data/change_detector.py` - core change detection (compute_hash, has_changed, track_price_change)
+- `tests/test_change_detector.py` - 24 unit tests
+
+**Files Modified**:
+- `data/data_store_main.py` - migration (5 columns), save_listing(), increment_unchanged_counter()
+- `main.py:25,45-92,206,241-253,602-604` - import, helper, stats, integration, summary
+
+---
+
 ### 2025-12-26 (Session 22 - Ollama Phase 5 Complete)
 
 | Task | Status |
@@ -129,25 +151,6 @@ archive/research/  archive/specs/          (code supersedes)
 - `websites/imot_bg/imot_scraper.py:20-25, 92-118` - LLM import + enrichment logic
 
 **Usage**: `scraper.use_llm = True` enables LLM enrichment after CSS extraction.
-
----
-
-### 2025-12-26 (Session 10 - Phase 2 Few-Shot Examples)
-
-| Task | Status |
-|------|--------|
-| Test few-shot examples for boolean fields | Complete |
-| Evaluate impact on accuracy | Complete |
-| Decision: Skip Phase 2 | Complete |
-
-**Summary**: Tested few-shot examples to fix `has_elevator` (0% accuracy). Examples fixed `has_elevator` but caused regressions in other fields (heating_type 67%, orientation 75%). Decided to skip Phase 2 since 97.4% already exceeds target and few-shot examples hurt more than help.
-
-**Findings**:
-- Few-shot examples made model too conservative
-- Model returned `null` for fields that previously worked
-- Net effect was negative on overall accuracy
-
-**Decision**: Skip Phase 2. Remaining options: Phase 3 (temperature=0), Phase 4 (hybrid CSS/LLM), Phase 5 (field-specific prompts).
 
 ---
 

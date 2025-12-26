@@ -15,6 +15,8 @@
 | 2 | Available |
 | 3 | Available |
 
+**Session 24 (2025-12-27)**: Instance 2 - Implemented Page Change Detection (Spec 111) Phases 1-2. Created `data/change_detector.py` with compute_hash, has_changed, track_price_change. Added 5 DB columns (content_hash, last_change_at, change_count, price_history, consecutive_unchanged). Integrated into main.py via `_check_and_save_listing()`. 24 unit tests pass. Unchanged listings now skipped, price changes logged with history.
+
 **Session 23 (2025-12-26)**: Instance 3 - Completed Solution F Phase 7 (Edge Cases & Hardening). Added MIN_PROXIES check with auto-refresh, fcntl file locking, 200ms delay after file write, reload_proxies() hook for order sync. All 15 Solution F tests pass. Solution F complete.
 
 **Session 22 (2025-12-26)**: Instance 2 - Completed Ollama Phase 5 (Production Hardening). Added extraction cache (Redis, 7-day TTL), confidence threshold config, metrics logging (get_metrics/reset_metrics), performance test. Researched page change detection from autobiz, created Spec 111. Updated SCRAPER_GUIDE.md with LLM documentation.
@@ -528,16 +530,16 @@ Test only waited 5 minutes → FAIL
 
 **Problem**: Every scrape re-processes all listings, even if unchanged. Wastes bandwidth/CPU/proxies.
 
-### Phase 1: Basic Hash Detection
-- [ ] Add DB columns via migration (content_hash, last_change_at, change_count, price_history)
-- [ ] Create `data/change_detector.py` (compute_hash, has_changed)
-- [ ] Integrate into `main.py` scraping loop
-- [ ] Test: Same listing scraped twice → skipped second time
+### Phase 1: Basic Hash Detection ✅
+- [x] Add DB columns via migration (content_hash, last_change_at, change_count, price_history, consecutive_unchanged)
+- [x] Create `data/change_detector.py` (compute_hash, has_changed, track_price_change)
+- [x] Integrate into `main.py` scraping loop (`_check_and_save_listing()`)
+- [x] Test: 24 unit tests pass (`tests/test_change_detector.py`)
 
-### Phase 2: Price Tracking
-- [ ] Implement `track_price_change()` with history
-- [ ] Log price changes
-- [ ] Test: Price drop detected and logged
+### Phase 2: Price Tracking ✅
+- [x] Implement `track_price_change()` with history (JSON array, 10 entries max)
+- [x] Log price changes (logger.info for drops/increases)
+- [x] Price history stored in `price_history` column
 
 ### Phase 3: Dashboard Integration (Optional)
 - [ ] Show price history chart in Streamlit
@@ -720,7 +722,6 @@ Test only waited 5 minutes → FAIL
 - [ ] Integrate with Celery
 
 ### Phase 5: Full Pipeline
-- [ ] Implement homes.bg scraper
 - [ ] E2E testing (full pipeline)
 - [ ] Add monitoring/alerting
 
@@ -728,7 +729,6 @@ Test only waited 5 minutes → FAIL
 
 ## Features (P2)
 
-- [ ] Implement homes.bg scraper
 - [ ] Improve floor extraction in bazar.bg scraper
 - [ ] Populate dashboard with scraped data
 

@@ -165,6 +165,13 @@ def migrate_listings_schema():
 
         # Notes
         ("user_notes", "TEXT"),
+
+        # Change Detection (Spec 111)
+        ("content_hash", "TEXT"),              # SHA256 of key content
+        ("last_change_at", "TIMESTAMP"),       # When content last changed
+        ("change_count", "INTEGER DEFAULT 0"), # How many times changed
+        ("price_history", "TEXT"),             # JSON: [{"price": 150000, "date": "..."}]
+        ("consecutive_unchanged", "INTEGER DEFAULT 0"),  # For adaptive scheduling
     ]
 
     added = 0
@@ -182,6 +189,13 @@ def migrate_listings_schema():
         logger.info(f"Migration complete: added {added} new columns to listings")
     else:
         logger.debug("No new columns to add")
+
+    # Create index for change detection (after column exists)
+    try:
+        conn.execute("CREATE INDEX IF NOT EXISTS idx_listings_hash ON listings(content_hash)")
+        conn.commit()
+    except sqlite3.Error:
+        pass  # Index already exists or column doesn't exist yet (first run)
 
     conn.close()
 
@@ -218,12 +232,16 @@ def init_viewings_table():
     logger.info("Viewings table initialized")
 
 
-def save_listing(listing) -> Optional[int]:
+def save_listing(
+    listing, content_hash: str = None, price_history: str = None
+) -> Optional[int]:
     """
     Save a listing to the database.
 
     Args:
         listing: ListingData object from scraper
+        content_hash: SHA256 hash of key listing fields (for change detection)
+        price_history: JSON string of price history array
 
     Returns:
         Listing ID or None if failed
@@ -244,10 +262,24 @@ def save_listing(listing) -> Optional[int]:
                 district, neighborhood, address, metro_station, metro_distance_m,
                 orientation, has_balcony, has_garden, has_parking, has_storage,
                 heating_type, condition, main_image_url, image_urls,
-                agency, agent_phone, listing_date
-            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                agency, agent_phone, listing_date,
+                content_hash, price_history
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             ON CONFLICT(url) DO UPDATE SET
                 price_eur = excluded.price_eur,
+                content_hash = excluded.content_hash,
+                price_history = COALESCE(excluded.price_history, price_history),
+                last_change_at = CASE
+                    WHEN content_hash IS NULL OR content_hash != excluded.content_hash
+                    THEN CURRENT_TIMESTAMP
+                    ELSE last_change_at
+                END,
+                change_count = CASE
+                    WHEN content_hash IS NULL OR content_hash != excluded.content_hash
+                    THEN COALESCE(change_count, 0) + 1
+                    ELSE change_count
+                END,
+                consecutive_unchanged = 0,
                 is_active = 1,
                 updated_at = CURRENT_TIMESTAMP
         """, (
@@ -265,7 +297,8 @@ def save_listing(listing) -> Optional[int]:
             listing.heating_type, listing.condition,
             listing.main_image_url, image_urls_json,
             listing.agency, listing.agent_phone,
-            listing.listing_date.isoformat() if listing.listing_date else None
+            listing.listing_date.isoformat() if listing.listing_date else None,
+            content_hash, price_history
         ))
 
         conn.commit()
@@ -287,6 +320,38 @@ def get_listing_by_url(url: str) -> Optional[sqlite3.Row]:
     row = cursor.fetchone()
     conn.close()
     return row
+
+
+def increment_unchanged_counter(url: str) -> bool:
+    """
+    Increment consecutive_unchanged counter for a listing.
+
+    Called when a listing is scraped but content hasn't changed.
+
+    Args:
+        url: Listing URL
+
+    Returns:
+        True if updated successfully, False otherwise
+    """
+    conn = get_db_connection()
+    try:
+        conn.execute(
+            """
+            UPDATE listings
+            SET consecutive_unchanged = COALESCE(consecutive_unchanged, 0) + 1,
+                updated_at = CURRENT_TIMESTAMP
+            WHERE url = ?
+        """,
+            (url,),
+        )
+        conn.commit()
+        return True
+    except sqlite3.Error as e:
+        logger.error(f"Error updating unchanged counter: {e}")
+        return False
+    finally:
+        conn.close()
 
 
 def get_listings(

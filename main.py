@@ -22,6 +22,7 @@ from loguru import logger
 from scrapling.fetchers import Fetcher, StealthyFetcher
 
 from data import data_store_main
+from data.change_detector import compute_hash, has_changed, track_price_change
 from paths import LOGS_DIR, PROXIES_DIR
 from proxies.proxies_main import (
     setup_mubeng_rotator,
@@ -39,6 +40,56 @@ MAX_PROXY_RETRIES = 3
 
 # Minimum proxies before triggering refresh
 MIN_PROXIES = 5
+
+
+def _check_and_save_listing(listing) -> dict:
+    """
+    Check if listing changed and save if needed.
+
+    Implements change detection to skip unchanged listings and track price changes.
+
+    Args:
+        listing: ListingData object from scraper
+
+    Returns:
+        dict with keys:
+            - saved (bool): True if listing was saved (new or changed)
+            - price_changed (bool): True if price changed
+            - price_diff (float|None): Price difference if changed
+            - old_price (float|None): Previous price if changed
+            - new_price (float|None): Current price if changed
+    """
+    # Check for existing listing
+    stored = data_store_main.get_listing_by_url(listing.url)
+    new_hash = compute_hash(listing)
+
+    # Check if content changed
+    stored_hash = stored["content_hash"] if stored else None
+    if stored and not has_changed(new_hash, stored_hash):
+        # No change - just update counter
+        data_store_main.increment_unchanged_counter(listing.url)
+        return {"saved": False, "price_changed": False, "price_diff": None}
+
+    # Content changed or new listing - track price change
+    stored_price = stored["price_eur"] if stored else None
+    stored_history = stored["price_history"] if stored else None
+
+    price_changed, new_history, price_diff = track_price_change(
+        listing.price_eur, stored_price, stored_history
+    )
+
+    # Save with change metadata
+    data_store_main.save_listing(
+        listing, content_hash=new_hash, price_history=new_history
+    )
+
+    return {
+        "saved": True,
+        "price_changed": price_changed,
+        "price_diff": price_diff,
+        "old_price": stored_price,
+        "new_price": listing.price_eur,
+    }
 
 
 async def _collect_listing_urls(
@@ -150,9 +201,9 @@ async def _scrape_listings(
     Uses StealthyFetcher for listing pages - anti-bot protection.
 
     Returns:
-        Dictionary with stats: {scraped: int, failed: int, total_attempts: int}
+        Dictionary with stats: {scraped: int, failed: int, total_attempts: int, unchanged: int}
     """
-    stats = {"scraped": 0, "failed": 0, "total_attempts": 0}
+    stats = {"scraped": 0, "failed": 0, "total_attempts": 0, "unchanged": 0}
 
     for i, url in enumerate(urls, 1):
         logger.info(f"[{i}/{len(urls)}] {url}")
@@ -187,9 +238,19 @@ async def _scrape_listings(
                 # If we get here, request succeeded
                 listing = await scraper.extract_listing(html, url)
                 if listing:
-                    data_store_main.save_listing(listing)
-                    stats["scraped"] += 1
-                    logger.info(f"  -> Saved: {listing.price_eur} EUR, {listing.sqm_total} sqm")
+                    result = _check_and_save_listing(listing)
+                    if result["saved"]:
+                        stats["scraped"] += 1
+                        logger.info(f"  -> Saved: {listing.price_eur} EUR, {listing.sqm_total} sqm")
+                        if result["price_changed"]:
+                            direction = "dropped" if result["price_diff"] < 0 else "increased"
+                            logger.info(
+                                f"  -> Price {direction}: "
+                                f"{result['old_price']} -> {result['new_price']} EUR"
+                            )
+                    else:
+                        stats["unchanged"] += 1
+                        logger.debug(f"  -> Unchanged (skipped)")
                     if proxy_pool and proxy_key:
                         proxy_pool.record_result(proxy_key, success=True)
                     url_result = True
@@ -538,7 +599,8 @@ def _print_summary(stats: dict, proxy_pool: Optional[ScoredProxyPool]) -> None:
     print("=" * 60)
     print("CRAWL COMPLETE")
     print("=" * 60)
-    print(f"\n[SUMMARY] Total scraped: {stats['scraped']}, "
+    print(f"\n[SUMMARY] Scraped: {stats['scraped']}, "
+          f"Unchanged: {stats.get('unchanged', 0)}, "
           f"Failed: {stats['failed']}, "
           f"Success rate: {stats['scraped'] / max(stats['total_attempts'], 1) * 100:.1f}%")
 
