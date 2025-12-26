@@ -201,8 +201,30 @@ Test only waited 5 minutes → FAIL
 - [x] Run test suite: **100% accuracy** on enum fields (V4 pattern)
 - [x] Keep `_translate_values()` as safety fallback (unchanged)
 
-#### Vocabulary Approach (Deferred - English prompts work better)
-- [ ] Create `llm/vocabulary.py` if needed after Phase 1-2
+### Phase 3.6: Achieve 95%+ Extraction Accuracy (P1)
+
+**Problem**: Current 70-80% accuracy is unacceptable for simple real estate text.
+**Target**: 95% minimum, aim for 99%.
+**Rationale**: Input is short, simple Bulgarian text with limited vocabulary - not complex prose.
+
+#### Research Required
+- [ ] Analyze extraction failures - which fields fail most?
+- [ ] Test with larger model (qwen2.5:3b vs 1.5b)
+- [ ] Test prompt variations for low-accuracy fields
+- [ ] Benchmark: Run 50 real listings, measure per-field accuracy
+
+#### Potential Fixes
+- [ ] Field-specific prompts (separate prompt per field type)
+- [ ] Pre-processing: Normalize Bulgarian text before LLM
+- [ ] Regex fallback: Use regex for obvious patterns (e.g., "тухла" → brick)
+- [ ] Confidence filtering: Reject low-confidence extractions, retry with different prompt
+- [ ] Model upgrade: Test qwen2.5:3b or qwen2.5:7b if 1.5b insufficient
+
+#### Acceptance Criteria
+- [ ] map_fields(): 95%+ accuracy on enum fields
+- [ ] extract_description(): 95%+ accuracy on enum fields
+- [ ] Create accuracy benchmark test with 50+ real samples
+- [ ] Document which fields need special handling
 
 #### Scrapling + LLM Synergy (Future)
 - [ ] Research element-aware prompts vs raw text prompts

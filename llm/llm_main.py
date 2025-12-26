@@ -149,12 +149,17 @@ class OllamaClient:
         logger.error(f"Failed to start Ollama after {max_attempts} attempts")
         return False
 
-    def _call_ollama(self, prompt: str, task: str) -> str:
+    def _call_ollama(
+        self, prompt: str, task: str, schema_class: Optional[Type[T]] = None
+    ) -> str:
         """Call Ollama REST API for generation.
 
         Args:
             prompt: The formatted prompt to send
             task: Task key from config (field_mapping or description_extraction)
+            schema_class: Optional Pydantic model for JSON schema enforcement.
+                         If provided, uses model_json_schema() for grammar-level
+                         enum enforcement. Otherwise falls back to "json".
 
         Returns:
             Raw response string from Ollama
@@ -162,14 +167,23 @@ class OllamaClient:
         task_config = self.config["tasks"][task]
         model = task_config["primary_model"]
 
+        # Use full JSON schema if provided, else just "json" for syntax-only
+        format_value = (
+            schema_class.model_json_schema() if schema_class else "json"
+        )
+
         try:
+            # Get keep_alive from config (default 5m if not set)
+            keep_alive = self.config["ollama"].get("keep_alive", "5m")
+
             response = requests.post(
                 f"{self.base_url}/api/generate",
                 json={
                     "model": model,
                     "prompt": prompt,
                     "stream": False,
-                    "format": task_config.get("format", "json"),
+                    "format": format_value,
+                    "keep_alive": keep_alive,  # Keep model loaded for batch processing
                     "options": {
                         "temperature": task_config["temperature"],
                         "num_predict": task_config["max_tokens"],
@@ -344,7 +358,7 @@ def map_fields(content: str) -> MappedFields:
         return MappedFields(confidence=0.0)
 
     prompt = FIELD_MAPPING_PROMPT.format(content=content)
-    response = client._call_ollama(prompt, "field_mapping")
+    response = client._call_ollama(prompt, "field_mapping", schema_class=MappedFields)
     return client._parse_response(response, MappedFields)
 
 
@@ -364,5 +378,7 @@ def extract_description(description: str) -> ExtractedDescription:
         return ExtractedDescription(confidence=0.0)
 
     prompt = EXTRACTION_PROMPT.format(description=description)
-    response = client._call_ollama(prompt, "description_extraction")
+    response = client._call_ollama(
+        prompt, "description_extraction", schema_class=ExtractedDescription
+    )
     return client._parse_response(response, ExtractedDescription)
