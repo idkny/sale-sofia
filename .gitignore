@@ -40,6 +40,9 @@ proxies/live_proxies.json
 proxies/scraped_*.json
 proxies/external/proxy-scraper-checker/proxies/
 
+# SSL Certificates (generated per-machine via setup.sh)
+data/certs/
+
 # Database
 data/*.db
 data/*.sqlite

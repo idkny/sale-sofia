@@ -13,6 +13,7 @@
 | Adding new components | [ADDING_COMPONENTS.md](ADDING_COMPONENTS.md) |
 | Coding conventions | [CONVENTIONS.md](CONVENTIONS.md) |
 | File placement rules | [FILE_STRUCTURE.md](FILE_STRUCTURE.md) |
+| SSL/Proxy setup | [SSL_PROXY_SETUP.md](SSL_PROXY_SETUP.md) |
 
 ---
 

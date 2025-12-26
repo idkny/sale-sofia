@@ -32,6 +32,19 @@ SELECTOR_STORAGE.mkdir(parents=True, exist_ok=True)
 # Default mubeng proxy endpoint
 MUBENG_PROXY = "http://localhost:8089"
 
+# Mubeng CA certificate for HTTPS MITM proxy
+# -----------------------------------------
+# Mubeng intercepts HTTPS traffic to rotate through upstream proxies.
+# This requires Firefox/Camoufox to trust mubeng's CA certificate.
+# Without this, you'll get SEC_ERROR_UNKNOWN_ISSUER errors.
+#
+# The certificate is extracted by setup.sh from mubeng's /cert endpoint.
+# See: docs/architecture/SSL_PROXY_SETUP.md for full documentation.
+#
+# Note: Target websites never see this certificate - they receive normal
+# HTTPS requests. This cert is only for the local browser-to-mubeng connection.
+MUBENG_CA_CERT = Path(__file__).parent.parent / "data" / "certs" / "mubeng-ca.pem"
+
 # Common encodings for Bulgarian/Cyrillic sites
 CYRILLIC_ENCODINGS = ["windows-1251", "utf-8", "iso-8859-5", "koi8-r"]
 
@@ -420,44 +433,55 @@ class ScraplingMixin:
         skip_proxy: bool = False,
     ) -> Adaptor:
         """
-        Fetch page with StealthyFetcher (anti-bot bypass).
+        Fetch page with Camoufox (anti-bot bypass).
 
         Uses modified Firefox (Camoufox) with:
         - Fingerprint spoofing
         - WebRTC leak protection
         - Human-like behavior simulation
-        - Mubeng proxy rotation (default)
-
-        Note: HTTPS sites may have SSL issues with HTTP proxies.
-        Set skip_proxy=True if you encounter SEC_ERROR_UNKNOWN_ISSUER errors.
+        - Mubeng proxy rotation with SSL certificate (default)
 
         Args:
             url: Target URL
             humanize: Simulate human mouse movement
             timeout: Request timeout in ms
-            skip_proxy: Set True to skip mubeng proxy (for SSL issues)
+            skip_proxy: Set True to skip mubeng proxy
 
         Returns:
             Scrapling Adaptor with page content
         """
-        try:
-            fetch_kwargs = {
-                "url": url,
-                "humanize": humanize,
-                "geoip": True,
-                "block_webrtc": True,
-                "network_idle": True,
-                "timeout": timeout,
-            }
-            # Use mubeng proxy by default, skip only when explicitly requested
-            if not skip_proxy:
-                fetch_kwargs["proxy"] = MUBENG_PROXY
+        from camoufox.sync_api import Camoufox
 
-            page = StealthyFetcher.fetch(**fetch_kwargs)
-            logger.debug(f"StealthyFetcher: {url} - success")
-            return page
+        try:
+            # Build Camoufox config with SSL certificate
+            # The certificatePaths option tells Camoufox to trust mubeng's CA,
+            # allowing HTTPS traffic to flow through the MITM proxy without
+            # SEC_ERROR_UNKNOWN_ISSUER errors. See: docs/architecture/SSL_PROXY_SETUP.md
+            config = {}
+            if MUBENG_CA_CERT.exists():
+                config["certificatePaths"] = [str(MUBENG_CA_CERT)]
+
+            # Build proxy config
+            proxy_config = None
+            if not skip_proxy:
+                proxy_config = {"server": MUBENG_PROXY}
+
+            with Camoufox(
+                headless=True,
+                humanize=humanize,
+                geoip=True,
+                block_webrtc=True,
+                proxy=proxy_config,
+                config=config,
+            ) as browser:
+                page = browser.new_page()
+                page.goto(url, timeout=timeout, wait_until="networkidle")
+                html = page.content()
+
+            logger.debug(f"Camoufox fetch: {url} - success")
+            return Adaptor(html, url=url, auto_save=self._adaptive_enabled)
         except Exception as e:
-            logger.error(f"StealthyFetcher failed: {url} - {e}")
+            logger.error(f"Camoufox fetch failed: {url} - {e}")
             raise
 
     def fetch_fast(

@@ -64,6 +64,50 @@ fi
 echo "[INFO] Verifying Mubeng..."
 "$MUBENG_PATH" --help
 
+# --- Mubeng SSL Certificate for HTTPS MITM Proxy ---
+# Required for Camoufox/Firefox to trust mubeng's intercepted HTTPS connections
+# See: docs/architecture/SSL_PROXY_SETUP.md
+
+CERT_DIR="$PROJECT_ROOT/data/certs"
+CERT_DER="$CERT_DIR/mubeng-ca.der"
+CERT_PEM="$CERT_DIR/mubeng-ca.pem"
+MUBENG_PORT=18089  # Temporary port for cert extraction
+
+if [ ! -f "$CERT_PEM" ]; then
+  echo "[INFO] Extracting mubeng SSL certificate..."
+  mkdir -p "$CERT_DIR"
+
+  # Create temporary proxy file (mubeng requires at least one proxy to start)
+  TEMP_PROXY_FILE=$(mktemp)
+  echo "http://127.0.0.1:8080" > "$TEMP_PROXY_FILE"
+
+  # Start mubeng temporarily on different port
+  "$MUBENG_PATH" -a "localhost:$MUBENG_PORT" -f "$TEMP_PROXY_FILE" &
+  MUBENG_PID=$!
+  sleep 2
+
+  # Download certificate (must access directly, not through proxy)
+  if curl -s -o "$CERT_DER" "http://localhost:$MUBENG_PORT/cert"; then
+    # Convert DER to PEM format (required by Camoufox)
+    if openssl x509 -inform DER -in "$CERT_DER" -out "$CERT_PEM" 2>/dev/null; then
+      echo "[OK] Mubeng SSL certificate installed at $CERT_PEM"
+
+      # Verify certificate
+      CERT_SUBJECT=$(openssl x509 -in "$CERT_PEM" -noout -subject 2>/dev/null)
+      echo "     Certificate: $CERT_SUBJECT"
+    else
+      echo "[WARN] Failed to convert certificate to PEM format"
+    fi
+  else
+    echo "[WARN] Failed to download mubeng certificate"
+  fi
+
+  # Cleanup
+  kill $MUBENG_PID 2>/dev/null || true
+  rm -f "$TEMP_PROXY_FILE"
+else
+  echo "[OK] Mubeng SSL certificate already exists at $CERT_PEM"
+fi
 
 # --- Ungoogled Chromium from fingerprint-chromium ---
 
