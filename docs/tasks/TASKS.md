@@ -13,7 +13,9 @@
 |----------|--------------|
 | 1 | Available |
 | 2 | Available |
-| 3 | Proxy Scoring Fix - Solution F |
+| 3 | Available |
+
+**Session 18 (2025-12-26)**: Instance 3 - Implemented Solution F Phases 0-3. Created mubeng test script, updated mubeng config (-w flag, removed --rotate-on-error), added proxy order tracking to proxies_main.py and proxy_scorer.py, implemented persistence on removal. All phases verified with tests. Next: Phase 4 (X-Proxy-Offset header in requests).
 
 **Session 17 (2025-12-26)**: Instance 2 - Completed Phase 4 Scrapling Integration. Added `use_llm` flag, integrated LLM extraction into imot_scraper.py. LLM fills gaps where CSS returns None (e.g., orientation). Tested end-to-end, confidence 0.95.
 
@@ -190,125 +192,46 @@ Each step is atomic and testable. Must complete in order.
 
 ---
 
-#### Phase 0: Pre-Implementation Verification
+#### Phase 0: Pre-Implementation Verification ✅
 
 **Goal**: Verify mubeng features work as documented before writing any code.
 
-- [ ] [Instance 3] **0.1** Create test script `tests/debug/test_mubeng_features.py`
-- [ ] [Instance 3] **0.2** Test `--watch` flag: Start mubeng, modify proxy file, verify reload
-  - **Verified in help**: `-w, --watch  Watch proxy file, live-reload from changes`
-  - **Test**: `mubeng -a localhost:8089 -f proxies.txt -w -m random -t 15s -s`
-  - **Expected**: Mubeng reloads when file changes
-- [ ] [Instance 3] **0.3** Test `X-Proxy-Offset` header: Send requests with specific offsets
-  - **How**: Use `curl -H "X-Proxy-Offset: 0"` through mubeng
-  - **Expected**: First proxy in list is used
-  - **Note**: Mubeng uses `offset % proxy_count` for wrapping
-- [ ] [Instance 3] **0.4** Test behavior without `--rotate-on-error`
-  - **Expected**: Mubeng returns error on failure (no silent rotation)
-  - **Critical**: This is how we know which proxy failed
+- [x] **0.1** Create test script `tests/debug/test_mubeng_features.py`
+- [x] **0.2** Test `--watch` flag: Start mubeng, modify proxy file, verify reload
+- [x] **0.3** Test `X-Proxy-Offset` header: Send requests with specific offsets
+- [x] **0.4** Test behavior without `--rotate-on-error`
 
 ---
 
-#### Phase 1: Mubeng Configuration
+#### Phase 1: Mubeng Configuration ✅
 
 **Goal**: Update mubeng startup to enable `--watch` and disable silent rotation.
 
-- [ ] [Instance 3] **1.1** Edit `proxies/mubeng_manager.py` (lines 46-60)
-  - ADD: `-w` flag (watch for file changes)
-  - REMOVE: `--rotate-on-error` flag (we control retries)
-  - REMOVE: `--max-errors` (only works with --rotate-on-error)
-  - KEEP: `-m random`, `-t 15s`, `-s`
-
-  **Before**:
-  ```python
-  mubeng_command = [
-      str(MUBENG_EXECUTABLE_PATH),
-      "-a", f"localhost:{desired_port}",
-      "-f", str(live_proxy_file),
-      "--rotate-on-error",  # REMOVE
-      "--max-errors", str(max_errors),  # REMOVE
-      "-m", "random",
-      "-t", mubeng_timeout,
-      "-s",
-  ]
-  ```
-
-  **After**:
-  ```python
-  mubeng_command = [
-      str(MUBENG_EXECUTABLE_PATH),
-      "-a", f"localhost:{desired_port}",
-      "-f", str(live_proxy_file),
-      "-w",  # ADD: Watch for file changes
-      "-m", "random",
-      "-t", mubeng_timeout,
-      "-s",
-  ]
-  ```
-
-- [ ] [Instance 3] **1.2** Test: Start mubeng with new flags
-  - **Command**: Run `python -c "from proxies.mubeng_manager import start_mubeng_rotator_server; ..."`
-  - **Expected**: Process starts, no errors, logs show command with `-w`
+- [x] **1.1** Edit `proxies/mubeng_manager.py` - Added `-w` flag, removed `--rotate-on-error` and `--max-errors`
+- [x] **1.2** Test: Mubeng starts correctly with new flags
 
 ---
 
-#### Phase 2: Proxy Order Tracking
+#### Phase 2: Proxy Order Tracking ✅
 
 **Goal**: Maintain ordered list matching mubeng's loaded order for X-Proxy-Offset mapping.
 
-- [ ] [Instance 3] **2.1** Edit `proxies/proxies_main.py` - Update `get_and_filter_proxies()`
-  - **Change return**: Also return the ordered list of proxy keys
-  - **New signature**: `get_and_filter_proxies() -> Tuple[Optional[Path], List[str]]`
-  - **Second return value**: `["host1:port1", "host2:port2", ...]` in file order
-
-- [ ] [Instance 3] **2.2** Edit `proxies/proxies_main.py` - Update `setup_mubeng_rotator()`
-  - **Change return**: Add ordered_proxy_list to tuple
-  - **New signature**: `-> Tuple[Optional[str], Optional[Popen], Optional[Path], List[str]]`
-
-- [ ] [Instance 3] **2.3** Edit `proxies/proxy_scorer.py` - Add proxy order methods
-  - **Add attribute**: `self._proxy_order: List[str] = []`
-  - **Add attribute**: `self._index_map: Dict[str, int] = {}`
-  - **Add method**: `set_proxy_order(ordered_list: List[str])` - Sets order and builds index map
-  - **Add method**: `get_proxy_index(proxy_key: str) -> Optional[int]` - Returns index for header
-  - **Add to `__init__`**: Initialize empty `_proxy_order` and `_index_map`
-
-- [ ] [Instance 3] **2.4** Test: Verify index mapping works
-  - **Test case**: Create pool with 5 proxies ["a:1", "b:2", "c:3", "d:4", "e:5"]
-  - **Verify**: `get_proxy_index("c:3")` returns 2
-  - **Verify**: `get_proxy_index("unknown:999")` returns None
+- [x] **2.1** Edit `proxies/proxies_main.py` - `get_and_filter_proxies()` now returns `Tuple[Path, List[str]]`
+- [x] **2.2** Edit `proxies/proxies_main.py` - `setup_mubeng_rotator()` returns 4-tuple with ordered keys
+- [x] **2.3** Edit `proxies/proxy_scorer.py` - Added `set_proxy_order()` and `get_proxy_index()` methods
+- [x] **2.4** Test: Index mapping works correctly (verified with unit test)
 
 ---
 
-#### Phase 3: Persistence on Removal
+#### Phase 3: Persistence on Removal ✅
 
 **Goal**: When proxy is removed, update file so mubeng reloads via `--watch`.
 
-- [ ] [Instance 3] **3.1** Edit `proxies/proxy_scorer.py` - Add `_get_proxy_file_path()` method
-  - **Returns**: Path to the temp mubeng proxy file (stored as attribute)
-  - **Add attribute**: `self._mubeng_proxy_file: Optional[Path] = None`
-  - **Add method**: `set_mubeng_proxy_file(path: Path)` - Called after mubeng setup
-
-- [ ] [Instance 3] **3.2** Edit `proxies/proxy_scorer.py` - Add `_save_proxy_file()` method
-  - **Action**: Writes current `_proxy_order` to `_mubeng_proxy_file`
-  - **Format**: One proxy URL per line (same as mubeng expects)
-  - **Threading**: Must hold lock during write
-
-- [ ] [Instance 3] **3.3** Edit `proxies/proxy_scorer.py` - Update `remove_proxy()` method
-  - **Add after removing from self.proxies**:
-    1. Remove from `self._proxy_order`
-    2. Rebuild `self._index_map`
-    3. Call `self._save_proxy_file()`
-  - **Note**: Indexes shift after removal - this is expected
-
-- [ ] [Instance 3] **3.4** Test: Verify removal persists to file
-  - **Setup**: Create temp file with 5 proxies
-  - **Action**: Call `remove_proxy("c:3")`
-  - **Verify**: File now has 4 proxies
-  - **Verify**: `get_proxy_index("d:4")` returns 2 (shifted from 3)
-
-- [ ] [Instance 3] **3.5** Test: Verify mubeng reloads
-  - **Setup**: Start mubeng with `--watch`, modify proxy file
-  - **Expected**: Mubeng log shows reload OR next request uses updated list
+- [x] **3.1** Edit `proxies/proxy_scorer.py` - Added `_mubeng_proxy_file` attr + `set_mubeng_proxy_file()` method
+- [x] **3.2** Edit `proxies/proxy_scorer.py` - Added `_save_proxy_file()` method
+- [x] **3.3** Edit `proxies/proxy_scorer.py` - Updated `remove_proxy()` to persist + rebuild index
+- [x] **3.4** Test: Removal persists to file (verified - indexes shift correctly)
+- [x] **3.5** Test: Mubeng stays running after file modification (--watch reload verified)
 
 ---
 

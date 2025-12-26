@@ -265,21 +265,21 @@ def _initialize_proxy_pool() -> Optional[ScoredProxyPool]:
         return None
 
 
-def _start_proxy_rotator() -> tuple[str, Any, Any]:
-    """Start mubeng proxy rotator. Returns (proxy_url, process, temp_file)."""
+def _start_proxy_rotator() -> tuple[str, Any, Any, list[str]]:
+    """Start mubeng proxy rotator. Returns (proxy_url, process, temp_file, ordered_proxy_keys)."""
     print()
     print("[INFO] Starting proxy rotator...")
-    proxy_url, mubeng_process, temp_proxy_file = setup_mubeng_rotator(
+    proxy_url, mubeng_process, temp_proxy_file, ordered_proxy_keys = setup_mubeng_rotator(
         port=8089,
         min_live_proxies=5,
     )
 
     if not mubeng_process:
         print("[ERROR] Failed to start proxy rotator. Aborting.")
-        return proxy_url, mubeng_process, temp_proxy_file
+        return proxy_url, mubeng_process, temp_proxy_file, ordered_proxy_keys
 
-    print(f"[SUCCESS] Proxy rotator running at {proxy_url}")
-    return proxy_url, mubeng_process, temp_proxy_file
+    print(f"[SUCCESS] Proxy rotator running at {proxy_url} with {len(ordered_proxy_keys)} proxies")
+    return proxy_url, mubeng_process, temp_proxy_file, ordered_proxy_keys
 
 
 def _run_preflight_level1(proxy_url: str, max_attempts: int = 6) -> bool:
@@ -299,39 +299,39 @@ def _run_preflight_level1(proxy_url: str, max_attempts: int = 6) -> bool:
     return False
 
 
-def _run_preflight_level2(mubeng_process: Any) -> tuple[bool, Any, str]:
+def _run_preflight_level2(mubeng_process: Any) -> tuple[bool, Any, str, Any, list[str]]:
     """
     Level 2 pre-flight: Soft restart - reload mubeng with same proxy file.
-    Returns (success, new_process, new_proxy_url).
+    Returns (success, new_process, new_proxy_url, new_temp_file, ordered_proxy_keys).
     """
     print()
     print("[INFO] Soft restart: Reloading proxy rotator...")
     stop_mubeng_rotator(mubeng_process, None)  # Don't delete temp file
 
-    proxy_url, new_process, _ = setup_mubeng_rotator(
+    proxy_url, new_process, new_temp_file, ordered_proxy_keys = setup_mubeng_rotator(
         port=8089,
         min_live_proxies=5,
     )
     if not new_process:
-        return False, new_process, proxy_url
+        return False, new_process, proxy_url, new_temp_file, ordered_proxy_keys
 
     print(f"[SUCCESS] Proxy rotator restarted at {proxy_url}")
     for attempt in range(1, 4):
         if preflight_check(proxy_url, timeout=15):
             print(f"[SUCCESS] Pre-flight check passed after soft restart (attempt {attempt})")
-            return True, new_process, proxy_url
+            return True, new_process, proxy_url, new_temp_file, ordered_proxy_keys
         else:
             print(f"[WARNING] Pre-flight still failing (attempt {attempt}/3)")
             if attempt < 3:
                 time.sleep(1)
 
-    return False, new_process, proxy_url
+    return False, new_process, proxy_url, new_temp_file, ordered_proxy_keys
 
 
-def _run_preflight_level3(orch, proxy_pool: Optional[ScoredProxyPool]) -> tuple[bool, Any, str, Any]:
+def _run_preflight_level3(orch, proxy_pool: Optional[ScoredProxyPool]) -> tuple[bool, Any, str, Any, list[str]]:
     """
     Level 3 pre-flight: Full refresh - scrape new proxies (5-10 min).
-    Returns (success, new_process, new_proxy_url, new_temp_file).
+    Returns (success, new_process, new_proxy_url, new_temp_file, ordered_proxy_keys).
     """
     print()
     print("[INFO] Full refresh: Fetching new proxies (this takes 5-10 min)...")
@@ -339,7 +339,7 @@ def _run_preflight_level3(orch, proxy_pool: Optional[ScoredProxyPool]) -> tuple[
     mtime_before, task_id = orch.trigger_proxy_refresh()
     if not orch.wait_for_refresh_completion(mtime_before, min_count=5, task_id=task_id):
         print("[ERROR] Proxy refresh timed out or failed. Aborting.", flush=True)
-        return False, None, "", None
+        return False, None, "", None, []
 
     print("[DEBUG] wait_for_refresh_completion returned True, continuing...", flush=True)
 
@@ -351,26 +351,26 @@ def _run_preflight_level3(orch, proxy_pool: Optional[ScoredProxyPool]) -> tuple[
         print(f"[SUCCESS] Proxy pool reloaded: {stats['total_proxies']} proxies")
 
     print("[INFO] Restarting proxy rotator with fresh proxies...")
-    proxy_url, new_process, new_temp_file = setup_mubeng_rotator(
+    proxy_url, new_process, new_temp_file, ordered_proxy_keys = setup_mubeng_rotator(
         port=8089,
         min_live_proxies=5,
     )
     if not new_process:
         print("[ERROR] Failed to restart proxy rotator. Aborting.")
-        return False, new_process, proxy_url, new_temp_file
+        return False, new_process, proxy_url, new_temp_file, ordered_proxy_keys
     print(f"[SUCCESS] Proxy rotator restarted at {proxy_url}")
 
     # Final pre-flight check
     for attempt in range(1, 4):
         if preflight_check(proxy_url, timeout=15):
             print(f"[SUCCESS] Pre-flight check passed after refresh (attempt {attempt})")
-            return True, new_process, proxy_url, new_temp_file
+            return True, new_process, proxy_url, new_temp_file, ordered_proxy_keys
         else:
             print(f"[WARNING] Pre-flight still failing (attempt {attempt}/3)")
             if attempt < 3:
                 time.sleep(1)
 
-    return False, new_process, proxy_url, new_temp_file
+    return False, new_process, proxy_url, new_temp_file, ordered_proxy_keys
 
 
 def _crawl_all_sites(start_urls: dict, proxy_url: str, proxy_pool: Optional[ScoredProxyPool]) -> dict:
@@ -461,19 +461,33 @@ def run_auto_mode() -> None:
             return
 
         proxy_pool = _initialize_proxy_pool()
-        proxy_url, mubeng_process, temp_proxy_file = _start_proxy_rotator()
+        proxy_url, mubeng_process, temp_proxy_file, ordered_proxy_keys = _start_proxy_rotator()
         if not mubeng_process:
             return
+
+        # Set proxy order in pool for X-Proxy-Offset mapping (Solution F)
+        if proxy_pool and ordered_proxy_keys:
+            proxy_pool.set_proxy_order(ordered_proxy_keys)
+            if temp_proxy_file:
+                proxy_pool.set_mubeng_proxy_file(temp_proxy_file)
 
         # Pre-flight with 3-level recovery
         preflight_passed = _run_preflight_level1(proxy_url)
 
         if not preflight_passed:
-            preflight_passed, mubeng_process, proxy_url = _run_preflight_level2(mubeng_process)
+            preflight_passed, mubeng_process, proxy_url, temp_proxy_file, ordered_proxy_keys = _run_preflight_level2(mubeng_process)
+            if proxy_pool and ordered_proxy_keys:
+                proxy_pool.set_proxy_order(ordered_proxy_keys)
+                if temp_proxy_file:
+                    proxy_pool.set_mubeng_proxy_file(temp_proxy_file)
 
         if not preflight_passed:
             result = _run_preflight_level3(orch, proxy_pool)
-            preflight_passed, mubeng_process, proxy_url, temp_proxy_file = result
+            preflight_passed, mubeng_process, proxy_url, temp_proxy_file, ordered_proxy_keys = result
+            if proxy_pool and ordered_proxy_keys:
+                proxy_pool.set_proxy_order(ordered_proxy_keys)
+                if temp_proxy_file:
+                    proxy_pool.set_mubeng_proxy_file(temp_proxy_file)
 
         if not preflight_passed:
             print("[ERROR] Pre-flight failed after all recovery attempts.")

@@ -67,6 +67,11 @@ class ScoredProxyPool:
         self.scores: dict[str, dict] = {}
         self.lock = threading.Lock()
 
+        # Solution F: Proxy order tracking for X-Proxy-Offset header
+        self._proxy_order: list[str] = []  # Ordered list of proxy keys matching mubeng file
+        self._index_map: dict[str, int] = {}  # proxy_key -> index for O(1) lookup
+        self._mubeng_proxy_file: Optional[Path] = None  # Path to mubeng's proxy file for --watch
+
         # Load proxies and scores
         self._load_proxies()
         self.load_scores()
@@ -305,7 +310,10 @@ class ScoredProxyPool:
 
     def remove_proxy(self, proxy_key: str) -> bool:
         """
-        Remove a proxy from the pool.
+        Remove a proxy from the pool and persist to mubeng's proxy file.
+
+        Solution F: When a proxy is removed, we update the proxy file
+        and mubeng's --watch flag triggers an automatic reload.
 
         Thread-safe: acquires lock during removal.
 
@@ -332,16 +340,26 @@ class ScoredProxyPool:
             ]
             removed = len(self.proxies) < original_count
 
+            # Solution F: Remove from proxy order and rebuild index map
+            if proxy_key in self._proxy_order:
+                self._proxy_order.remove(proxy_key)
+                self._rebuild_index_map()
+                logger.debug(f"Removed {proxy_key} from proxy order, new count: {len(self._proxy_order)}")
+
             if removed:
                 logger.info(
                     f"Removed proxy {proxy_key} from pool "
                     f"({original_count} -> {len(self.proxies)})"
                 )
 
-            # Save updated scores
-            self.save_scores()
+                # Solution F: Persist to mubeng proxy file (triggers --watch reload)
+                if self._mubeng_proxy_file:
+                    self._save_proxy_file()
 
-            return removed
+        # Save updated scores (outside lock to avoid holding during I/O)
+        self.save_scores()
+
+        return removed
 
     def get_proxy_url(self) -> Optional[str]:
         """
@@ -396,3 +414,91 @@ class ScoredProxyPool:
             new_count = len(self.proxies)
 
             logger.info(f"Reloaded proxy pool: {old_count} -> {new_count} proxies")
+
+    # =========================================================================
+    # Solution F: Proxy Order Tracking for X-Proxy-Offset
+    # =========================================================================
+
+    def set_proxy_order(self, ordered_proxy_keys: list[str]) -> None:
+        """
+        Set the proxy order to match mubeng's loaded proxy file.
+
+        This establishes the mapping between proxy keys and their index
+        for use with the X-Proxy-Offset header in Solution F.
+
+        Args:
+            ordered_proxy_keys: List of proxy keys ("host:port") in file order
+        """
+        with self.lock:
+            self._proxy_order = list(ordered_proxy_keys)  # Copy to avoid external mutation
+            self._index_map = {key: idx for idx, key in enumerate(ordered_proxy_keys)}
+            logger.info(f"Set proxy order: {len(self._proxy_order)} proxies mapped")
+
+    def get_proxy_index(self, proxy_key: str) -> Optional[int]:
+        """
+        Get the index of a proxy for use with X-Proxy-Offset header.
+
+        Args:
+            proxy_key: Proxy key in format "host:port" or full URL
+
+        Returns:
+            Index (0-based) if found, None if proxy not in order map
+        """
+        # Handle both "host:port" and full URL formats
+        if "://" in proxy_key:
+            proxy_key = proxy_key.split("://")[1]
+
+        with self.lock:
+            return self._index_map.get(proxy_key)
+
+    def _rebuild_index_map(self) -> None:
+        """Rebuild the index map from current proxy order. Must hold lock."""
+        self._index_map = {key: idx for idx, key in enumerate(self._proxy_order)}
+
+    def set_mubeng_proxy_file(self, proxy_file: Path) -> None:
+        """
+        Set the path to mubeng's proxy file for live updates.
+
+        When proxies are removed, we update this file and mubeng's --watch
+        flag will detect the change and reload automatically.
+
+        Args:
+            proxy_file: Path to the temp proxy file used by mubeng
+        """
+        with self.lock:
+            self._mubeng_proxy_file = Path(proxy_file)
+            logger.info(f"Set mubeng proxy file: {self._mubeng_proxy_file}")
+
+    def _save_proxy_file(self) -> bool:
+        """
+        Write current proxy order to mubeng's proxy file.
+
+        This triggers mubeng's --watch reload. Must hold lock before calling.
+
+        Returns:
+            True if file was written successfully, False otherwise
+        """
+        if not self._mubeng_proxy_file:
+            logger.warning("Cannot save proxy file: _mubeng_proxy_file not set")
+            return False
+
+        if not self._proxy_order:
+            logger.warning("Cannot save proxy file: _proxy_order is empty")
+            return False
+
+        try:
+            # Write proxy URLs to file (one per line)
+            with open(self._mubeng_proxy_file, 'w') as f:
+                for proxy_key in self._proxy_order:
+                    # Convert "host:port" to "http://host:port" for mubeng
+                    f.write(f"http://{proxy_key}\n")
+
+            logger.info(
+                f"Updated mubeng proxy file: {len(self._proxy_order)} proxies "
+                f"written to {self._mubeng_proxy_file}"
+            )
+            return True
+
+        except IOError as e:
+            logger.error(f"Failed to save proxy file: {e}")
+            return False

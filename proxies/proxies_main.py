@@ -49,12 +49,17 @@ def check_proxies():
 
 def get_and_filter_proxies(
     min_live_proxies: int = MIN_LIVE_PROXIES_DEFAULT,
-) -> Optional[Path]:
+) -> Tuple[Optional[Path], List[str]]:
     """
     Load proxies from live_proxies.json, filter out Transparent (exposes IP),
     and write to a temporary file for Mubeng.
 
     No protocol filtering - that happens at browser level.
+
+    Returns:
+        Tuple of (proxy_file_path, ordered_proxy_keys)
+        - proxy_file_path: Path to temp file for mubeng, or None on failure
+        - ordered_proxy_keys: List of "host:port" strings in file order (for X-Proxy-Offset)
     """
     logger.info(f"Loading proxies with min_live: {min_live_proxies}")
     live_proxies_file = PROXIES_DIR / "live_proxies.json"
@@ -62,7 +67,7 @@ def get_and_filter_proxies(
         print("[INFO] Live proxies file not found. Triggering a refresh...")
         scrape_new_proxies_task.delay()
         print("[INFO] Scraping task sent to background. Checking will follow. Please wait a moment and retry.")
-        return None
+        return None, []
 
     with open(live_proxies_file, "r") as f:
         all_proxies = json.load(f)
@@ -89,7 +94,10 @@ def get_and_filter_proxies(
             f"[ERROR] Found only {len(filtered_proxies)} proxies matching your criteria. "
             f"Required at least {min_live_proxies}. Aborting."
         )
-        return None
+        return None, []
+
+    # Build ordered proxy keys list (for X-Proxy-Offset mapping)
+    ordered_proxy_keys = [f"{p['host']}:{p['port']}" for p in filtered_proxies]
 
     # Write to a temporary file for Mubeng
     try:
@@ -99,11 +107,11 @@ def get_and_filter_proxies(
                 f.write(f"{proxy_to_url(proxy['host'], proxy['port'], proxy.get('protocol', 'http'))}\n")
         logger.info(f"Prepared temporary proxy file with {len(filtered_proxies)} proxies: {temp_proxy_file.name}")
         print(f"[SUCCESS] Created temporary proxy list for Mubeng with {len(filtered_proxies)} proxies.")
-        return Path(temp_proxy_file.name)
+        return Path(temp_proxy_file.name), ordered_proxy_keys
     except Exception as e:
         logger.error(f"Failed to create temporary proxy file: {e}", exc_info=True)
         print("[ERROR] Failed to create temporary file for Mubeng. See logs for details.")
-        return None
+        return None, []
 
 
 def _check_and_refresh_proxies():
@@ -136,12 +144,19 @@ def setup_mubeng_rotator(
     port: int,
     country_codes: Optional[List[str]] = None,
     min_live_proxies: int = MIN_LIVE_PROXIES_DEFAULT,
-) -> Tuple[Optional[str], Optional[subprocess.Popen], Optional[Path]]:
+) -> Tuple[Optional[str], Optional[subprocess.Popen], Optional[Path], List[str]]:
     """
     Set up and start the Mubeng proxy rotator with ALL available proxies.
 
     No protocol filtering at this stage - that happens at browser level.
     Quality filtering happens via pre-flight check after mubeng starts.
+
+    Returns:
+        Tuple of (proxy_url, mubeng_process, proxy_file_path, ordered_proxy_keys)
+        - proxy_url: Mubeng proxy URL (e.g., "http://localhost:8089")
+        - mubeng_process: Popen object for the mubeng process
+        - proxy_file_path: Path to the temp proxy file
+        - ordered_proxy_keys: List of "host:port" strings for X-Proxy-Offset mapping
     """
     logger.info("Setting up and starting Mubeng rotator...")
 
@@ -149,16 +164,16 @@ def setup_mubeng_rotator(
 
     if not free_port(port):
         logger.critical(f"Port {port} is in use and could not be freed. Aborting.")
-        return None, None, None
+        return None, None, None, []
 
     # Load ALL proxies - no protocol/anonymity filtering at this stage
-    filtered_proxies_file = get_and_filter_proxies(
+    filtered_proxies_file, ordered_proxy_keys = get_and_filter_proxies(
         min_live_proxies=min_live_proxies,
     )
 
     if not filtered_proxies_file:
         logger.error("Failed to get a list of filtered proxies for Mubeng.")
-        return None, None, None
+        return None, None, None, []
 
     mubeng_process = start_mubeng_rotator_server(
         live_proxy_file=filtered_proxies_file,
@@ -170,11 +185,11 @@ def setup_mubeng_rotator(
         logger.error("Failed to start Mubeng server process.")
         if filtered_proxies_file.exists():
             filtered_proxies_file.unlink(missing_ok=True)
-        return None, None, None
+        return None, None, None, []
 
     proxy_url = f"http://localhost:{port}"
-    logger.info(f"Mubeng rotator started successfully at {proxy_url}")
-    return proxy_url, mubeng_process, filtered_proxies_file
+    logger.info(f"Mubeng rotator started successfully at {proxy_url} with {len(ordered_proxy_keys)} proxies")
+    return proxy_url, mubeng_process, filtered_proxies_file, ordered_proxy_keys
 
 
 def stop_mubeng_rotator(process: Optional[subprocess.Popen], temp_file_path: Optional[Path]):

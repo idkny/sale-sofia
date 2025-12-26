@@ -79,6 +79,29 @@ archive/research/  archive/specs/          (code supersedes)
 
 ## Session History
 
+### 2025-12-26 (Session 4 - Solution F Phases 0-3 Implementation)
+
+| Task | Status |
+|------|--------|
+| Phase 0: Create mubeng test script | ✅ Complete |
+| Phase 0: Test --watch, X-Proxy-Offset, no rotate-on-error | ✅ Complete |
+| Phase 1: Update mubeng_manager.py config | ✅ Complete |
+| Phase 2: Add proxy order tracking | ✅ Complete |
+| Phase 3: Implement persistence on removal | ✅ Complete |
+
+**Summary**: Implemented Solution F Phases 0-3. All mubeng features verified with test script. Updated mubeng config (-w flag, removed --rotate-on-error). Added proxy order tracking to proxies_main.py and proxy_scorer.py. Implemented file persistence on proxy removal with --watch reload support.
+
+**Files Modified**:
+- `proxies/mubeng_manager.py` - Added `-w` flag, removed `--rotate-on-error`
+- `proxies/proxies_main.py` - Returns ordered proxy list
+- `proxies/proxy_scorer.py` - Added `set_proxy_order()`, `get_proxy_index()`, `set_mubeng_proxy_file()`, `_save_proxy_file()`
+- `main.py` - Updated to pass ordered keys to proxy pool
+- `tests/debug/test_mubeng_features.py` (new) - Mubeng feature verification tests
+
+**Next Session**: Continue with Phase 4 (X-Proxy-Offset header in requests), Phase 5 (retry logic), and remaining phases.
+
+---
+
 ### 2025-12-26 (Session 3 - Detailed Implementation Plan)
 
 | Task | Status |
@@ -325,39 +348,6 @@ mubeng_command = [
 3. Start with `mubeng_manager.py`: Add `-w`, remove `--rotate-on-error`
 4. Test that mubeng starts correctly with new flags
 5. Continue with remaining Phase 1 tasks
-
----
-
-### 2025-12-26 (Session 1 - Proxy Scoring System Analysis)
-
-| Task | Status |
-|------|--------|
-| Set up Instance 3 | ✅ Complete |
-| Analyze main.py and orchestrator.py | ✅ Complete |
-| Investigate automatic proxy refresh | ✅ Complete |
-| Investigate proxy removal on failure | ✅ Complete |
-| Investigate JIT proxy validation | ✅ Complete |
-| Document findings in TASKS.md | ✅ Complete |
-
-**Summary**: Deep analysis of proxy management system revealed two critical bugs that make the scoring system non-functional.
-
-**Finding 1: Wrong Proxy Being Tracked**
-- `main.py` uses mubeng (`localhost:8089`) as proxy
-- `record_result()` receives mubeng URL, not actual proxy
-- Scoring system tracks wrong entity → does nothing
-
-**Finding 2: Proxy Removal Doesn't Persist**
-- `remove_proxy()` removes from memory only
-- Does NOT update `live_proxies.json`
-- Bad proxies return on next session reload
-
-**Root Cause**: Architecture mismatch - `ScoredProxyPool` designed for direct proxy usage, but system uses mubeng as intermediary.
-
-**Finding 3: No Just-In-Time Proxy Validation**
-- No liveness check before using proxy for scraping
-- Dead proxies waste 15-30s per request
-- No retry with different proxy on failure
-- Mubeng's `--rotate-on-error` is reactive, not proactive
 
 ---
 

@@ -23,16 +23,18 @@ def start_mubeng_rotator_server(
     live_proxy_file: Path,
     desired_port: int,
     mubeng_timeout: str = "15s",
-    max_errors: int = 3,
     country_codes: Optional[list[str]] = None,
 ) -> Optional[subprocess.Popen]:
     """Starts the mubeng proxy rotator server as a background process.
+
+    Uses Solution F configuration:
+    - `-w` flag: Watch proxy file for changes, auto-reload on modification
+    - No `--rotate-on-error`: We handle retries manually with X-Proxy-Offset
 
     Args:
         live_proxy_file: Path to file containing proxy URLs (one per line)
         desired_port: Port to run the rotator on (e.g., 8089)
         mubeng_timeout: Timeout for proxy requests (default: 15s)
-        max_errors: Max errors before rotating to next proxy (default: 3)
         country_codes: Optional list of country codes to filter by (e.g., ["US", "DE"])
 
     Returns the Popen object if successful, None otherwise.
@@ -49,9 +51,7 @@ def start_mubeng_rotator_server(
         f"localhost:{desired_port}",
         "-f",
         str(live_proxy_file),
-        "--rotate-on-error",
-        "--max-errors",
-        str(max_errors),
+        "-w",  # Watch for file changes - auto-reload on modification (Solution F)
         "-m",
         "random",
         "-t",
