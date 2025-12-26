@@ -4,7 +4,7 @@ type: session_file
 project: sale-sofia
 instance: 2
 created_at: 2025-12-24
-updated_at: 2025-12-25
+updated_at: 2025-12-26
 ---
 
 # Instance 2 Session
@@ -88,6 +88,40 @@ archive/research/  archive/specs/          (code supersedes)
 
 ## Session History
 
+### 2025-12-26 (Session 7 - Prompt Accuracy Improvements)
+
+| Task | Status |
+|------|--------|
+| Research: Why model returns Bulgarian despite English constraints | Complete |
+| Research: Ollama `format: json` behavior | Complete |
+| Create test script for prompt experiments | Complete |
+| Phase 1: Switch prompts to English | Complete |
+| Phase 2: Add JSON schema enforcement | Complete |
+| Phase 3: Configure OLLAMA_KEEP_ALIVE | Complete |
+| Add Phase 3.6 task (95% accuracy target) | Complete |
+
+**Summary**: Researched and implemented Spec 108 to fix Bulgarian value leakage. English prompts + JSON schema enforcement achieved 100% enum accuracy (was 40%). Added OLLAMA_KEEP_ALIVE=1h for batch processing.
+
+**Key Findings**:
+- `format: json` only ensures syntax, NOT value language
+- English prompts with "RESPOND IN ENGLISH ONLY" = 100% accuracy
+- Bulgarian prompts with English hints = 40% accuracy
+- `/api/chat` provides no benefit over `/api/generate`
+
+**Files Modified**:
+- `llm/prompts.py` - English prompts with Bulgarian mappings
+- `llm/llm_main.py` - Schema enforcement via `model_json_schema()` + keep_alive
+- `config/ollama.yaml` - Added `keep_alive: 1h`
+
+**Files Created**:
+- `docs/specs/108_OLLAMA_PROMPT_IMPROVEMENTS.md`
+- `tests/llm/test_ollama_prompts.py` (8 integration tests)
+- `docs/research/ollama_language_behavior.md` (archived)
+
+**Commit**: f9361e8
+
+---
+
 ### 2025-12-26 (Session 6 - Ollama Implementation + Testing)
 
 | Task | Status |
@@ -154,72 +188,6 @@ archive/research/  archive/specs/          (code supersedes)
 3. Implement OllamaClient (port from ZohoCentral)
 4. Test Ollama start/stop/restart
 5. Pull model: `ollama pull qwen2.5:1.5b`
-
----
-
-### 2025-12-25 (Session 4 - Scrapling Integration & Crawler Plan)
-
-| Task | Status |
-|------|--------|
-| Create crawler validation plan (Spec 106) | Complete |
-| Add Scrapling integration (Phase 0) to spec | Complete |
-| Install Scrapling v0.2.99 | Complete |
-| Create `websites/scrapling_base.py` adapter | Complete |
-| Test Scrapling with imot.bg | Complete |
-| Migrate imot_scraper.py to Scrapling | Not Started |
-
-**Summary**: Created comprehensive 5-phase crawler plan in Spec 106. Integrated Scrapling library for adaptive scraping with auto-encoding detection. Built and tested `scrapling_base.py` adapter that handles Bulgarian windows-1251 encoding automatically. Successfully extracted data from imot.bg (price: 170400 EUR, area: 71 sqm, floor: 4/6, building: brick).
-
-**Why Scrapling?**
-- **Adaptive scraping**: Auto-relocates selectors when sites change HTML
-- **Anti-bot bypass**: StealthyFetcher with Camoufox (fingerprint spoofing)
-- **774x faster** than BeautifulSoup for parsing
-- **LLM integration**: MCP server for AI extraction (Ollama)
-
-**Files Created**:
-- `websites/scrapling_base.py` - Scrapling adapter with:
-  - `detect_encoding()` - Auto-detects windows-1251, UTF-8 from headers/meta/chardet
-  - `fetch_with_encoding()` - Fetches with proper Bulgarian text handling
-  - `ScraplingMixin` class with `fetch()`, `css()`, `css_first()`, `get_page_text()`
-  - StealthyFetcher integration for anti-bot bypass
-- `docs/specs/106_CRAWLER_VALIDATION_PLAN.md` - Comprehensive 5-phase plan:
-  - Phase 0: Scrapling Integration (partially complete)
-  - Phase 1: Scraper Validation
-  - Phase 2: Description Extraction (regex + LLM)
-  - Phase 3: Change Detection & History (tracks ALL field changes)
-  - Phase 3.5: Cross-Site Duplicate Detection & Merging
-  - Phase 4: Rate Limiting & Async Orchestration
-  - Phase 5: Full Pipeline Integration
-
-**Key Decisions Made**:
-1. **Encoding is flexible** - windows-1251 is Cyrillic (Bulgarian), auto-detected per site
-2. **Change tracking** - Track ALL field changes, not just price (new `listing_changes` table)
-3. **Cross-site merging** - Same property on multiple sites → merge data, track sources
-4. **LLM for descriptions** - Use Ollama locally for extracting structured data
-
-**What Works**:
-```python
-from websites.scrapling_base import ScraplingMixin
-
-class MyScraper(ScraplingMixin):
-    def __init__(self):
-        self.site_name = 'imot.bg'
-        super().__init__()
-
-scraper = MyScraper()
-page = scraper.fetch("https://www.imot.bg/...")  # Auto-detects encoding
-text = scraper.get_page_text(page)  # Clean text for regex extraction
-```
-
-**To Continue (Next Session)**:
-1. Migrate `websites/imot_bg/imot_scraper.py` to use ScraplingMixin
-2. Migrate `websites/bazar_bg/bazar_scraper.py` to use ScraplingMixin
-3. Test StealthyFetcher with mubeng proxy
-4. Enable adaptive mode (`auto_save=True`, `auto_match=True`)
-
-**Dependencies Added**:
-- `scrapling[all]>=0.2.9` (already installed in venv)
-- `chardet` (for encoding detection, installed)
 
 ---
 
