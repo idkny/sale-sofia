@@ -43,8 +43,10 @@ CRITICAL RULES:
 1. Extract information from the BULGARIAN DESCRIPTION below
 2. RESPOND IN ENGLISH ONLY - use ONLY English enum values
 3. Use the DETECTED WORDS section - these are pre-matched for you
-4. Return valid JSON matching the schema
-5. Use null for missing information
+4. For boolean fields: set true when keyword is detected, null when not mentioned
+5. Return valid JSON matching the schema
+
+NOW EXTRACT FROM THIS DESCRIPTION:
 
 BULGARIAN DESCRIPTION:
 {description}

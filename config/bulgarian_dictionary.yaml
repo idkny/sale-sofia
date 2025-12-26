@@ -164,28 +164,28 @@ orientation:
     - северна
     - северна експозиция
     - северно изложение
-    - С
+    # Removed single-letter "С" - causes false positives
   south:
     - юг
     - южно
     - южна
     - южна експозиция
     - южно изложение
-    - Ю
+    # Removed single-letter "Ю" - causes false positives
   east:
     - изток
     - източно
     - източна
     - източна експозиция
     - източно изложение
-    - И
+    # Removed single-letter "И" - causes false positives
   west:
     - запад
     - западно
     - западна
     - западна експозиция
     - западно изложение
-    - З
+    # Removed single-letter "З" - causes false positives
 
 # =============================================================================
 # FURNISHING (Enum field)
@@ -299,12 +299,14 @@ view_type:
     - към планината
     - планински изглед
   park:
-    - парк
-    - градина
+    # Removed bare "парк" - matches "паркомясто" (parking) falsely
     - зелена площ
     - към парка
+    - към парк
     - паркова гледка
     - паркова експозиция
+    - гледка към парк
+    - гледка парк
   sea:
     - море
     - морска гледка

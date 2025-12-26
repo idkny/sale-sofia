@@ -88,6 +88,53 @@ archive/research/  archive/specs/          (code supersedes)
 
 ## Session History
 
+### 2025-12-26 (Session 10 - Phase 2 Few-Shot Examples)
+
+| Task | Status |
+|------|--------|
+| Test few-shot examples for boolean fields | Complete |
+| Evaluate impact on accuracy | Complete |
+| Decision: Skip Phase 2 | Complete |
+
+**Summary**: Tested few-shot examples to fix `has_elevator` (0% accuracy). Examples fixed `has_elevator` but caused regressions in other fields (heating_type 67%, orientation 75%). Decided to skip Phase 2 since 97.4% already exceeds target and few-shot examples hurt more than help.
+
+**Findings**:
+- Few-shot examples made model too conservative
+- Model returned `null` for fields that previously worked
+- Net effect was negative on overall accuracy
+
+**Decision**: Skip Phase 2. Remaining options: Phase 3 (temperature=0), Phase 4 (hybrid CSS/LLM), Phase 5 (field-specific prompts).
+
+---
+
+### 2025-12-26 (Session 9 - Verify & Fix Dictionary Implementation)
+
+| Task | Status |
+|------|--------|
+| Verify Session 8 implementation | Complete |
+| Fix `heating` → `heating_type` field mismatch | Complete |
+| Fix single-letter false positives (И, Ю, С, З) | Complete |
+| Fix `парк` matching in `паркомясто` | Complete |
+| Run accuracy test | Complete (**97.4%**) |
+| Update TASKS.md Phase 1 as complete | Complete |
+
+**Summary**: Verified and fixed Session 8's dictionary implementation. Found field name mismatch (`heating` in YAML vs `heating_type` in schema/prompt) that caused hints to have wrong field names. Also found single-letter abbreviations (И/Ю/С/З) causing false positives, and `парк` substring matching in `паркомясто`.
+
+**Results**:
+- Baseline: 69%
+- After fixes: **97.4%** (exceeds 95% target)
+- 14/15 fields at 100% accuracy
+- Remaining issue: `has_elevator` (0%, 1 sample) - LLM ignores correct hint
+
+**Files Modified**:
+- `config/bulgarian_dictionary.yaml` - `heating` → `heating_type`, removed single-letter abbreviations
+- `llm/dictionary.py` - Updated field name to `heating_type`
+- `tests/llm/test_extraction_accuracy.py` - Fixed incorrect test expectation
+
+**Phase 1 Complete**: Dynamic dictionary approach validated and working.
+
+---
+
 ### 2025-12-26 (Session 8 - Dynamic Bulgarian Dictionary)
 
 | Task | Status |
@@ -101,16 +148,9 @@ archive/research/  archive/specs/          (code supersedes)
 | Update llm/llm_main.py to use dictionary | Complete |
 | Research comprehensive BG real estate terminology | Complete |
 | Update dictionary with 400+ researched terms | Complete |
-| Run accuracy test | Pending |
+| Run accuracy test | Complete (Session 9) |
 
 **Summary**: Researched extraction accuracy issue (69% baseline). Found model size is NOT the problem (3b worse than 1.5b). Designed and implemented dynamic Bulgarian dictionary approach: scan text for keywords, inject only relevant hints into prompt. Launched 4 research agents to gather comprehensive Bulgarian real estate terminology (property types, legal docs, amenities, platform-specific terms). Created 600+ line dictionary file with all terms.
-
-**Key Findings**:
-- Extraction accuracy was 69% (not 78% as previously reported)
-- Model size doesn't help: qwen2.5:1.5b (61%) > qwen2.5:3b (30%)
-- Fields WITH Bulgarian hints have 80-100% accuracy
-- Fields WITHOUT hints have 0-50% accuracy
-- Solution: Dynamic dictionary with regex pre-scan
 
 **Files Created**:
 - `docs/specs/110_DYNAMIC_BULGARIAN_DICTIONARY.md`
@@ -122,82 +162,6 @@ archive/research/  archive/specs/          (code supersedes)
 **Files Modified**:
 - `llm/prompts.py` - Added EXTRACTION_PROMPT_BASE with {hints} placeholder
 - `llm/llm_main.py` - Integrated dictionary scanning
-
-**Files Archived**:
-- `docs/specs/109_EXTRACTION_PROMPT_HINTS.md` → `archive/specs/` (superseded by Spec 110)
-
-**Next Steps**:
-1. Run accuracy test to verify improvement
-2. If < 95%: Add few-shot examples (Phase 2)
-3. If < 95%: Implement hybrid CSS/LLM approach (Phase 4)
-
----
-
-### 2025-12-26 (Session 7 - Prompt Accuracy Improvements)
-
-| Task | Status |
-|------|--------|
-| Research: Why model returns Bulgarian despite English constraints | Complete |
-| Research: Ollama `format: json` behavior | Complete |
-| Create test script for prompt experiments | Complete |
-| Phase 1: Switch prompts to English | Complete |
-| Phase 2: Add JSON schema enforcement | Complete |
-| Phase 3: Configure OLLAMA_KEEP_ALIVE | Complete |
-| Add Phase 3.6 task (95% accuracy target) | Complete |
-
-**Summary**: Researched and implemented Spec 108 to fix Bulgarian value leakage. English prompts + JSON schema enforcement achieved 100% enum accuracy (was 40%). Added OLLAMA_KEEP_ALIVE=1h for batch processing.
-
-**Key Findings**:
-- `format: json` only ensures syntax, NOT value language
-- English prompts with "RESPOND IN ENGLISH ONLY" = 100% accuracy
-- Bulgarian prompts with English hints = 40% accuracy
-- `/api/chat` provides no benefit over `/api/generate`
-
-**Files Modified**:
-- `llm/prompts.py` - English prompts with Bulgarian mappings
-- `llm/llm_main.py` - Schema enforcement via `model_json_schema()` + keep_alive
-- `config/ollama.yaml` - Added `keep_alive: 1h`
-
-**Files Created**:
-- `docs/specs/108_OLLAMA_PROMPT_IMPROVEMENTS.md`
-- `tests/llm/test_ollama_prompts.py` (8 integration tests)
-- `docs/research/ollama_language_behavior.md` (archived)
-
-**Commit**: f9361e8
-
----
-
-### 2025-12-26 (Session 6 - Ollama Implementation + Testing)
-
-| Task | Status |
-|------|--------|
-| Create `llm/` directory with 4 files | Complete |
-| Create `config/ollama.yaml` | Complete |
-| Implement OllamaClient in llm_main.py | Complete |
-| Test Ollama start/stop/restart | Complete |
-| Test map_fields() on 5 imot.bg pages | Complete (100%) |
-| Test extract_description() on 5 descriptions | Complete (78%) |
-
-**Summary**: Implemented full Ollama integration with parallel agent execution. Created 5 files (4 in llm/ + 1 config). Added Bulgarian→English translation layer for LLM responses. Tested with real imot.bg listings and synthetic descriptions.
-
-**Test Results**:
-- `map_fields()`: 100% extraction rate (price, area, floor, construction)
-- `extract_description()`: 78% extraction rate (7/9 fields average)
-
-**Files Created**:
-- `llm/__init__.py` - Module exports
-- `llm/llm_main.py` - OllamaClient facade (~280 lines)
-- `llm/prompts.py` - Bulgarian prompts with English value constraints
-- `llm/schemas.py` - Pydantic models (MappedFields, ExtractedDescription)
-- `config/ollama.yaml` - Model and task configuration
-
-**Key Implementation Details**:
-- Singleton OllamaClient with health check + auto-restart
-- Bulgarian→English translation in `_translate_values()`
-- Prompts specify exact English enum values with Bulgarian explanations
-- REST API calls to Ollama's `/api/generate` endpoint
-
-**Parallel Agents Used**: 4 agents for independent files, 1 sequential for facade
 
 ---
 

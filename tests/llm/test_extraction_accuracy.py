@@ -59,7 +59,7 @@ TEST_SAMPLES = [
             "furnishing": "partially",
             "heating_type": "gas",
             "has_parking": True,
-            "parking_type": "outdoor",
+            "parking_type": "garage",  # "Гараж в двора" = garage in yard, not outdoor
             "condition": "new",
         },
     },
