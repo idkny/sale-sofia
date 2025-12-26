@@ -30,6 +30,12 @@ import redis
 from loguru import logger
 
 from paths import LOGS_DIR, PROXIES_DIR, ROOT_DIR
+from proxies.redis_keys import (
+    job_completed_chunks_key,
+    job_result_count_key,
+    job_status_key,
+    job_total_chunks_key,
+)
 
 # Celery log file for debugging
 CELERY_LOG_FILE = LOGS_DIR / "celery_worker.log"
@@ -79,10 +85,10 @@ class Orchestrator:
         """
         try:
             r = self._get_redis_client()
-            total = r.get(f"proxy_refresh:{job_id}:total_chunks")
-            completed = r.get(f"proxy_refresh:{job_id}:completed_chunks")
-            status = r.get(f"proxy_refresh:{job_id}:status")
-            result_count = r.get(f"proxy_refresh:{job_id}:result_count")
+            total = r.get(job_total_chunks_key(job_id))
+            completed = r.get(job_completed_chunks_key(job_id))
+            status = r.get(job_status_key(job_id))
+            result_count = r.get(job_result_count_key(job_id))
 
             total_int = int(total) if total else 0
             completed_int = int(completed) if completed else 0
@@ -495,11 +501,17 @@ class Orchestrator:
         if not dispatch.success:
             return False
 
-        # Phase 2: Try chord-based wait (preferred)
+        # Phase 2: Try chord-based wait (preferred) with fallback
         if dispatch.chord_id:
-            return self._wait_via_chord(
-                dispatch.chord_id, dispatch.job_id, start_time, timeout, min_count, check_interval
+            chord_result = self._wait_via_chord(
+                dispatch.chord_id, dispatch.job_id, start_time, timeout, min_count, check_interval,
+                total_chunks=dispatch.total_chunks
             )
+            # chord_result: True/False = chord completed (return as-is), None = timeout/failure (try fallback)
+            if chord_result is not None or not dispatch.job_id:
+                return chord_result if chord_result is not None else False
+            # Chord timed out or failed - fall back to Redis polling
+            print("[INFO] Chord timed out or failed, falling back to Redis polling...")
 
         # Phase 3: Try Redis progress polling
         if dispatch.job_id:
@@ -578,8 +590,15 @@ class Orchestrator:
         timeout: int,
         min_count: int,
         check_interval: int,
-    ) -> bool:
-        """Wait for chord completion using Celery's event-based tracking."""
+        total_chunks: int = 0,
+    ) -> Optional[bool]:
+        """Wait for chord completion using Celery's event-based tracking.
+
+        Returns:
+            True: Chord completed with enough proxies
+            False: Chord completed but not enough proxies
+            None: Chord timed out or failed (triggers fallback)
+        """
         from celery.result import AsyncResult
         from celery_app import celery_app
 
@@ -592,7 +611,22 @@ class Orchestrator:
         )
 
         try:
-            timeout_val = timeout if timeout > 0 else None
+            # Calculate dynamic timeout based on chunk count (per spec 105)
+            # Formula: (chunks / workers) * time_per_chunk * buffer
+            if timeout > 0:
+                timeout_val = timeout
+            elif total_chunks > 0:
+                workers = 8  # Match Celery concurrency
+                time_per_chunk = 90  # seconds (45-95s range from spec)
+                buffer = 1.5  # 50% safety margin
+                rounds = (total_chunks + workers - 1) // workers
+                calculated = int(rounds * time_per_chunk * buffer)
+                timeout_val = max(calculated, 600)  # At least 10 min
+                print(f"[INFO] Dynamic timeout: {timeout_val}s ({total_chunks} chunks, {rounds} rounds)")
+            else:
+                timeout_val = 1800  # 30 min default
+                print(f"[INFO] Using default timeout: {timeout_val}s")
+
             final_result = chord_result.get(timeout=timeout_val, propagate=False)
             self._stop_progress_thread(stop_progress, progress_thread)
 
@@ -602,12 +636,12 @@ class Orchestrator:
             if chord_result.failed():
                 logger.error(f"Chord failed: {final_result}")
                 print(f"[ERROR] Chord failed: {final_result}")
-                return False
+                return None  # Trigger fallback
 
             usable_count = self.get_usable_proxy_count()
             print(f"[SUCCESS] Chord complete! {usable_count} usable proxies after {mins}m {secs}s", flush=True)
             logger.info(f"Chord {chord_id} completed, {usable_count} usable proxies")
-            print(f"[DEBUG] Returning from wait_for_refresh_completion (usable >= min: {usable_count} >= {min_count})", flush=True)
+            # Return True/False based on proxy count - chord DID complete, no fallback needed
             return usable_count >= min_count
 
         except Exception as e:
@@ -642,18 +676,18 @@ class Orchestrator:
         stop_event.set()
         thread.join(timeout=2)
 
-    def _handle_chord_error(self, error: Exception, start_time: float, timeout: int) -> bool:
-        """Handle errors during chord wait."""
+    def _handle_chord_error(self, error: Exception, start_time: float, timeout: int) -> None:
+        """Handle errors during chord wait. Returns None to trigger fallback."""
         elapsed = int(time.time() - start_time)
         mins, secs = elapsed // 60, elapsed % 60
 
         if "TimeoutError" in type(error).__name__ or "timeout" in str(error).lower():
-            logger.error(f"Timeout waiting for chord after {timeout}s")
-            print(f"[ERROR] Timeout after {mins}m {secs}s")
+            logger.warning(f"Chord wait timed out after {timeout}s, will try fallback")
+            print(f"[WARNING] Chord timeout after {mins}m {secs}s (will try Redis fallback)")
         else:
             logger.error(f"Error waiting for chord: {error}")
             print(f"[ERROR] Chord wait failed: {error}")
-        return False
+        return None
 
     def _wait_via_redis_polling(
         self, job_id: str, start_time: float, timeout: int, min_count: int, check_interval: int
