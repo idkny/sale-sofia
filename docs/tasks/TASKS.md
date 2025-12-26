@@ -11,8 +11,10 @@
 
 | Instance | Current Task |
 |----------|--------------|
-| 1 | Fix wait_for_proxies blind polling bug |
-| 2 | Available |
+| 1 | Available |
+| 2 | Ollama Phase 3.5 - Research model & extraction improvements |
+
+**Session 12 (2025-12-26)**: Fixed `wait_for_proxies` blind polling bug - now uses signal-based `wait_for_refresh_completion()`.
 
 **Session 11 (2025-12-26)**: Fixed false positive fallback msg + proxy overwrite bug. Found new bug: `wait_for_proxies` uses blind polling instead of chord wait.
 
@@ -92,11 +94,10 @@ Test only waited 5 minutes → FAIL
   - Changed `_wait_via_chord` return: `None`=timeout, `True/False`=completed
 - [x] Fix proxy file overwrite bug (Session 11, commit 9d5d3ad)
   - `_save_proxy_files` now merges instead of overwrites
-- [ ] Fix `wait_for_proxies` blind polling bug (NEW - Session 11)
-  - Bug: `wait_for_proxies` polls file every 15s, ignores chord progress
-  - `main.py:246` sets 600s timeout, but refresh takes 15-20 min
-  - Fix: Use `wait_for_refresh_completion(task_id)` instead of blind polling
-  - Details in `docs/tasks/instance_001.md` Session 11
+- [x] Fix `wait_for_proxies` blind polling bug (Session 12)
+  - `wait_for_proxies` now calls `wait_for_refresh_completion(task_id)`
+  - Uses signal-based wait (chord/Redis) instead of blind polling
+  - Dynamic timeout based on chunk count (per spec 105/107)
 
 ---
 

@@ -279,10 +279,11 @@ class TestWaitViaChord:
                 check_interval=15
             )
 
-            assert result is False
+            # Returns None to trigger fallback (not False which means "completed but not enough proxies")
+            assert result is None
 
     def test_chord_timeout(self):
-        """When chord.get() times out, should handle error and return False."""
+        """When chord.get() times out, should handle error and return None for fallback."""
         from orchestrator import Orchestrator
 
         orch = Orchestrator()
@@ -350,27 +351,32 @@ class TestProgressThread:
 
 
 class TestHandleChordError:
-    """Tests for _handle_chord_error helper."""
+    """Tests for _handle_chord_error helper.
+
+    Note: _handle_chord_error returns None (not False) to trigger fallback.
+    - None = chord failed/timeout, try Redis fallback
+    - False = chord completed but not enough proxies (no fallback needed)
+    """
 
     def test_timeout_error_handling(self):
-        """Should recognize and log timeout errors."""
+        """Should recognize timeout errors and return None to trigger fallback."""
         from orchestrator import Orchestrator
 
         orch = Orchestrator()
 
         result = orch._handle_chord_error(TimeoutError("timeout"), time.time(), 60)
 
-        assert result is False
+        assert result is None  # None triggers fallback
 
     def test_generic_error_handling(self):
-        """Should handle non-timeout errors."""
+        """Should handle non-timeout errors and return None to trigger fallback."""
         from orchestrator import Orchestrator
 
         orch = Orchestrator()
 
         result = orch._handle_chord_error(ValueError("some error"), time.time(), 60)
 
-        assert result is False
+        assert result is None  # None triggers fallback
 
 
 class TestWaitViaRedisPolling:

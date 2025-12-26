@@ -436,36 +436,12 @@ class Orchestrator:
 
         # Trigger refresh
         print(f"[INFO] Need at least {min_count} usable proxies, triggering refresh...")
-        print("[INFO] This may take 2-5 minutes (scraping + checking proxies)...")
         mtime_before, task_id = self.trigger_proxy_refresh()
 
-        # Wait loop
-        start_time = time.time()
-        check_interval = 15  # seconds
-
-        while time.time() - start_time < timeout:
-            # Check if Celery is still alive (restart if died)
-            if not self.restart_celery_if_dead():
-                logger.error("Celery failed to restart")
-                print("[ERROR] Celery worker cannot be restarted")
-                return False
-
-            usable_count = self.get_usable_proxy_count()
-            elapsed = int(time.time() - start_time)
-
-            if usable_count >= min_count:
-                print(f"[SUCCESS] {usable_count} usable proxies available after {elapsed}s")
-                return True
-
-            # Show progress every check
-            total = self.get_proxy_count()
-            celery_status = "alive" if self.is_celery_alive() else "DEAD"
-            print(f"[WAIT] {usable_count}/{total} usable proxies... ({elapsed}s, celery: {celery_status})")
-            time.sleep(check_interval)
-
-        logger.error(f"Timeout waiting for proxies after {timeout}s")
-        print(f"[ERROR] Timeout waiting for proxies after {timeout}s")
-        return False
+        # Use signal-based wait (chord/Redis) instead of blind file polling
+        # Don't pass timeout - let wait_for_refresh_completion use dynamic timeout
+        # based on chunk count (per spec 105/107)
+        return self.wait_for_refresh_completion(mtime_before, min_count, task_id=task_id)
 
     def wait_for_refresh_completion(
         self,
