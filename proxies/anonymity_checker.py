@@ -16,6 +16,8 @@ from typing import Optional
 
 import requests
 
+from proxies import proxy_to_url
+
 logger = logging.getLogger(__name__)
 
 # Privacy-revealing headers that indicate proxy usage
@@ -120,6 +122,49 @@ def parse_anonymity(response_text: str, real_ip: str) -> str:
     return "Elite"
 
 
+def _try_judge_url(
+    proxy_url: str,
+    judge_url: str,
+    real_ip: str,
+    timeout: int,
+) -> Optional[str]:
+    """
+    Try a single judge URL to determine proxy anonymity.
+
+    Args:
+        proxy_url: Full proxy URL
+        judge_url: Judge URL to test against
+        real_ip: Your real IP address
+        timeout: Request timeout in seconds
+
+    Returns:
+        Anonymity level ("Transparent", "Anonymous", "Elite") or None if failed
+    """
+    try:
+        response = requests.get(
+            judge_url,
+            proxies={"http": proxy_url, "https": proxy_url},
+            timeout=timeout,
+            headers={"User-Agent": "Mozilla/5.0 (anonymity-check)"},
+        )
+
+        if response.status_code == 200:
+            anonymity = parse_anonymity(response.text, real_ip)
+            logger.debug(f"Proxy {proxy_url} anonymity: {anonymity} (via {judge_url})")
+            return anonymity
+
+    except requests.exceptions.Timeout:
+        logger.debug(f"Judge {judge_url} timed out for {proxy_url}")
+    except requests.exceptions.ProxyError as e:
+        logger.debug(f"Proxy error with {judge_url} for {proxy_url}: {e}")
+    except requests.exceptions.ConnectionError as e:
+        logger.debug(f"Connection error with {judge_url} for {proxy_url}: {e}")
+    except requests.exceptions.RequestException as e:
+        logger.debug(f"Judge {judge_url} failed for {proxy_url}: {e}")
+
+    return None
+
+
 def check_proxy_anonymity(
     proxy_url: str,
     real_ip: Optional[str] = None,
@@ -147,33 +192,11 @@ def check_proxy_anonymity(
             # Assume Anonymous if we can't determine (safer than Elite)
             return "Anonymous"
 
-    # Try each judge URL with individual timeout handling
+    # Try each judge URL until one succeeds
     for judge_url in JUDGE_URLS:
-        try:
-            response = requests.get(
-                judge_url,
-                proxies={"http": proxy_url, "https": proxy_url},
-                timeout=timeout,
-                headers={"User-Agent": "Mozilla/5.0 (anonymity-check)"},
-            )
-
-            if response.status_code == 200:
-                anonymity = parse_anonymity(response.text, real_ip)
-                logger.debug(f"Proxy {proxy_url} anonymity: {anonymity} (via {judge_url})")
-                return anonymity
-
-        except requests.exceptions.Timeout:
-            logger.debug(f"Judge {judge_url} timed out for {proxy_url}")
-            continue
-        except requests.exceptions.ProxyError as e:
-            logger.debug(f"Proxy error with {judge_url} for {proxy_url}: {e}")
-            continue
-        except requests.exceptions.ConnectionError as e:
-            logger.debug(f"Connection error with {judge_url} for {proxy_url}: {e}")
-            continue
-        except requests.exceptions.RequestException as e:
-            logger.debug(f"Judge {judge_url} failed for {proxy_url}: {e}")
-            continue
+        result = _try_judge_url(proxy_url, judge_url, real_ip, timeout)
+        if result is not None:
+            return result
 
     # All judges failed - proxy might be dead or blocking these URLs
     logger.debug(f"All judge URLs failed for {proxy_url}")
@@ -208,7 +231,7 @@ def check_proxy_anonymity_batch(
             proxy["anonymity"] = None
             continue
 
-        proxy_url = f"{protocol}://{host}:{port}"
+        proxy_url = proxy_to_url(host, port, protocol)
 
         # Check anonymity
         anonymity = check_proxy_anonymity(proxy_url, real_ip=real_ip, timeout=timeout)
@@ -246,7 +269,7 @@ def enrich_proxy_with_anonymity(proxy: dict, timeout: int = DEFAULT_TIMEOUT) -> 
         proxy["anonymity_verified_at"] = None
         return proxy
 
-    proxy_url = f"{protocol}://{host}:{port}"
+    proxy_url = proxy_to_url(host, port, protocol)
 
     # Try full anonymity check first
     anonymity = check_proxy_anonymity(proxy_url, timeout=timeout)

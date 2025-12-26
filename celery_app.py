@@ -40,6 +40,9 @@ celery_app.conf.update(
     timezone="Europe/Sofia",
     enable_utc=True,
 
+    # Beat scheduler - store schedule in data/celery/
+    beat_schedule_filename="data/celery/celerybeat-schedule",
+
     # Task settings
     task_track_started=True,
     task_time_limit=1800,  # 30 min max per task (chunks take 2-5 min each)

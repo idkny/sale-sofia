@@ -22,6 +22,14 @@ MAX_FLOOR = 4
 MIN_ROOMS = 3
 MIN_BATHROOMS = 2
 
+# Budget headroom thresholds for condition scoring
+BUDGET_HEADROOM_HIGH = 50_000  # EUR - adds +1.0 to condition score
+BUDGET_HEADROOM_LOW = 20_000   # EUR - adds +0.5 to condition score
+
+# Building year thresholds
+BUILDING_YEAR_NEW = 2000   # Brick buildings >= this year score 4.0
+BUILDING_YEAR_OLD = 1980   # Brick buildings >= this year score 3.5
+
 # Scoring weights (sum = 100)
 WEIGHTS = {
     "location": 25,
@@ -317,9 +325,9 @@ def _score_condition(listing: Dict[str, Any]) -> float:
         condition_score = 2.0
 
     # Adjust for budget headroom
-    if budget_remaining >= 50000:
+    if budget_remaining >= BUDGET_HEADROOM_HIGH:
         condition_score = min(5.0, condition_score + 1.0)
-    elif budget_remaining >= 20000:
+    elif budget_remaining >= BUDGET_HEADROOM_LOW:
         condition_score = min(5.0, condition_score + 0.5)
     elif budget_remaining < 0:
         condition_score = max(1.0, condition_score - 2.0)
@@ -367,9 +375,9 @@ def _score_building(listing: Dict[str, Any]) -> float:
     elif "new" in building_type or "ново" in building_type:
         return 4.5
     elif "brick" in building_type or "тухла" in building_type:
-        if year and year >= 2000:
+        if year and year >= BUILDING_YEAR_NEW:
             return 4.0
-        elif year and year >= 1980:
+        elif year and year >= BUILDING_YEAR_OLD:
             return 3.5
         else:
             return 3.0

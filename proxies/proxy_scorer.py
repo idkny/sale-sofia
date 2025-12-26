@@ -27,6 +27,8 @@ import time
 from pathlib import Path
 from typing import Optional
 
+from proxies import proxy_to_url
+
 logger = logging.getLogger(__name__)
 
 # Scoring configuration
@@ -179,7 +181,38 @@ class ScoredProxyPool:
         protocol = proxy.get("protocol", "http")
         host = proxy["host"]
         port = proxy["port"]
-        return f"{protocol}://{host}:{port}"
+        return proxy_to_url(host, port, protocol)
+
+    def _calculate_selection_weights(self) -> tuple[list[dict], list[float]]:
+        """
+        Calculate selection weights for all valid proxies.
+
+        Returns:
+            Tuple of (valid_proxies, weights) where weights are normalized probabilities.
+            Returns empty lists if no valid proxies available.
+        """
+        scores = []
+        valid_proxies = []
+
+        for proxy in self.proxies:
+            proxy_key = self._get_proxy_key(proxy)
+            if proxy_key in self.scores:
+                score = self.scores[proxy_key]["score"]
+                if score > 0:
+                    scores.append(score)
+                    valid_proxies.append(proxy)
+
+        if not valid_proxies:
+            return [], []
+
+        total_score = sum(scores)
+        if total_score <= 0:
+            # Uniform weights if all scores are 0
+            weights = [1.0 / len(valid_proxies)] * len(valid_proxies)
+        else:
+            weights = [s / total_score for s in scores]
+
+        return valid_proxies, weights
 
     def select_proxy(self) -> Optional[dict]:
         """
@@ -196,30 +229,11 @@ class ScoredProxyPool:
                 logger.warning("No proxies available for selection")
                 return None
 
-            # Get scores for all proxies
-            scores = []
-            valid_proxies = []
-
-            for proxy in self.proxies:
-                proxy_key = self._get_proxy_key(proxy)
-                if proxy_key in self.scores:
-                    score = self.scores[proxy_key]["score"]
-                    # Only include proxies with positive scores
-                    if score > 0:
-                        scores.append(score)
-                        valid_proxies.append(proxy)
-
+            valid_proxies, weights = self._calculate_selection_weights()
             if not valid_proxies:
                 logger.warning("No valid proxies with positive scores")
                 return None
 
-            # Weighted random selection
-            total_score = sum(scores)
-            if total_score <= 0:
-                # Fallback to uniform random if all scores are 0
-                return random.choice(valid_proxies)
-
-            weights = [s / total_score for s in scores]
             selected = random.choices(valid_proxies, weights=weights, k=1)[0]
 
             # Update last_used timestamp

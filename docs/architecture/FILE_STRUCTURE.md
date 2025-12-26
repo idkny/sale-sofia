@@ -24,6 +24,7 @@ Is it a .py file?
 ├── Scraper code? ────────────────────→ websites/<site>/
 ├── Browser automation? ──────────────→ browsers/
 ├── Proxy management? ────────────────→ proxies/
+├── LLM integration? ─────────────────→ llm/
 ├── Dashboard/UI? ────────────────────→ app/
 ├── Utility script? ──────────────────→ scripts/
 ├── Data access? ─────────────────────→ data/
@@ -96,6 +97,12 @@ sale-sofia/
 │   ├── *.json                # Proxy lists (live_proxies.json)
 │   ├── *.md                  # Module README only
 │   └── external/             # External binaries
+│
+├── llm/                      # LLM integration (Ollama)
+│   ├── __init__.py           # Exports
+│   ├── llm_main.py           # Facade (OllamaClient + public functions)
+│   ├── prompts.py            # Prompt templates
+│   └── schemas.py            # Pydantic models
 │
 ├── websites/                 # Scrapers
 │   ├── base_scraper.py       # Base class
@@ -172,6 +179,7 @@ sale-sofia/
 | Scraper | `websites/<site>/` |
 | Browser code | `browsers/` |
 | Proxy code | `proxies/` |
+| LLM code | `llm/` |
 | Dashboard code | `app/` |
 | Data access | `data/` |
 | Utility script | `scripts/` |

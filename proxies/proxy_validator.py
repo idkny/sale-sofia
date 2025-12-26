@@ -148,6 +148,38 @@ class ProxyValidator:
         """Get a random test URL."""
         return random.choice(TEST_URLS)
 
+    def _validate_response(
+        self, response: requests.Response, response_type: str
+    ) -> tuple[bool, Optional[str]]:
+        """
+        Validate proxy response and extract IP.
+
+        Args:
+            response: The HTTP response object
+            response_type: Expected type ("json" or "text")
+
+        Returns:
+            Tuple of (is_valid, extracted_ip)
+        """
+        if response.status_code != 200:
+            return False, None
+
+        if response_type == "json":
+            try:
+                data = response.json()
+                ip = data.get("origin") or data.get("ip")
+                if ip:
+                    return True, ip
+            except (ValueError, KeyError):
+                pass
+            return False, None
+
+        # Text response - basic IP validation
+        ip = response.text.strip()
+        if "." in ip and len(ip) < 50:
+            return True, ip
+        return False, None
+
     def check_proxy_liveness(
         self,
         proxy_url: str,
@@ -179,29 +211,15 @@ class ProxyValidator:
             )
             response_time = time.time() - start_time
 
-            if response.status_code == 200:
-                # Verify we got a valid response
-                if response_type == "json":
-                    data = response.json()
-                    if "origin" in data or "ip" in data:
-                        logger.debug(
-                            f"Proxy {proxy_url} passed liveness check "
-                            f"via {test_url} ({response_time:.2f}s)"
-                        )
-                        if update_score:
-                            self._record_success(proxy_url, response_time)
-                        return True
-                else:  # text response
-                    ip = response.text.strip()
-                    # Basic IP validation (should contain dots for IPv4)
-                    if "." in ip and len(ip) < 50:
-                        logger.debug(
-                            f"Proxy {proxy_url} passed liveness check "
-                            f"via {test_url} ({response_time:.2f}s) - IP: {ip}"
-                        )
-                        if update_score:
-                            self._record_success(proxy_url, response_time)
-                        return True
+            is_valid, ip = self._validate_response(response, response_type)
+            if is_valid:
+                logger.debug(
+                    f"Proxy {proxy_url} passed liveness check "
+                    f"via {test_url} ({response_time:.2f}s) - IP: {ip}"
+                )
+                if update_score:
+                    self._record_success(proxy_url, response_time)
+                return True
 
             logger.debug(f"Proxy {proxy_url} failed liveness check via {test_url}")
             if update_score:

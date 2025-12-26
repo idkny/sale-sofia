@@ -9,6 +9,7 @@ from celery import chain
 
 import config
 from paths import PROXIES_DIR
+from proxies import proxy_to_url
 from utils.utils import free_port
 
 from .mubeng_manager import (
@@ -95,7 +96,7 @@ def get_and_filter_proxies(
         temp_proxy_file = tempfile.NamedTemporaryFile(mode="w", delete=False, suffix=".txt", dir=PROXIES_DIR)
         with temp_proxy_file as f:
             for proxy in filtered_proxies:
-                f.write(f"{proxy.get('protocol', 'http')}://{proxy['host']}:{proxy['port']}\n")
+                f.write(f"{proxy_to_url(proxy['host'], proxy['port'], proxy.get('protocol', 'http'))}\n")
         logger.info(f"Prepared temporary proxy file with {len(filtered_proxies)} proxies: {temp_proxy_file.name}")
         print(f"[SUCCESS] Created temporary proxy list for Mubeng with {len(filtered_proxies)} proxies.")
         return Path(temp_proxy_file.name)

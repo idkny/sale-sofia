@@ -88,6 +88,51 @@ archive/research/  archive/specs/          (code supersedes)
 
 ## Session History
 
+### 2025-12-26 (Session 8 - Dynamic Bulgarian Dictionary)
+
+| Task | Status |
+|------|--------|
+| Research extraction accuracy failures | Complete |
+| Test qwen2.5:3b vs 1.5b model | Complete (1.5b better) |
+| Create Spec 110: Dynamic Bulgarian Dictionary | Complete |
+| Create config/bulgarian_dictionary.yaml | Complete |
+| Create llm/dictionary.py (scanner + hint builder) | Complete |
+| Update llm/prompts.py with base templates | Complete |
+| Update llm/llm_main.py to use dictionary | Complete |
+| Research comprehensive BG real estate terminology | Complete |
+| Update dictionary with 400+ researched terms | Complete |
+| Run accuracy test | Pending |
+
+**Summary**: Researched extraction accuracy issue (69% baseline). Found model size is NOT the problem (3b worse than 1.5b). Designed and implemented dynamic Bulgarian dictionary approach: scan text for keywords, inject only relevant hints into prompt. Launched 4 research agents to gather comprehensive Bulgarian real estate terminology (property types, legal docs, amenities, platform-specific terms). Created 600+ line dictionary file with all terms.
+
+**Key Findings**:
+- Extraction accuracy was 69% (not 78% as previously reported)
+- Model size doesn't help: qwen2.5:1.5b (61%) > qwen2.5:3b (30%)
+- Fields WITH Bulgarian hints have 80-100% accuracy
+- Fields WITHOUT hints have 0-50% accuracy
+- Solution: Dynamic dictionary with regex pre-scan
+
+**Files Created**:
+- `docs/specs/110_DYNAMIC_BULGARIAN_DICTIONARY.md`
+- `llm/dictionary.py` - Scanner and hint builder
+- `config/bulgarian_dictionary.yaml` - 400+ term comprehensive dictionary
+- `tests/llm/test_extraction_accuracy.py` - Accuracy test suite
+- `tests/llm/test_model_comparison.py` - Model comparison test
+
+**Files Modified**:
+- `llm/prompts.py` - Added EXTRACTION_PROMPT_BASE with {hints} placeholder
+- `llm/llm_main.py` - Integrated dictionary scanning
+
+**Files Archived**:
+- `docs/specs/109_EXTRACTION_PROMPT_HINTS.md` → `archive/specs/` (superseded by Spec 110)
+
+**Next Steps**:
+1. Run accuracy test to verify improvement
+2. If < 95%: Add few-shot examples (Phase 2)
+3. If < 95%: Implement hybrid CSS/LLM approach (Phase 4)
+
+---
+
 ### 2025-12-26 (Session 7 - Prompt Accuracy Improvements)
 
 | Task | Status |
@@ -153,41 +198,6 @@ archive/research/  archive/specs/          (code supersedes)
 - REST API calls to Ollama's `/api/generate` endpoint
 
 **Parallel Agents Used**: 4 agents for independent files, 1 sequential for facade
-
----
-
-### 2025-12-26 (Session 5 - Ollama Integration Planning)
-
-| Task | Status |
-|------|--------|
-| Research ZohoCentral Ollama implementation | Complete |
-| Create Spec 107 (Ollama Integration) | Complete |
-| Review project architecture patterns | Complete |
-| Simplify spec architecture (12→5 files) | Complete |
-| Update manifest.json for `llm/` folder | Complete |
-| Update FILE_STRUCTURE.md for `llm/` folder | Complete |
-| Remove duplicate tasks from spec (single source of truth) | Complete |
-
-**Summary**: Researched ZohoCentral's Ollama integration (health check, port killer, model selection). Created Spec 107 for Ollama integration with 5-phase plan. Simplified architecture from 12 files to 5 files following `proxies/proxies_main.py` facade pattern. Updated project structure documentation.
-
-**Key Decisions**:
-- **Pattern**: `llm/` folder with facade pattern (same as `proxies/`)
-- **Files**: 4 files only (`__init__.py`, `llm_main.py`, `prompts.py`, `schemas.py`)
-- **Model**: `qwen2.5:1.5b` (1.2GB VRAM, good for Bulgarian/Cyrillic)
-- **Use cases**: Page content → DB field mapping, Description → structured data
-
-**Files Created/Modified**:
-- `docs/specs/107_OLLAMA_INTEGRATION.md` - Full integration spec
-- `admin/config/project_structure_manifest.json` - Added `llm/` folder rule
-- `docs/architecture/FILE_STRUCTURE.md` - Added `llm/` documentation
-- `docs/tasks/TASKS.md` - Added Ollama integration phases
-
-**To Continue (Next Session)**:
-1. Create `llm/` directory with 4 files
-2. Create `config/ollama.yaml`
-3. Implement OllamaClient (port from ZohoCentral)
-4. Test Ollama start/stop/restart
-5. Pull model: `ollama pull qwen2.5:1.5b`
 
 ---
 

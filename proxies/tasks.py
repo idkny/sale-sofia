@@ -250,7 +250,7 @@ def _check_quality_for_non_transparent(proxies: List[Dict[str, Any]]) -> List[Di
 
     logger.info(f"Checking quality for {len(candidates)} non-transparent proxies...")
     for proxy in candidates:
-        enrich_proxy_with_quality(proxy, timeout=60)
+        enrich_proxy_with_quality(proxy, timeout=45)
 
     ip_passed = sum(1 for p in candidates if p.get("ip_check_passed"))
     target_passed = sum(1 for p in candidates if p.get("target_passed"))
@@ -276,7 +276,7 @@ def _update_redis_progress(job_id: str) -> None:
         logger.warning(f"Failed to update Redis progress: {e}")
 
 
-@celery_app.task(soft_time_limit=420, time_limit=480)  # 7min soft, 8min hard
+@celery_app.task(soft_time_limit=780, time_limit=900)  # 13min soft, 15min hard
 def check_proxy_chunk_task(proxy_chunk: List[Dict[str, Any]], job_id: str = "") -> List[Dict[str, Any]]:
     """
     Worker task that checks a small chunk of proxies for liveness and returns the live ones.

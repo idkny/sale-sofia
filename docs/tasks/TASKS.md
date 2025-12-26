@@ -12,7 +12,12 @@
 | Instance | Current Task |
 |----------|--------------|
 | 1 | Available |
-| 2 | Available |
+| 2 | Run accuracy test (Phase 3.6) |
+| 3 | Available |
+
+**Session 13 (2025-12-26)**: Instance 3 - Found 2 CRITICAL issues: (1) Proxy scoring broken (tracks mubeng URL, not actual proxy; removal doesn't persist), (2) No JIT proxy validation (no pre-check, no retry, dead proxies waste time). Both block automatic threshold refresh.
+
+**Session 8 (2025-12-26)**: Instance 2 - Research + implement dynamic Bulgarian dictionary for LLM extraction (Spec 110). Created comprehensive dictionary with 400+ terms from 4 research agents. Implementation complete, accuracy test pending.
 
 **Session 12 (2025-12-26)**: Fixed `wait_for_proxies` blind polling bug + increased dynamic timeout (90s→400s per chunk) + added task time limits (7min soft, 8min hard).
 
@@ -41,6 +46,280 @@
   - browsers_main.py:147-152 - rejects if validated_proxy=None
   - firefox.py:17-19 - rejects if proxy=None
   - chromium.py:19-21 - rejects if proxy=None
+
+---
+
+## CRITICAL BUG: Proxy Scoring System Broken (P0)
+
+**Found by**: Instance 3 (Session 1, 2025-12-26)
+**Status**: Not started
+**Blocks**: Automatic threshold-based proxy refresh
+
+### Finding 1: Wrong Proxy Being Tracked
+
+**Location**: `main.py:148-160`
+
+**Problem**: `main.py` uses mubeng as an auto-rotating proxy (`http://localhost:8089`). When recording success/failure, it passes this mubeng URL to `proxy_pool.record_result()` instead of the actual underlying proxy.
+
+```python
+# main.py - What happens:
+proxy = "http://localhost:8089"  # MUBENG_PROXY
+proxy_pool.record_result(proxy, success=True)  # Records "localhost:8089"!
+
+# proxy_scorer.py - What it expects:
+# "1.2.3.4:8080" - actual proxy from live_proxies.json
+```
+
+**Evidence**:
+- `main.py:35` - `MUBENG_PROXY = "http://localhost:8089"`
+- `main.py:135` - `proxy=proxy or MUBENG_PROXY`
+- `main.py:148-160` - `proxy_pool.record_result(proxy, success=...)` where proxy is mubeng URL
+- `proxy_scorer.py:270-271` - Logs warning "Proxy localhost:8089 not found in scores"
+
+**Impact**: The entire scoring system does nothing because it's tracking "localhost:8089" which doesn't exist in `live_proxies.json`.
+
+### Finding 2: Proxy Removal Doesn't Persist
+
+**Location**: `proxies/proxy_scorer.py:306-344`
+
+**Problem**: When `remove_proxy()` is called (after 3 failures or score < 0.01), it removes the proxy from in-memory lists but does NOT update `live_proxies.json`.
+
+```python
+def remove_proxy(self, proxy_key: str) -> bool:
+    with self.lock:
+        del self.scores[proxy_key]           # ✅ Removes from scores dict
+        self.proxies = [p for p in ...]      # ✅ Removes from memory list
+        self.save_scores()                    # ✅ Saves proxy_scores.json
+        # ❌ MISSING: Does NOT save to live_proxies.json!
+```
+
+**Impact**:
+1. Bad proxy removed from memory (won't be used this session)
+2. Next session: `live_proxies.json` is reloaded → bad proxy is back!
+3. `_initialize_scores()` gives it a fresh score → starts over
+
+### Conclusion
+
+The `ScoredProxyPool` was designed for **direct proxy usage**, but the system uses **mubeng as an intermediary** that hides actual proxy identity. This architectural mismatch makes the scoring system non-functional.
+
+**Current state**:
+- ❌ Proxy scoring: Not working (wrong proxy tracked)
+- ❌ Auto-removal: Not persisted (bad proxies return next session)
+- ❌ Threshold-based refresh: Cannot work until above are fixed
+
+### Optional Solutions
+
+#### Solution A: Bypass Mubeng for Scraping (Recommended)
+
+Use `ScoredProxyPool.select_proxy()` directly instead of mubeng for scraping.
+
+**Pros**:
+- Full control over which proxy is used
+- Scoring works correctly
+- Can implement smart retry with different proxy
+
+**Cons**:
+- Lose mubeng's automatic rotation
+- Need to handle rotation logic in main.py
+
+**Implementation**:
+```python
+# main.py
+proxy_dict = proxy_pool.select_proxy()
+proxy_url = f"{proxy_dict['protocol']}://{proxy_dict['host']}:{proxy_dict['port']}"
+response = StealthyFetcher.fetch(url=url, proxy=proxy_url, ...)
+proxy_pool.record_result(f"{proxy_dict['host']}:{proxy_dict['port']}", success=True)
+```
+
+#### Solution B: Get Actual Proxy from Mubeng Headers
+
+Configure mubeng to return which proxy it used in response headers.
+
+**Pros**:
+- Keep mubeng's rotation benefits
+- Minimal changes to main.py
+
+**Cons**:
+- Mubeng may not support this (needs research)
+- Adds complexity
+
+#### Solution C: Separate Concerns - Mubeng for Checking, Direct for Scraping
+
+Use mubeng only for the proxy checking phase (Celery tasks), use direct proxies for scraping.
+
+**Pros**:
+- Best of both worlds
+- Clear separation
+
+**Cons**:
+- Two different proxy usage patterns
+
+#### Solution D: Fix Persistence Only (Partial Fix)
+
+Add `_save_proxies()` to `ScoredProxyPool.remove_proxy()`.
+
+**Pros**:
+- Quick fix for persistence issue
+
+**Cons**:
+- Doesn't fix the tracking issue (Finding 1)
+- Only half the problem solved
+
+### Tasks
+
+- [ ] Decide on solution approach (A, B, C, or D)
+- [ ] If Solution A: Refactor main.py to use direct proxy selection
+- [ ] If Solution B: Research mubeng header support
+- [ ] If Solution C: Implement dual-mode proxy usage
+- [ ] If Solution D: Add `_save_proxies()` method
+- [ ] Add `_save_proxies()` to persist removals to `live_proxies.json`
+- [ ] Test: Verify bad proxy is removed and stays removed
+- [ ] Test: Verify scoring correctly tracks actual proxies
+
+### Dependency
+
+**After this is fixed**, we can implement:
+- [ ] Automatic threshold-based proxy refresh (check count every N minutes, refresh if < X)
+
+---
+
+## MISSING FEATURE: Just-In-Time Proxy Validation (P1)
+
+**Found by**: Instance 3 (Session 1, 2025-12-26)
+**Status**: Not started
+**Depends on**: Proxy Scoring System fix (above)
+
+### Problem Statement
+
+Free proxies are short-lived. A proxy that worked 1 hour ago may be dead now. Currently, there is **no validation before using a proxy** for scraping - the system just sends requests and hopes for the best.
+
+### What Currently Exists
+
+| Feature | Status | Notes |
+|---------|--------|-------|
+| Startup preflight check | ✅ Yes | `main.py:285-299` - checks mubeng ONCE |
+| 3-level recovery at startup | ✅ Yes | Retry → soft restart → full refresh |
+| Mubeng rotate-on-error | ✅ Yes | Reactive - rotates AFTER failure |
+| Mubeng max-errors | ✅ Yes | Rotates after 3 consecutive errors |
+
+### What is MISSING
+
+| Feature | Status | Impact |
+|---------|--------|--------|
+| Pre-request validation | ❌ No | Dead proxies waste time on each URL |
+| Just-in-time liveness check | ❌ No | No "is proxy alive?" before browser |
+| Failed proxy removal | ❌ No | Dead proxies stay in `live_proxies.json` forever |
+| Retry with different proxy | ❌ No | On failure, skips URL instead of retrying |
+
+### Current Flow (Broken)
+
+```
+For each URL:
+  StealthyFetcher.fetch(url, proxy=mubeng)
+       │
+       ├── Success → Save listing
+       │
+       └── Failure → Log error, move to next URL
+                     ❌ No validation
+                     ❌ No removal
+                     ❌ No retry
+```
+
+### Desired Flow
+
+```
+For each URL:
+  1. proxy = pool.select_proxy()           # Get proxy from pool
+  2. if not quick_liveness_check(proxy):   # 1-2 second ping
+       pool.remove_proxy(proxy)            # Remove dead proxy
+       goto 1                              # Try another
+  3. response = fetch(url, proxy)          # Use validated proxy
+  4. if success:
+       pool.record_success(proxy)
+     else:
+       pool.record_failure(proxy)          # May trigger removal
+       retry with different proxy?         # Optional
+```
+
+### Why Mubeng's rotate-on-error is Not Enough
+
+1. **Reactive, not proactive** - Only rotates AFTER a request fails (wastes 15-30 seconds)
+2. **No removal** - Dead proxies stay in mubeng's list, get retried later
+3. **No visibility** - Can't track which proxy was used or failed
+4. **No persistence** - Mubeng's internal state is lost on restart
+
+### Implementation Options
+
+#### Option 1: Direct Proxy Selection (Recommended)
+
+Bypass mubeng for scraping, use `ScoredProxyPool.select_proxy()` directly.
+
+```python
+# main.py - new flow
+proxy_dict = proxy_pool.select_proxy()
+proxy_url = f"{proxy_dict['protocol']}://{proxy_dict['host']}:{proxy_dict['port']}"
+
+# Quick liveness check (1-2 seconds)
+if not preflight_check(proxy_url, timeout=2):
+    proxy_pool.remove_proxy(proxy_dict)
+    continue  # Try another proxy
+
+# Use validated proxy
+response = StealthyFetcher.fetch(url=url, proxy=proxy_url)
+proxy_pool.record_result(proxy_key, success=response.ok)
+```
+
+**Pros**: Full control, proper scoring, removal works
+**Cons**: Lose mubeng rotation, more code in main.py
+
+#### Option 2: Keep Mubeng, Add Pre-Check Layer
+
+Keep mubeng but add validation layer before each request.
+
+```python
+# Still use mubeng, but validate first
+for attempt in range(3):
+    if preflight_check(MUBENG_PROXY, timeout=2):
+        break
+    time.sleep(1)  # Mubeng rotates on the failed check
+else:
+    log("All proxies failed pre-check")
+    continue
+```
+
+**Pros**: Minimal changes, keeps mubeng benefits
+**Cons**: Still can't track individual proxies, no removal
+
+#### Option 3: Hybrid - Mubeng for Bulk, Direct for Scraping
+
+Use mubeng only for the Celery proxy-checking phase, direct selection for scraping.
+
+**Pros**: Best of both worlds
+**Cons**: Two different proxy usage patterns
+
+### Tasks
+
+- [ ] Decide on implementation approach (Option 1, 2, or 3)
+- [ ] Implement quick liveness check before each request
+- [ ] Implement retry logic with different proxy on failure
+- [ ] Ensure failed proxies are removed from `live_proxies.json`
+- [ ] Add configurable retry count (e.g., max 3 proxies per URL)
+- [ ] Test: Verify dead proxy is detected and removed
+- [ ] Test: Verify retry with different proxy works
+- [ ] Test: Measure time savings vs current approach
+
+### Relationship to Other Bugs
+
+1. **Proxy Scoring System Broken (P0)** - Must fix first. JIT validation needs proper proxy tracking.
+2. **Threshold-based refresh** - JIT removal will decrease proxy count, triggering refresh.
+
+### Acceptance Criteria
+
+- [ ] Dead proxies detected within 2 seconds (not 15-30s timeout)
+- [ ] Dead proxies removed from `live_proxies.json` immediately
+- [ ] At least 1 retry with different proxy before skipping URL
+- [ ] Proxy count decreases as dead proxies are removed
+- [ ] When count drops below threshold, refresh is triggered
 
 ---
 
@@ -203,28 +482,51 @@ Test only waited 5 minutes → FAIL
 
 ### Phase 3.6: Achieve 95%+ Extraction Accuracy (P1)
 
-**Problem**: Current 70-80% accuracy is unacceptable for simple real estate text.
-**Target**: 95% minimum, aim for 99%.
-**Rationale**: Input is short, simple Bulgarian text with limited vocabulary - not complex prose.
+**Spec**: [110_DYNAMIC_BULGARIAN_DICTIONARY.md](../specs/110_DYNAMIC_BULGARIAN_DICTIONARY.md)
+**Research**: [extraction_accuracy_analysis.md](../research/extraction_accuracy_analysis.md)
 
-#### Research Required
-- [ ] Analyze extraction failures - which fields fail most?
-- [ ] Test with larger model (qwen2.5:3b vs 1.5b)
-- [ ] Test prompt variations for low-accuracy fields
-- [ ] Benchmark: Run 50 real listings, measure per-field accuracy
+**Problem**: Current 69% accuracy - missing Bulgarian hints for many fields.
+**Target**: 95%+ accuracy.
+**Finding**: Model size is NOT the problem (3b worse than 1.5b). Solution is dynamic dictionary.
 
-#### Potential Fixes
-- [ ] Field-specific prompts (separate prompt per field type)
-- [ ] Pre-processing: Normalize Bulgarian text before LLM
-- [ ] Regex fallback: Use regex for obvious patterns (e.g., "тухла" → brick)
-- [ ] Confidence filtering: Reject low-confidence extractions, retry with different prompt
-- [ ] Model upgrade: Test qwen2.5:3b or qwen2.5:7b if 1.5b insufficient
+#### Research (Complete - 2025-12-26)
+- [x] Analyze extraction failures - which fields fail most?
+  - bathrooms: 0%, has_elevator: 0%, heating_type: 33%, orientation: 75%
+- [x] Test with larger model (qwen2.5:3b vs 1.5b)
+  - Result: 1.5b (61%) > 3b (30%) - smaller is better
+- [x] Identify root cause: Missing Bulgarian hints for low-accuracy fields
+- [x] Design solution: Dynamic dictionary with regex pre-scan
+
+#### Phase 1: Dynamic Dictionary (Target: 85-95%)
+- [ ] [Instance 2] Create `config/bulgarian_dictionary.yaml`
+- [ ] [Instance 2] Create `llm/dictionary.py` (scanner + hint builder)
+- [ ] [Instance 2] Update `llm/prompts.py` with base templates
+- [ ] [Instance 2] Update `llm/llm_main.py` to use dictionary
+- [ ] Create `tests/llm/test_dictionary.py`
+- [ ] Run accuracy test
+
+#### Phase 2: Few-Shot Examples (If < 95%)
+- [ ] Add 3-5 input/output examples to prompt
+- [ ] Re-run accuracy test
+
+#### Phase 3: Temperature = 0 (Quick Win)
+- [ ] Change description_extraction temperature: 0.1 → 0.0
+- [ ] Re-run accuracy test
+
+#### Phase 4: Hybrid CSS/LLM (If < 95%)
+- [ ] Extract structured fields with Scrapling CSS selectors
+- [ ] Use LLM only for free-text description
+- [ ] Re-run accuracy test
+
+#### Phase 5: Field-Specific Prompts (If < 98%)
+- [ ] Create focused prompts for problematic fields
+- [ ] Implement confidence-based retry
 
 #### Acceptance Criteria
-- [ ] map_fields(): 95%+ accuracy on enum fields
-- [ ] extract_description(): 95%+ accuracy on enum fields
-- [ ] Create accuracy benchmark test with 50+ real samples
-- [ ] Document which fields need special handling
+- [ ] Overall accuracy ≥ 95% (target 99%)
+- [ ] No field below 80% accuracy
+- [ ] All existing tests pass
+- [ ] Unknown words logged for future updates
 
 #### Scrapling + LLM Synergy (Future)
 - [ ] Research element-aware prompts vs raw text prompts

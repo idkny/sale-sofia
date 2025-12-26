@@ -21,8 +21,9 @@ from typing import Optional, Type, TypeVar
 import requests
 import yaml
 
-from llm.prompts import FIELD_MAPPING_PROMPT, EXTRACTION_PROMPT
+from llm.prompts import FIELD_MAPPING_PROMPT, build_extraction_prompt
 from llm.schemas import MappedFields, ExtractedDescription
+from llm.dictionary import scan_and_build_hints
 
 logger = logging.getLogger(__name__)
 
@@ -365,6 +366,11 @@ def map_fields(content: str) -> MappedFields:
 def extract_description(description: str) -> ExtractedDescription:
     """Extract structured data from free-text description.
 
+    Uses dynamic Bulgarian dictionary to:
+    1. Pre-scan text for known Bulgarian keywords
+    2. Inject only relevant hints into the prompt
+    3. Pre-extract numeric values with regex (more reliable than LLM)
+
     Args:
         description: Free-text description from listing
 
@@ -377,8 +383,20 @@ def extract_description(description: str) -> ExtractedDescription:
         logger.error("Ollama not available for description extraction")
         return ExtractedDescription(confidence=0.0)
 
-    prompt = EXTRACTION_PROMPT.format(description=description)
+    # Scan text for Bulgarian keywords and build dynamic hints
+    hints, pre_extracted = scan_and_build_hints(description)
+
+    # Build prompt with injected hints
+    prompt = build_extraction_prompt(description, hints)
+
     response = client._call_ollama(
         prompt, "description_extraction", schema_class=ExtractedDescription
     )
-    return client._parse_response(response, ExtractedDescription)
+    result = client._parse_response(response, ExtractedDescription)
+
+    # Override with pre-extracted numeric values (regex is more reliable than LLM)
+    for field, value in pre_extracted.items():
+        if value is not None and hasattr(result, field):
+            setattr(result, field, value)
+
+    return result

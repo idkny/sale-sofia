@@ -37,6 +37,51 @@ Return ONLY valid JSON with these exact field names and enum values.
 RESPOND IN ENGLISH ONLY. Your JSON values must be in English, not Bulgarian.
 """
 
+EXTRACTION_PROMPT_BASE = """You are a Bulgarian real estate data extraction expert.
+
+CRITICAL RULES:
+1. Extract information from the BULGARIAN DESCRIPTION below
+2. RESPOND IN ENGLISH ONLY - use ONLY English enum values
+3. Use the DETECTED WORDS section - these are pre-matched for you
+4. Return valid JSON matching the schema
+5. Use null for missing information
+
+BULGARIAN DESCRIPTION:
+{description}
+
+{hints}
+
+REQUIRED JSON FIELDS:
+- rooms: number or null
+- bedrooms: number or null
+- bathrooms: number or null
+- furnishing: "furnished" | "partially" | "unfurnished" | null
+- condition: "new" | "renovated" | "needs_renovation" | null
+- has_parking: boolean or null
+- parking_type: "underground" | "outdoor" | "garage" | null
+- has_elevator: boolean or null
+- has_security: boolean or null
+- has_balcony: boolean or null
+- has_storage: boolean or null
+- orientation: "north" | "south" | "east" | "west" | null
+- has_view: boolean or null
+- view_type: "city" | "mountain" | "park" | null
+- heating_type: "district" | "gas" | "electric" | "air_conditioner" | null
+- payment_options: "cash" | "installments" | "mortgage" | null
+- confidence: number (0.0-1.0)
+
+Return ONLY valid JSON.
+"""
+
+
+def build_extraction_prompt(description: str, hints: str = "") -> str:
+    """Build extraction prompt with dynamic hints."""
+    hints_section = hints if hints else "No specific Bulgarian keywords detected."
+    return EXTRACTION_PROMPT_BASE.format(description=description, hints=hints_section)
+
+
+# DEPRECATED: Use EXTRACTION_PROMPT_BASE with build_extraction_prompt() instead.
+# This legacy prompt is kept for backwards compatibility only.
 EXTRACTION_PROMPT = """You are a Bulgarian real estate data extraction expert.
 
 CRITICAL RULES:

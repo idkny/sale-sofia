@@ -37,6 +37,7 @@ from typing import Optional
 
 import httpx
 
+from proxies import proxy_to_url
 from proxies.anonymity_checker import get_real_ip
 
 logger = logging.getLogger(__name__)
@@ -370,7 +371,7 @@ def enrich_proxy_with_quality(
         return proxy
 
     # Build proxy URL
-    proxy_url = f"{protocol}://{host}:{port}"
+    proxy_url = proxy_to_url(host, port, protocol)
 
     # Run quality checks
     checker = QualityChecker(timeout=timeout)

@@ -16,6 +16,7 @@ Usage:
 import atexit
 import json
 import os
+import re
 import signal
 import socket
 import subprocess
@@ -26,6 +27,7 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, Dict, Optional
 
+import psutil
 import redis
 from loguru import logger
 
@@ -114,6 +116,8 @@ class Orchestrator:
 
     def __enter__(self):
         """Context manager entry."""
+        print("[INFO] Cleaning up stale processes...")
+        self.cleanup_stale_processes()
         self._register_shutdown_handlers()
         return self
 
@@ -121,6 +125,25 @@ class Orchestrator:
         """Context manager exit - stops all processes."""
         self.stop_all()
         return False  # Don't suppress exceptions
+
+    def cleanup_stale_processes(self) -> int:
+        """
+        Kill stale celery and mubeng processes from crashed sessions.
+
+        Returns:
+            Count of processes killed.
+        """
+        killed = 0
+        # Pattern matches: celery -A celery_app worker (the actual command)
+        # More specific to avoid matching Python processes that import celery
+        killed += self._kill_process_by_pattern(r"celery\s+-A\s+\S+\s+worker")
+        killed += self._kill_process_by_pattern(r"mubeng")
+        if killed > 0:
+            logger.info(f"Cleaned up {killed} stale processes")
+            print(f"[INFO] Cleaned up {killed} stale processes")
+        else:
+            logger.debug("No stale processes found")
+        return killed
 
     def _register_shutdown_handlers(self):
         """Register signal handlers for clean shutdown."""
@@ -146,6 +169,49 @@ class Orchestrator:
         """Check if Redis is running on default port."""
         return self._is_port_in_use(6379)
 
+    def _kill_process_by_pattern(self, pattern: str) -> int:
+        """Kill all processes matching pattern. Returns count killed."""
+        killed = 0
+        for proc in psutil.process_iter(["pid", "cmdline"]):
+            try:
+                cmdline = " ".join(proc.info["cmdline"] or [])
+                if re.search(pattern, cmdline):
+                    logger.info(f"Killing stale process: PID {proc.pid} - {cmdline[:80]}")
+                    proc.terminate()
+                    try:
+                        proc.wait(timeout=5)
+                    except psutil.TimeoutExpired:
+                        logger.warning(f"Process {proc.pid} did not terminate, killing...")
+                        proc.kill()
+                        proc.wait(timeout=2)
+                    killed += 1
+            except (psutil.NoSuchProcess, psutil.AccessDenied):
+                pass
+        return killed
+
+    def _health_check_redis(self) -> bool:
+        """Check if Redis is healthy by sending PING command."""
+        try:
+            client = redis.Redis(
+                host=os.getenv("REDIS_HOST", "localhost"),
+                port=int(os.getenv("REDIS_PORT", "6379")),
+                socket_timeout=2.0,
+            )
+            return client.ping()
+        except (redis.ConnectionError, redis.TimeoutError, redis.RedisError):
+            return False
+
+    def _health_check_celery(self) -> bool:
+        """Check if Celery worker is healthy by sending ping."""
+        try:
+            from celery_app import celery_app
+
+            inspect = celery_app.control.inspect(timeout=5.0)
+            ping_result = inspect.ping()
+            return ping_result is not None and len(ping_result) > 0
+        except Exception:
+            return False
+
     def start_redis(self) -> bool:
         """
         Start Redis if not running.
@@ -153,8 +219,9 @@ class Orchestrator:
         Returns:
             True if Redis is available, False otherwise.
         """
-        if self._is_redis_running():
-            logger.info("Redis is already running")
+        # Check if Redis is already running and healthy
+        if self._health_check_redis():
+            logger.info("Redis is already running and healthy")
             print("[INFO] Redis is already running")
             return True
 
@@ -169,11 +236,11 @@ class Orchestrator:
                 stderr=subprocess.PIPE,
             )
 
-            # Wait for Redis to start
+            # Wait for Redis to start and be healthy (PING responds)
             for _ in range(10):
                 time.sleep(0.5)
-                if self._is_redis_running():
-                    logger.info("Redis started successfully")
+                if self._health_check_redis():
+                    logger.info("Redis started and healthy (PING OK)")
                     print("[SUCCESS] Redis started")
                     return True
 
@@ -219,9 +286,9 @@ class Orchestrator:
         Returns:
             True if Celery started/running, False otherwise.
         """
-        # Check if a worker is already running system-wide
-        if self._is_celery_running_systemwide():
-            logger.info("Celery worker already running - reusing existing worker")
+        # Check if a worker is already running and responding to pings
+        if self._health_check_celery():
+            logger.info("Celery worker already running and healthy")
             print("[INFO] Celery worker already running - reusing existing worker")
             return True
 
@@ -268,8 +335,18 @@ class Orchestrator:
                     print(f"[ERROR] Celery failed. Check: {CELERY_LOG_FILE}")
                     return False
 
-            logger.info(f"Celery worker started (PID: {self.celery_process.pid})")
-            print(f"[SUCCESS] Celery worker started (log: {CELERY_LOG_FILE})")
+            # Wait for Celery worker to respond to health check (up to 15s more)
+            logger.info(f"Celery process started (PID: {self.celery_process.pid}), waiting for health check...")
+            for i in range(15):
+                if self._health_check_celery():
+                    logger.info("Celery worker healthy (ping OK)")
+                    print(f"[SUCCESS] Celery worker started (log: {CELERY_LOG_FILE})")
+                    return True
+                time.sleep(1)
+
+            # Process is running but not responding to pings
+            logger.warning("Celery started but not responding to ping, continuing anyway")
+            print(f"[WARNING] Celery started but ping check failed (log: {CELERY_LOG_FILE})")
             return True
 
         except FileNotFoundError:
@@ -593,7 +670,7 @@ class Orchestrator:
                 timeout_val = timeout
             elif total_chunks > 0:
                 workers = 8  # Match Celery concurrency
-                time_per_chunk = 400  # seconds (observed 362-399s in production)
+                time_per_chunk = 900  # seconds (15min hard limit per chunk)
                 buffer = 1.5  # 50% safety margin
                 rounds = (total_chunks + workers - 1) // workers
                 calculated = int(rounds * time_per_chunk * buffer)

@@ -11,6 +11,229 @@ import streamlit as st
 import pandas as pd
 import json
 
+# Import scoring functions needed by tab render functions
+# These are imported here after sys.path is modified to include project root
+from app.scoring import calculate_total_investment, MAX_TOTAL_BUDGET
+
+
+def _render_details_tab(listing: dict, listing_dict: dict) -> None:
+    """Render the Details tab content showing price, size, building, location and features."""
+    col1, col2, col3 = st.columns(3)
+
+    with col1:
+        st.markdown("**💰 Price & Budget**")
+        st.markdown(f"- Price: **€{listing['price_eur']:,.0f}**" if listing['price_eur'] else "- Price: N/A")
+        st.markdown(f"- Price/sqm: €{listing['price_per_sqm_eur']:,.0f}" if listing['price_per_sqm_eur'] else "- Price/sqm: N/A")
+        reno = listing['estimated_renovation_eur'] or 0
+        st.markdown(f"- Est. Renovation: €{reno:,.0f}")
+        total = calculate_total_investment(listing_dict)
+        budget_status = "✅" if total <= MAX_TOTAL_BUDGET else "❌"
+        st.markdown(f"- **Total: €{total:,.0f}** {budget_status}")
+
+    with col2:
+        st.markdown("**📐 Size & Layout**")
+        st.markdown(f"- Total sqm: {listing['sqm_total']}")
+        st.markdown(f"- Net sqm: {listing['sqm_net'] or 'N/A'}")
+        st.markdown(f"- Rooms: {listing['rooms_count']}")
+        st.markdown(f"- Bathrooms: {listing['bathrooms_count']}")
+        st.markdown(f"- Floor: {listing['floor_number']}/{listing['floor_total']}")
+        st.markdown(f"- Elevator: {'Yes' if listing['has_elevator'] else 'No'}")
+
+    with col3:
+        st.markdown("**🏗️ Building**")
+        st.markdown(f"- Type: {listing['building_type'] or 'N/A'}")
+        st.markdown(f"- Year: {listing['construction_year'] or 'N/A'}")
+        st.markdown(f"- Act Status: {listing['act_status'] or 'N/A'}")
+        st.markdown(f"- Condition: {listing['condition'] or 'N/A'}")
+
+    st.markdown("---")
+
+    col1, col2 = st.columns(2)
+
+    with col1:
+        st.markdown("**📍 Location**")
+        st.markdown(f"- District: {listing['district'] or 'N/A'}")
+        st.markdown(f"- Neighborhood: {listing['neighborhood'] or 'N/A'}")
+        st.markdown(f"- Address: {listing['address'] or 'N/A'}")
+        st.markdown(f"- Metro: {listing['metro_station'] or 'N/A'} ({listing['metro_distance_m']}m)" if listing['metro_distance_m'] else "- Metro: N/A")
+        st.markdown(f"- Orientation: {listing['orientation'] or 'N/A'}")
+
+    with col2:
+        st.markdown("**🏠 Features**")
+        features = []
+        if listing.get("has_balcony"): features.append("Balcony")
+        if listing.get("has_garden"): features.append("Garden")
+        if listing.get("has_terrace"): features.append("Terrace")
+        if listing.get("has_parking"): features.append("Parking")
+        if listing.get("has_storage"): features.append("Storage")
+        if listing.get("has_garage"): features.append("Garage")
+        if listing.get("has_elevator"): features.append("Elevator")
+        if listing.get("has_ac_preinstalled"): features.append("AC")
+        if listing.get("is_furnished"): features.append("Furnished")
+
+        st.markdown(", ".join(features) if features else "No features recorded")
+
+    # Link to original listing
+    if listing["url"]:
+        st.markdown(f"[🔗 View Original Listing]({listing['url']})")
+
+
+def _render_scoring_tab(listing_dict: dict, score) -> None:
+    """Render the Scoring tab content showing score breakdown and bar chart."""
+    st.markdown("### Score Breakdown")
+
+    # Score metrics
+    cols = st.columns(7)
+    metrics = [
+        ("Location", score.location, 25),
+        ("Price/sqm", score.price_sqm, 20),
+        ("Condition", score.condition, 15),
+        ("Layout", score.layout, 15),
+        ("Building", score.building, 10),
+        ("Rental", score.rental, 10),
+        ("Extras", score.extras, 5),
+    ]
+
+    for col, (name, value, weight) in zip(cols, metrics):
+        with col:
+            st.metric(f"{name} ({weight}%)", f"{value:.1f}/5")
+
+    st.markdown("---")
+    st.metric("**Total Weighted Score**", f"{score.total_weighted:.2f}/5.0")
+
+    # Score bar chart
+    score_data = {
+        "Criterion": ["Location", "Price/sqm", "Condition", "Layout", "Building", "Rental", "Extras"],
+        "Score": [score.location, score.price_sqm, score.condition, score.layout, score.building, score.rental, score.extras]
+    }
+    st.bar_chart(pd.DataFrame(score_data).set_index("Criterion"))
+
+
+def _render_deal_breakers_tab(deal_breakers: list) -> None:
+    """Render the Deal Breakers tab content showing pass/fail status for each check."""
+    st.markdown("### Deal Breaker Check")
+
+    for db in deal_breakers:
+        icon = "✅" if db.passed else "❌"
+        st.markdown(f"{icon} **{db.name}**: {db.reason}")
+
+
+def _render_notes_tab(listing: dict, listing_id: int, get_viewings_for_listing) -> None:
+    """Render the Notes & Viewings tab content showing notes and viewing history."""
+    st.markdown("### Notes")
+    st.text_area(
+        "User Notes",
+        value=listing.get("user_notes") or "",
+        key="view_notes",
+        disabled=True
+    )
+
+    st.markdown("### Viewing History")
+    viewings = get_viewings_for_listing(listing_id)
+
+    if viewings:
+        for v in viewings:
+            with st.expander(f"📅 Viewing on {v['date_viewed']}"):
+                st.markdown(f"**Agent:** {v['agent_contact'] or 'N/A'}")
+                st.markdown(f"**First Impressions:** {v['first_impressions'] or 'N/A'}")
+
+                if v['positives']:
+                    positives = json.loads(v['positives']) if isinstance(v['positives'], str) else v['positives']
+                    st.markdown("**Positives:**")
+                    for p in positives:
+                        st.markdown(f"- ✅ {p}")
+
+                if v['negatives']:
+                    negatives = json.loads(v['negatives']) if isinstance(v['negatives'], str) else v['negatives']
+                    st.markdown("**Negatives:**")
+                    for n in negatives:
+                        st.markdown(f"- ❌ {n}")
+    else:
+        st.info("No viewings recorded yet")
+
+
+def _render_edit_tab(listing: dict, listing_id: int, update_listing_evaluation, add_viewing) -> None:
+    """Render the Edit tab content with forms to update listing and add viewings."""
+    st.markdown("### Update Listing")
+
+    with st.form(key="update_form"):
+        new_status = st.selectbox(
+            "Status",
+            ["New", "Contacted", "Viewed", "Shortlist", "Rejected"],
+            index=["New", "Contacted", "Viewed", "Shortlist", "Rejected"].index(listing["status"]) if listing["status"] in ["New", "Contacted", "Viewed", "Shortlist", "Rejected"] else 0
+        )
+
+        new_decision = st.selectbox(
+            "Decision",
+            ["None", "Maybe", "Shortlist", "Reject", "Offer Made"],
+            index=["None", "Maybe", "Shortlist", "Reject", "Offer Made"].index(listing["decision"]) if listing["decision"] in ["None", "Maybe", "Shortlist", "Reject", "Offer Made"] else 0
+        )
+
+        new_reason = st.text_area(
+            "Decision Reason",
+            value=listing.get("decision_reason") or ""
+        )
+
+        new_renovation = st.number_input(
+            "Estimated Renovation (€)",
+            value=float(listing.get("estimated_renovation_eur") or 0),
+            step=1000.0
+        )
+
+        new_notes = st.text_area(
+            "User Notes",
+            value=listing.get("user_notes") or ""
+        )
+
+        submit = st.form_submit_button("Save Changes")
+
+        if submit:
+            success = update_listing_evaluation(
+                listing_id,
+                status=new_status,
+                decision=None if new_decision == "None" else new_decision,
+                decision_reason=new_reason if new_reason else None,
+                estimated_renovation_eur=new_renovation if new_renovation > 0 else None,
+                user_notes=new_notes if new_notes else None
+            )
+            if success:
+                st.success("Listing updated!")
+                st.rerun()
+            else:
+                st.error("Failed to update listing")
+
+    # Add viewing form
+    st.markdown("---")
+    st.markdown("### Add Viewing")
+
+    with st.form(key="add_viewing_form"):
+        view_date = st.date_input("Date Viewed")
+        view_agent = st.text_input("Agent Contact")
+        view_impressions = st.text_area("First Impressions")
+        view_positives = st.text_area("Positives (one per line)")
+        view_negatives = st.text_area("Negatives (one per line)")
+
+        add_viewing_btn = st.form_submit_button("Add Viewing")
+
+        if add_viewing_btn:
+            positives_list = [p.strip() for p in view_positives.split("\n") if p.strip()]
+            negatives_list = [n.strip() for n in view_negatives.split("\n") if n.strip()]
+
+            result = add_viewing(
+                listing_id=listing_id,
+                date_viewed=str(view_date),
+                agent_contact=view_agent if view_agent else None,
+                first_impressions=view_impressions if view_impressions else None,
+                positives=positives_list if positives_list else None,
+                negatives=negatives_list if negatives_list else None
+            )
+            if result:
+                st.success("Viewing added!")
+                st.rerun()
+            else:
+                st.error("Failed to add viewing")
+
+
 st.set_page_config(page_title="Listings", page_icon="🏢", layout="wide")
 
 st.title("🏢 Listings")
@@ -163,213 +386,19 @@ try:
                 ])
 
                 with tab1:
-                    col1, col2, col3 = st.columns(3)
-
-                    with col1:
-                        st.markdown("**💰 Price & Budget**")
-                        st.markdown(f"- Price: **€{listing['price_eur']:,.0f}**" if listing['price_eur'] else "- Price: N/A")
-                        st.markdown(f"- Price/sqm: €{listing['price_per_sqm_eur']:,.0f}" if listing['price_per_sqm_eur'] else "- Price/sqm: N/A")
-                        reno = listing['estimated_renovation_eur'] or 0
-                        st.markdown(f"- Est. Renovation: €{reno:,.0f}")
-                        total = calculate_total_investment(listing_dict)
-                        budget_status = "✅" if total <= MAX_TOTAL_BUDGET else "❌"
-                        st.markdown(f"- **Total: €{total:,.0f}** {budget_status}")
-
-                    with col2:
-                        st.markdown("**📐 Size & Layout**")
-                        st.markdown(f"- Total sqm: {listing['sqm_total']}")
-                        st.markdown(f"- Net sqm: {listing['sqm_net'] or 'N/A'}")
-                        st.markdown(f"- Rooms: {listing['rooms_count']}")
-                        st.markdown(f"- Bathrooms: {listing['bathrooms_count']}")
-                        st.markdown(f"- Floor: {listing['floor_number']}/{listing['floor_total']}")
-                        st.markdown(f"- Elevator: {'Yes' if listing['has_elevator'] else 'No'}")
-
-                    with col3:
-                        st.markdown("**🏗️ Building**")
-                        st.markdown(f"- Type: {listing['building_type'] or 'N/A'}")
-                        st.markdown(f"- Year: {listing['construction_year'] or 'N/A'}")
-                        st.markdown(f"- Act Status: {listing['act_status'] or 'N/A'}")
-                        st.markdown(f"- Condition: {listing['condition'] or 'N/A'}")
-
-                    st.markdown("---")
-
-                    col1, col2 = st.columns(2)
-
-                    with col1:
-                        st.markdown("**📍 Location**")
-                        st.markdown(f"- District: {listing['district'] or 'N/A'}")
-                        st.markdown(f"- Neighborhood: {listing['neighborhood'] or 'N/A'}")
-                        st.markdown(f"- Address: {listing['address'] or 'N/A'}")
-                        st.markdown(f"- Metro: {listing['metro_station'] or 'N/A'} ({listing['metro_distance_m']}m)" if listing['metro_distance_m'] else "- Metro: N/A")
-                        st.markdown(f"- Orientation: {listing['orientation'] or 'N/A'}")
-
-                    with col2:
-                        st.markdown("**🏠 Features**")
-                        features = []
-                        if listing.get("has_balcony"): features.append("Balcony")
-                        if listing.get("has_garden"): features.append("Garden")
-                        if listing.get("has_terrace"): features.append("Terrace")
-                        if listing.get("has_parking"): features.append("Parking")
-                        if listing.get("has_storage"): features.append("Storage")
-                        if listing.get("has_garage"): features.append("Garage")
-                        if listing.get("has_elevator"): features.append("Elevator")
-                        if listing.get("has_ac_preinstalled"): features.append("AC")
-                        if listing.get("is_furnished"): features.append("Furnished")
-
-                        st.markdown(", ".join(features) if features else "No features recorded")
-
-                    # Link to original listing
-                    if listing["url"]:
-                        st.markdown(f"[🔗 View Original Listing]({listing['url']})")
+                    _render_details_tab(listing, listing_dict)
 
                 with tab2:
-                    st.markdown("### Score Breakdown")
-
-                    # Score metrics
-                    cols = st.columns(7)
-                    metrics = [
-                        ("Location", score.location, 25),
-                        ("Price/sqm", score.price_sqm, 20),
-                        ("Condition", score.condition, 15),
-                        ("Layout", score.layout, 15),
-                        ("Building", score.building, 10),
-                        ("Rental", score.rental, 10),
-                        ("Extras", score.extras, 5),
-                    ]
-
-                    for col, (name, value, weight) in zip(cols, metrics):
-                        with col:
-                            st.metric(f"{name} ({weight}%)", f"{value:.1f}/5")
-
-                    st.markdown("---")
-                    st.metric("**Total Weighted Score**", f"{score.total_weighted:.2f}/5.0")
-
-                    # Score bar chart
-                    score_data = {
-                        "Criterion": ["Location", "Price/sqm", "Condition", "Layout", "Building", "Rental", "Extras"],
-                        "Score": [score.location, score.price_sqm, score.condition, score.layout, score.building, score.rental, score.extras]
-                    }
-                    st.bar_chart(pd.DataFrame(score_data).set_index("Criterion"))
+                    _render_scoring_tab(listing_dict, score)
 
                 with tab3:
-                    st.markdown("### Deal Breaker Check")
-
-                    for db in deal_breakers:
-                        icon = "✅" if db.passed else "❌"
-                        color = "green" if db.passed else "red"
-                        st.markdown(f"{icon} **{db.name}**: {db.reason}")
+                    _render_deal_breakers_tab(deal_breakers)
 
                 with tab4:
-                    st.markdown("### Notes")
-                    st.text_area(
-                        "User Notes",
-                        value=listing.get("user_notes") or "",
-                        key="view_notes",
-                        disabled=True
-                    )
-
-                    st.markdown("### Viewing History")
-                    viewings = get_viewings_for_listing(listing_id)
-
-                    if viewings:
-                        for v in viewings:
-                            with st.expander(f"📅 Viewing on {v['date_viewed']}"):
-                                st.markdown(f"**Agent:** {v['agent_contact'] or 'N/A'}")
-                                st.markdown(f"**First Impressions:** {v['first_impressions'] or 'N/A'}")
-
-                                if v['positives']:
-                                    positives = json.loads(v['positives']) if isinstance(v['positives'], str) else v['positives']
-                                    st.markdown("**Positives:**")
-                                    for p in positives:
-                                        st.markdown(f"- ✅ {p}")
-
-                                if v['negatives']:
-                                    negatives = json.loads(v['negatives']) if isinstance(v['negatives'], str) else v['negatives']
-                                    st.markdown("**Negatives:**")
-                                    for n in negatives:
-                                        st.markdown(f"- ❌ {n}")
-                    else:
-                        st.info("No viewings recorded yet")
+                    _render_notes_tab(listing, listing_id, get_viewings_for_listing)
 
                 with tab5:
-                    st.markdown("### Update Listing")
-
-                    with st.form(key="update_form"):
-                        new_status = st.selectbox(
-                            "Status",
-                            ["New", "Contacted", "Viewed", "Shortlist", "Rejected"],
-                            index=["New", "Contacted", "Viewed", "Shortlist", "Rejected"].index(listing["status"]) if listing["status"] in ["New", "Contacted", "Viewed", "Shortlist", "Rejected"] else 0
-                        )
-
-                        new_decision = st.selectbox(
-                            "Decision",
-                            ["None", "Maybe", "Shortlist", "Reject", "Offer Made"],
-                            index=["None", "Maybe", "Shortlist", "Reject", "Offer Made"].index(listing["decision"]) if listing["decision"] in ["None", "Maybe", "Shortlist", "Reject", "Offer Made"] else 0
-                        )
-
-                        new_reason = st.text_area(
-                            "Decision Reason",
-                            value=listing.get("decision_reason") or ""
-                        )
-
-                        new_renovation = st.number_input(
-                            "Estimated Renovation (€)",
-                            value=float(listing.get("estimated_renovation_eur") or 0),
-                            step=1000.0
-                        )
-
-                        new_notes = st.text_area(
-                            "User Notes",
-                            value=listing.get("user_notes") or ""
-                        )
-
-                        submit = st.form_submit_button("Save Changes")
-
-                        if submit:
-                            success = update_listing_evaluation(
-                                listing_id,
-                                status=new_status,
-                                decision=None if new_decision == "None" else new_decision,
-                                decision_reason=new_reason if new_reason else None,
-                                estimated_renovation_eur=new_renovation if new_renovation > 0 else None,
-                                user_notes=new_notes if new_notes else None
-                            )
-                            if success:
-                                st.success("Listing updated!")
-                                st.rerun()
-                            else:
-                                st.error("Failed to update listing")
-
-                    # Add viewing form
-                    st.markdown("---")
-                    st.markdown("### Add Viewing")
-
-                    with st.form(key="add_viewing_form"):
-                        view_date = st.date_input("Date Viewed")
-                        view_agent = st.text_input("Agent Contact")
-                        view_impressions = st.text_area("First Impressions")
-                        view_positives = st.text_area("Positives (one per line)")
-                        view_negatives = st.text_area("Negatives (one per line)")
-
-                        add_viewing_btn = st.form_submit_button("Add Viewing")
-
-                        if add_viewing_btn:
-                            positives_list = [p.strip() for p in view_positives.split("\n") if p.strip()]
-                            negatives_list = [n.strip() for n in view_negatives.split("\n") if n.strip()]
-
-                            result = add_viewing(
-                                listing_id=listing_id,
-                                date_viewed=str(view_date),
-                                agent_contact=view_agent if view_agent else None,
-                                first_impressions=view_impressions if view_impressions else None,
-                                positives=positives_list if positives_list else None,
-                                negatives=negatives_list if negatives_list else None
-                            )
-                            if result:
-                                st.success("Viewing added!")
-                                st.rerun()
-                            else:
-                                st.error("Failed to add viewing")
+                    _render_edit_tab(listing, listing_id, update_listing_evaluation, add_viewing)
 
     else:
         st.info("No listings found. Try adjusting your filters or scrape some listings first.")
