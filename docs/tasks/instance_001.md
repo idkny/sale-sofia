@@ -79,6 +79,157 @@ archive/research/  archive/specs/          (code supersedes)
 
 ## Session History
 
+### 2025-12-26 (Session 12 - Signal-Based Wait + Timeout Fix)
+
+| Task | Status |
+|------|--------|
+| Fix wait_for_proxies blind polling bug | ✅ Complete (commit c9d99b8) |
+| Increase dynamic timeout (90s→400s) | ✅ Complete (commit fc40722) |
+| Add task time limits (7min soft, 8min hard) | ✅ Complete (commit fc40722) |
+| Fix 3 unit tests (None vs False) | ✅ Complete (commit c9d99b8) |
+| Research professional timeout patterns | ✅ Complete |
+| Run live test to verify | ⏸️ Partial (41/42 chunks, interrupted) |
+
+**Summary**: Fixed the `wait_for_proxies` blind polling bug by connecting it to the existing signal-based `wait_for_refresh_completion()`. Also increased dynamic timeout from 90s to 400s per chunk based on production data, and added soft/hard time limits to prevent zombie tasks.
+
+**Key Changes:**
+- `orchestrator.py:441-444` - `wait_for_proxies` now calls `wait_for_refresh_completion(task_id)`
+- `orchestrator.py:596` - `time_per_chunk` changed from 90 to 400 seconds
+- `proxies/tasks.py:279` - Added `soft_time_limit=420, time_limit=480`
+
+**Research Finding**: Multi-tier fallback (chord → Redis → file) is industry-standard "defense in depth" pattern, not hacky.
+
+---
+
+### 2025-12-26 (Session 11 - Proxy Merge Fix + New Bug Found)
+
+| Task | Status |
+|------|--------|
+| Fix false positive fallback message | ✅ Complete (commit 5b71300) |
+| Fix proxy file overwrite bug | ✅ Complete (commit 9d5d3ad) |
+| Run live test to verify fixes | ❌ FAILED - new bug found |
+| Document new bug for next session | ✅ Complete |
+
+---
+
+#### Fixes Committed This Session
+
+**1. False Positive Fallback Message (commit 5b71300)**
+
+Changed `_wait_via_chord` return type from `bool` to `Optional[bool]`:
+- `True` = chord completed, enough proxies
+- `False` = chord completed, not enough proxies (NO fallback)
+- `None` = chord timeout/failure (triggers fallback)
+
+Files: `orchestrator.py` lines 594-601, 636-645, 679-690
+
+**2. Proxy File Overwrite Bug (commit 9d5d3ad)**
+
+Problem: Multiple concurrent refresh jobs were overwriting `live_proxies.json`:
+- Job 1: 11 proxies → file has 11
+- Job 2: 1 proxy → file has 1 (OVERWROTE!)
+- Job 3: 4 proxies → file has 4 (OVERWROTE!)
+
+Fix: `_save_proxy_files` now MERGES new proxies with existing:
+- De-duplicates by `host:port` key
+- New proxies override existing (fresher data)
+- Sorts by timeout (fastest first)
+
+Files: `proxies/tasks.py` lines 334-372
+
+---
+
+#### NEW BUG FOUND: `wait_for_proxies` Timeout Too Short
+
+**Symptom**: Live test timed out after 600s with message:
+```
+[WAIT] 0/0 usable proxies... (585s, celery: alive)
+Timeout waiting for proxies after 600s
+[ERROR] Could not get proxies. Aborting.
+```
+
+**But Redis showed 37/41 chunks completed!** The refresh was still running.
+
+**Root Cause Analysis**:
+
+1. `main.py:246` calls:
+   ```python
+   orch.wait_for_proxies(min_count=5, timeout=600)  # 10 min timeout
+   ```
+
+2. But `orchestrator.py:413` default is:
+   ```python
+   def wait_for_proxies(self, min_count=5, timeout=2400)  # 40 min default
+   ```
+
+3. With 41 chunks and 8 workers:
+   - Rounds = ceil(41/8) = 6 rounds
+   - Time per round ~90s (some chunks took 248s!)
+   - Total processing: 10-20 minutes
+   - Plus ~150s for PSC scraping
+   - **Total can easily exceed 10 minutes**
+
+4. The `wait_for_proxies` loop just polls file every 15s:
+   ```
+   [WAIT] 0/0 usable proxies... (0s)
+   [WAIT] 0/0 usable proxies... (15s)
+   ...repeats until timeout...
+   ```
+
+5. It times out BEFORE the chord completes and saves proxies!
+
+**Why Simply Increasing Timeout is NOT the Right Fix**:
+
+The user mentioned we've solved this before with a different approach. The problem is that `wait_for_proxies` is **disconnected** from the actual refresh progress. It just polls the file blindly with no awareness that:
+- A refresh task is running
+- How many chunks are done
+- When it will complete
+
+**The Right Fix** (for next session):
+
+`wait_for_proxies` should be aware of the refresh it triggered:
+1. After calling `trigger_proxy_refresh()`, it gets back `task_id`
+2. It should use `wait_for_refresh_completion(task_id)` instead of blind polling
+3. This would use the chord-based event wait we already implemented
+4. The dynamic timeout would be calculated based on actual chunk count
+
+**Key Code Locations**:
+
+1. `main.py:246` - where timeout=600 is set (symptom)
+2. `orchestrator.py:413-470` - `wait_for_proxies()` method (needs fix)
+3. `orchestrator.py:478-525` - `wait_for_refresh_completion()` (already has chord wait)
+4. `orchestrator.py:385-411` - `trigger_proxy_refresh()` returns task_id
+
+**The Pattern We Need**:
+```python
+def wait_for_proxies(self, min_count=5, timeout=2400):
+    if usable_count >= min_count:
+        return True
+
+    # Trigger refresh and get task_id
+    mtime_before, task_id = self.trigger_proxy_refresh()
+
+    # Use the chord-aware wait instead of blind polling!
+    if task_id:
+        return self.wait_for_refresh_completion(task_id, timeout, min_count)
+
+    # Fallback to file polling only if no task_id
+    return self._wait_via_file_monitoring(...)
+```
+
+**Test Data from Failed Run**:
+- Job ID: `77c5d41b-0803-4f1e-bf5d-01e7d9834f0b`
+- Total chunks: 41
+- Completed when timeout hit: 37/41 (90%)
+- Status: PROCESSING (would have completed in ~2 more minutes)
+
+**Files to Check Next Session**:
+1. `orchestrator.py:413-470` - `wait_for_proxies()` implementation
+2. `orchestrator.py:478-525` - `wait_for_refresh_completion()` implementation
+3. Look for how these two methods should be connected
+
+---
+
 ### 2025-12-26 (Session 10 - Live Test Verification)
 
 | Task | Status |
@@ -126,142 +277,7 @@ archive/research/  archive/specs/          (code supersedes)
 ```
 This is a false positive - the chord DID complete. Minor logic bug in return path.
 
----
-
-### 2025-12-26 (Session 9 - Chord Timeout Bug Fix)
-
-| Task | Status |
-|------|--------|
-| Debug hanging proxy refresh pipeline | Complete |
-| Identify chord.get() infinite block bug | Complete |
-| Implement dynamic timeout with fallback | Complete |
-| Verify fix with unit test | Complete |
-| Full live test | ✅ VERIFIED in Session 10 |
-
-**Problem Reported**: After refactoring, the proxy refresh process would "hang" or "get blocked" after chunks complete.
-
-**Root Cause Identified**:
-1. `wait_for_refresh_completion()` called from `_run_preflight_level3()` with no timeout parameter
-2. Default `timeout=0` caused `timeout_val = None` in `_wait_via_chord()`
-3. `chord_result.get(timeout=None)` blocks FOREVER if:
-   - Any chunk task fails
-   - The Celery worker dies
-   - The chord callback never fires
-4. The Redis polling fallback only ran if there was NO chord_id (not as a timeout fallback)
-
-**Evidence Found During Live Test**:
-- Celery log showed "Worker exited prematurely: signal 15 (SIGTERM)"
-- 39/40 chunk tasks succeeded, 1 died with worker
-- `process_check_results_task` was NEVER received (grep found no "received" log for it)
-- Chord callback didn't fire because not all chunks completed
-- `chord_result.get(timeout=None)` was blocking forever waiting for incomplete chord
-
-**Related Specs**:
-- `docs/specs/105_CHUNK_PROCESSING_TIMING_BUG.md` - Documented this exact issue on 2025-12-25
-- `archive/specs/107_REDIS_PROGRESS_TRACKING.md` - Proposed Redis polling as fallback
-
-**The Gap in Previous Implementation**:
-Spec 105 proposed TWO solutions working together:
-1. Event-based (chord) for fast completion detection
-2. Redis polling as fallback if chord times out
-
-But the implementation only used chord.get() with no timeout and no fallback!
-
-**Fix Applied to `orchestrator.py`**:
-
-1. **Added `total_chunks` parameter to `_wait_via_chord()`** (line 593):
-   - Now receives chunk count from dispatcher for timeout calculation
-
-2. **Dynamic timeout calculation** (lines 607-622):
-   ```python
-   # Formula from spec 105:
-   workers = 8  # Match Celery concurrency
-   time_per_chunk = 90  # seconds (45-95s range from spec)
-   buffer = 1.5  # 50% safety margin
-   rounds = (total_chunks + workers - 1) // workers
-   calculated = int(rounds * time_per_chunk * buffer)
-   timeout_val = max(calculated, 600)  # At least 10 min
-   ```
-
-3. **Fallback to Redis polling on timeout** (lines 504-514):
-   ```python
-   chord_success = self._wait_via_chord(..., total_chunks=dispatch.total_chunks)
-   if chord_success or not dispatch.job_id:
-       return chord_success
-   # Chord timed out - fall back to Redis polling
-   print("[INFO] Chord wait timed out, falling back to Redis polling...")
-   ```
-
-4. **Informative error messages** (lines 678-680):
-   - Changed from `[ERROR]` to `[WARNING]` for timeouts
-   - Added "(will try Redis fallback)" message
-
-**Timeout Scaling Verification** (matches spec 105):
-| Proxies | Chunks | Timeout |
-|---------|--------|---------|
-| ~3,000  | 29     | 600s (10m min) |
-| ~5,000  | 50     | 945s (15m) |
-| ~10,000 | 100    | 1755s (29m) |
-| ~20,000 | 200    | 3375s (56m) |
-
-**Files Changed**:
-- `orchestrator.py` lines 504-514, 585-624, 673-684
-
-**How to Run Full Live Test Next Session**:
-1. Kill any stale processes:
-   ```bash
-   pkill -f "celery.*worker" 2>/dev/null
-   pkill -f "python main.py" 2>/dev/null
-   ```
-
-2. Clean proxy files to force refresh:
-   ```bash
-   rm -f proxies/live_proxies.json proxies/live_proxies.txt
-   ```
-
-3. Run main.py and watch for:
-   - `[INFO] Dynamic timeout: Xs (N chunks, M rounds)` - proves fix is active
-   - If timeout occurs: `[WARNING] Chord timeout ... (will try Redis fallback)`
-   - Then: `[INFO] Falling back to Redis progress tracking...`
-
-4. The test should NOT hang anymore. If chord times out, Redis polling takes over.
-
-5. Alternative: Run the stress test directly:
-   ```bash
-   python tests/stress/test_orchestrator_event_based.py
-   ```
-
-**What Was NOT Tested This Session**:
-- Full end-to-end live test (PSC was failing with exit code 1, possibly concurrent access)
-- The actual fallback path (needs chord to timeout first)
-
-**Why PSC Failed During Testing**:
-- PSC executable returned exit code 1
-- Likely cause: concurrent PSC runs from leftover Beat schedule or multiple test runs
-- Solution: Always kill existing Celery workers before testing
-
----
-
-### 2025-12-25 (Session 8 - Event-Based Completion)
-
-| Task | Status |
-|------|--------|
-| Switch to event-based completion | Complete |
-| Test with actual orchestrator code | Complete - VERIFIED |
-
-**Summary**: Implemented and VERIFIED event-based completion using Celery chord result. Dispatcher now returns `chord_id`, orchestrator uses `AsyncResult(chord_id).get()` to block until done. Created `test_orchestrator_event_based.py` to verify actual production code path works.
-
-**Changes Made**:
-1. `proxies/tasks.py:124-127`: Changed `.delay()` to `.apply_async()`, returns `chord_id`
-2. `orchestrator.py:533-597`: Uses `AsyncResult(chord_id).get()` with background progress thread
-
-**Test Results**:
-- 35 chunks processed in 21 minutes
-- chord_id correctly extracted and used
-- Progress shown: 0% → 100%
-- 79 usable proxies at completion
-
-**Spec Archived**: `107_REDIS_PROGRESS_TRACKING.md` → `archive/specs/`
+*(Session 9 archived to `archive/sessions/instance_001_session_9_2025-12-26.md`)*
 
 ---
 

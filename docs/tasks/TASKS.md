@@ -12,9 +12,9 @@
 | Instance | Current Task |
 |----------|--------------|
 | 1 | Available |
-| 2 | Ollama Phase 3.5 - Research model & extraction improvements |
+| 2 | Available |
 
-**Session 12 (2025-12-26)**: Fixed `wait_for_proxies` blind polling bug - now uses signal-based `wait_for_refresh_completion()`.
+**Session 12 (2025-12-26)**: Fixed `wait_for_proxies` blind polling bug + increased dynamic timeout (90s→400s per chunk) + added task time limits (7min soft, 8min hard).
 
 **Session 11 (2025-12-26)**: Fixed false positive fallback msg + proxy overwrite bug. Found new bug: `wait_for_proxies` uses blind polling instead of chord wait.
 
@@ -46,7 +46,7 @@
 
 ## CRITICAL BUG: Chunk Processing Timing (P1)
 
-**Spec**: [105_CHUNK_PROCESSING_TIMING_BUG.md](../specs/105_CHUNK_PROCESSING_TIMING_BUG.md)
+**Spec**: [105_CHUNK_PROCESSING_TIMING_BUG.md](../../archive/specs/105_CHUNK_PROCESSING_TIMING_BUG.md) *(archived - all tasks complete)*
 
 **Bug Found During Test 2.2.6**: The test terminated BEFORE chunks finished processing because of hardcoded timeout.
 
@@ -87,7 +87,7 @@ Test only waited 5 minutes → FAIL
   - Bug: `chord_result.get(timeout=None)` blocked forever if any chunk failed
   - Fix: Dynamic timeout calculation + fallback to Redis polling
   - `orchestrator.py:504-514` - fallback logic
-  - `orchestrator.py:607-622` - dynamic timeout: `max((chunks/8)*90*1.5, 600)`
+  - `orchestrator.py:594-600` - dynamic timeout: `max((chunks/8)*400*1.5, 600)` (updated Session 12)
 - [x] Verify chord timeout fix with full live test (Session 10)
   - Verified: Dynamic timeout active, chord completes without hanging
 - [x] Fix false positive fallback message (Session 11, commit 5b71300)
@@ -177,34 +177,35 @@ Test only waited 5 minutes → FAIL
 - [x] Implement `extract_description()` public function
 - [x] Test: Extract from 5 descriptions - **78% extraction** (7/9 fields avg)
 
-### Phase 3.5: Research - Model & Extraction Improvements
+### Phase 3.5: Prompt Accuracy Improvements
 
-**Question**: Why do we need translation when qwen2.5:1.5b supports 200 languages including Bulgarian?
+**Spec**: [108_OLLAMA_PROMPT_IMPROVEMENTS.md](../specs/108_OLLAMA_PROMPT_IMPROVEMENTS.md)
+**Research**: [ollama_language_behavior.md](../research/ollama_language_behavior.md)
 
-#### Research Tasks
-- [ ] Investigate why model returns Bulgarian despite English prompt constraints
-  - Check if model is set correctly (temperature, system prompt, format)
-  - Test with explicit `system` role vs `prompt` only
-  - Compare qwen2.5:1.5b vs qwen2.5:3b for Bulgarian accuracy
-- [ ] Research Ollama's `format: json` behavior with non-English languages
-- [ ] Test if prompt language affects output language (Bulgarian prompt → English output?)
+**Problem**: Bulgarian prompts → 40% accuracy. English prompts → 100% accuracy.
 
-#### If Translation Still Needed - Vocabulary Approach
-- [ ] Create `llm/vocabulary.py` with comprehensive Bulgarian→English mappings
-  - Real estate terms (тухла, панел, ЕПК, ТЕЦ, etc.)
-  - Stop words (и, или, в, на, за, etc.)
-  - Neighborhood names
-  - Features (асансьор, тераса, мазе, etc.)
-- [ ] Implement regex pre-filter: extract known words from description
-- [ ] Pass only matched vocabulary to LLM for final verdict
-- [ ] Test: Compare accuracy with/without vocabulary pre-filter
+#### Research (Complete)
+- [x] Investigate why model returns Bulgarian despite English prompt constraints
+- [x] Research Ollama's `format: json` behavior (only syntax, not values)
+- [x] Test prompt language impact (English prompts = 5/5, Bulgarian = 2/5)
+- [x] Create test script: `tests/llm/test_ollama_prompts.py`
 
-#### Scrapling + LLM Synergy
-- [ ] Research: Can Scrapling's element detection help LLM?
-  - Scrapling knows which CSS selector contains price, area, etc.
-  - Pass element context to LLM: "This element (.price) contains: 125000 EUR"
-  - LLM validates/parses rather than discovers
-- [ ] Test: Element-aware prompts vs raw text prompts
+#### Implementation Tasks (Complete - Session 7)
+- [x] Phase 1: Switch prompts to English with "RESPOND IN ENGLISH ONLY"
+  - Modified `llm/prompts.py`: FIELD_MAPPING_PROMPT, EXTRACTION_PROMPT
+- [x] Phase 2: Add JSON schema enforcement
+  - Modified `llm/llm_main.py`: Uses `schema_class.model_json_schema()` in format
+- [x] Phase 3: Configure OLLAMA_KEEP_ALIVE for batch processing
+  - Added `keep_alive: 1h` to `config/ollama.yaml`
+  - Modified `llm/llm_main.py`: Passes keep_alive to API
+- [x] Run test suite: **100% accuracy** on enum fields (V4 pattern)
+- [x] Keep `_translate_values()` as safety fallback (unchanged)
+
+#### Vocabulary Approach (Deferred - English prompts work better)
+- [ ] Create `llm/vocabulary.py` if needed after Phase 1-2
+
+#### Scrapling + LLM Synergy (Future)
+- [ ] Research element-aware prompts vs raw text prompts
 - [ ] Implement hybrid extraction: Scrapling CSS → LLM fallback
 
 ### Phase 4: Scrapling Integration
