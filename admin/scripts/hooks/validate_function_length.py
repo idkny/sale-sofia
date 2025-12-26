@@ -32,19 +32,8 @@ SOFT_LIMIT = 30  # Warning threshold
 
 # Files with known violations (legacy) - warn only, don't block
 # Remove from this list after refactoring
-LEGACY_FILES = {
-    "orchestrator.py",
-    "main.py",
-    "proxies/tasks.py",
-    "proxies/quality_checker.py",
-    "proxies/proxy_validator.py",
-    "proxies/proxy_scorer.py",
-    "proxies/anonymity_checker.py",
-    "browsers/browsers_main.py",
-    "websites/imot_bg/imot_scraper.py",
-    "websites/bazar_bg/bazar_scraper.py",
-    "app/scoring.py",
-}
+# NOTE: Cleared 2025-12-26 after completing all refactoring tasks
+LEGACY_FILES: set[str] = set()
 
 # Project root detection
 SCRIPT_DIR = Path(__file__).resolve().parent
