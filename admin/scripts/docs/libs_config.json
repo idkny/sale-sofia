@@ -1,0 +1,101 @@
+{
+  "metadata": {
+    "description": "Configuration for GitHub documentation scraper - lists libraries and their doc locations",
+    "created_at": "2025-12-26",
+    "updated_at": "2025-12-26",
+    "tags": ["documentation", "github", "config"]
+  },
+  "libraries": {
+    "scrapling": {
+      "owner": "D4Vinci",
+      "repo": "Scrapling",
+      "docs_path": "docs",
+      "branch": "main",
+      "enabled": true,
+      "comment": "Main scraping library - docs folder"
+    },
+    "camoufox": {
+      "owner": "daijro",
+      "repo": "camoufox",
+      "docs_path": ".",
+      "branch": "main",
+      "enabled": true,
+      "comment": "Stealth browser - root-level README"
+    },
+    "celery": {
+      "owner": "celery",
+      "repo": "celery",
+      "docs_path": "docs",
+      "branch": "main",
+      "enabled": true
+    },
+    "redis-py": {
+      "owner": "redis",
+      "repo": "redis-py",
+      "docs_path": "docs",
+      "branch": "master",
+      "enabled": true
+    },
+    "streamlit": {
+      "owner": "streamlit",
+      "repo": "streamlit",
+      "docs_path": "docs",
+      "branch": "develop",
+      "enabled": true
+    },
+    "httpx": {
+      "owner": "encode",
+      "repo": "httpx",
+      "docs_path": "docs",
+      "branch": "master",
+      "enabled": true
+    },
+    "mubeng": {
+      "owner": "kitabisa",
+      "repo": "mubeng",
+      "docs_path": ".",
+      "branch": "master",
+      "enabled": true,
+      "comment": "Proxy rotator - root-level README"
+    },
+    "playwright-python": {
+      "owner": "microsoft",
+      "repo": "playwright-python",
+      "docs_path": "docs",
+      "branch": "main",
+      "enabled": true
+    },
+    "loguru": {
+      "owner": "Delgan",
+      "repo": "loguru",
+      "docs_path": "docs",
+      "branch": "master",
+      "enabled": true,
+      "comment": "Logging library used throughout project"
+    },
+    "pydantic": {
+      "owner": "pydantic",
+      "repo": "pydantic",
+      "docs_path": "docs",
+      "branch": "main",
+      "enabled": true,
+      "comment": "Data validation for models"
+    },
+    "pandas": {
+      "owner": "pandas-dev",
+      "repo": "pandas",
+      "docs_path": "doc/source",
+      "branch": "main",
+      "enabled": true,
+      "comment": "Data analysis for dashboard"
+    },
+    "pytest": {
+      "owner": "pytest-dev",
+      "repo": "pytest",
+      "docs_path": "doc/en",
+      "branch": "main",
+      "enabled": true,
+      "comment": "Testing framework"
+    }
+  }
+}
