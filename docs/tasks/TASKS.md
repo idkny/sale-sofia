@@ -139,7 +139,10 @@ Test only waited 5 minutes → FAIL
 - [x] Migrate imot_scraper.py to Scrapling (2025-12-25, 17 tests pass)
 - [x] Migrate bazar_scraper.py to Scrapling (2025-12-25)
 - [x] Enable adaptive mode with baseline selectors (2025-12-25)
-- [ ] Test StealthyFetcher with mubeng proxy
+- [x] Test StealthyFetcher with mubeng proxy (2025-12-25)
+  - StealthyFetcher works (215KB from imot.bg)
+  - HTTPS + mubeng has SSL issues (proxy cert conflict)
+  - Recommendation: Use StealthyFetcher without proxy for HTTPS sites
 - [ ] Set up Ollama LLM for description extraction
 
 ### Phase 1: Scraper Validation

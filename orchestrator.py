@@ -605,8 +605,9 @@ class Orchestrator:
                 return False
 
             usable_count = self.get_usable_proxy_count()
-            print(f"[SUCCESS] Chord complete! {usable_count} usable proxies after {mins}m {secs}s")
+            print(f"[SUCCESS] Chord complete! {usable_count} usable proxies after {mins}m {secs}s", flush=True)
             logger.info(f"Chord {chord_id} completed, {usable_count} usable proxies")
+            print(f"[DEBUG] Returning from wait_for_refresh_completion (usable >= min: {usable_count} >= {min_count})", flush=True)
             return usable_count >= min_count
 
         except Exception as e:

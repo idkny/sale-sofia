@@ -1,6 +1,6 @@
 # Adding New Components
 
-> Step-by-step guides for extending the system. Read when adding scrapers, browsers, or proxy sources.
+> Step-by-step guides for extending the system. Read when adding scrapers or proxy sources.
 
 ---
 
@@ -27,22 +27,37 @@ SQM_SELECTOR = "span.area"
 
 ### 3. Create scraper class
 
+Use ScraplingMixin for DOM operations:
+
 ```python
 from ..base_scraper import BaseSiteScraper, ListingData
+from ..scrapling_base import ScraplingMixin
 
-class NewsiteBgScraper(BaseSiteScraper):
+class NewsiteBgScraper(BaseSiteScraper, ScraplingMixin):
     def __init__(self):
         super().__init__()
         self.site_name = "newsite.bg"
         self.base_url = "https://www.newsite.bg"
 
     async def extract_listing(self, html, url) -> Optional[ListingData]:
-        # Implement extraction using selectors
-        pass
+        # Parse HTML with Scrapling Adaptor
+        adaptor = self.parse_html(html)
+
+        # Use CSS selectors
+        price = adaptor.css_first("span.price")
+        sqm = adaptor.css_first("span.area")
+
+        return ListingData(
+            price_eur=self.extract_number(price.text if price else None),
+            sqm_total=self.extract_number(sqm.text if sqm else None),
+            # ... other fields
+        )
 
     async def extract_search_results(self, html) -> List[str]:
         # Return list of listing URLs from search page
-        pass
+        adaptor = self.parse_html(html)
+        links = adaptor.css("a.listing-link")
+        return [link.attrib.get("href") for link in links]
 ```
 
 ### 4. Register in websites/__init__.py
@@ -70,43 +85,44 @@ newsite.bg:
 
 ---
 
-## Adding a New Browser Strategy
+## Using Scrapling Fetchers
 
-### 1. Create strategy file
+The system uses Scrapling for all HTTP fetching. Two fetchers are available:
 
-**Location**: `browsers/strategies/newbrowser.py`
+### Fetcher (Fast HTTP)
 
-```python
-from .base import BaseBrowserStrategy
-from typing import Tuple
-from playwright.async_api import Browser, BrowserContext
-
-class NewBrowserStrategy(BaseBrowserStrategy):
-    async def launch(self) -> Tuple[Browser, BrowserContext]:
-        # Launch and configure browser
-        # Return (browser, context)
-        pass
-
-    async def close(self) -> None:
-        # Cleanup resources
-        pass
-```
-
-### 2. Auto-discovery
-
-Strategy is **auto-discovered** via naming convention:
-- Class must end with `Strategy`
-- File must be in `browsers/strategies/`
-
-No manual registration needed.
-
-### 3. Usage
+For simple pages without anti-bot protection:
 
 ```python
-from browsers.browsers_main import create_instance
+from scrapling.fetchers import Fetcher
 
-handle = await create_instance("newbrowser", proxy=proxy_url)
+response = Fetcher.fetch(
+    url="https://example.com/search",
+    proxy="http://localhost:8089",
+    timeout=15000
+)
+html = response.html_content
 ```
+
+### StealthyFetcher (Anti-Bot Bypass)
+
+For pages with Cloudflare or similar protection:
+
+```python
+from scrapling.fetchers import StealthyFetcher
+
+response = StealthyFetcher.fetch(
+    url="https://example.com/listing/123",
+    proxy="http://localhost:8089",
+    humanize=True,
+    block_webrtc=True,
+    network_idle=True,
+    timeout=30000
+)
+html = response.html_content
+```
+
+**Important**: Always use a proxy. The mubeng rotator runs on `localhost:8089`.
 
 ---
 
@@ -162,7 +178,7 @@ def scrape_all_proxies():
 
 | Component | Key Files |
 |-----------|-----------|
-| Scrapers | `websites/__init__.py`, `websites/base_scraper.py` |
-| Browsers | `browsers/browsers_main.py`, `browsers/strategies/base.py` |
+| Scrapers | `websites/__init__.py`, `websites/base_scraper.py`, `websites/scrapling_base.py` |
+| Fetching | Use `scrapling.fetchers.Fetcher` or `StealthyFetcher` in `main.py` |
 | Proxies | `proxies/tasks.py`, `proxies/proxies_main.py` |
 | Config | `config/start_urls.yaml`, `config/loader.py` |

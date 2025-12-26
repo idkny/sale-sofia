@@ -415,10 +415,9 @@ class ScraplingMixin:
     def fetch_stealth(
         self,
         url: str,
-        proxy: Optional[str] = None,
-        solve_cloudflare: bool = True,
         humanize: bool = True,
         timeout: int = 30000,
+        skip_proxy: bool = False,
     ) -> Adaptor:
         """
         Fetch page with StealthyFetcher (anti-bot bypass).
@@ -427,28 +426,34 @@ class ScraplingMixin:
         - Fingerprint spoofing
         - WebRTC leak protection
         - Human-like behavior simulation
+        - Mubeng proxy rotation (default)
+
+        Note: HTTPS sites may have SSL issues with HTTP proxies.
+        Set skip_proxy=True if you encounter SEC_ERROR_UNKNOWN_ISSUER errors.
 
         Args:
             url: Target URL
-            proxy: Proxy URL (defaults to mubeng)
-            solve_cloudflare: Auto-solve Cloudflare challenges
             humanize: Simulate human mouse movement
             timeout: Request timeout in ms
+            skip_proxy: Set True to skip mubeng proxy (for SSL issues)
 
         Returns:
             Scrapling Adaptor with page content
         """
         try:
-            page = StealthyFetcher.fetch(
-                url,
-                proxy=proxy or MUBENG_PROXY,
-                solve_cloudflare=solve_cloudflare,
-                humanize=humanize,
-                geoip=True,
-                block_webrtc=True,
-                network_idle=True,
-                timeout=timeout,
-            )
+            fetch_kwargs = {
+                "url": url,
+                "humanize": humanize,
+                "geoip": True,
+                "block_webrtc": True,
+                "network_idle": True,
+                "timeout": timeout,
+            }
+            # Use mubeng proxy by default, skip only when explicitly requested
+            if not skip_proxy:
+                fetch_kwargs["proxy"] = MUBENG_PROXY
+
+            page = StealthyFetcher.fetch(**fetch_kwargs)
             logger.debug(f"StealthyFetcher: {url} - success")
             return page
         except Exception as e:
@@ -458,8 +463,8 @@ class ScraplingMixin:
     def fetch_fast(
         self,
         url: str,
-        proxy: Optional[str] = None,
         timeout: int = 15000,
+        skip_proxy: bool = False,
     ) -> Adaptor:
         """
         Fast HTTP fetch without browser (no JS execution).
@@ -471,18 +476,21 @@ class ScraplingMixin:
 
         Args:
             url: Target URL
-            proxy: Proxy URL (defaults to mubeng)
             timeout: Request timeout in ms
+            skip_proxy: Set True to skip mubeng proxy
 
         Returns:
             Scrapling Adaptor with page content
         """
         try:
-            page = Fetcher.fetch(
-                url,
-                proxy=proxy or MUBENG_PROXY,
-                timeout=timeout,
-            )
+            fetch_kwargs = {
+                "url": url,
+                "timeout": timeout,
+            }
+            if not skip_proxy:
+                fetch_kwargs["proxy"] = MUBENG_PROXY
+
+            page = Fetcher.fetch(**fetch_kwargs)
             logger.debug(f"Fetcher: {url} - success")
             return page
         except Exception as e:

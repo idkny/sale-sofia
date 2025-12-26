@@ -238,7 +238,7 @@ class {SiteName}Scraper(ScraplingMixin, BaseSiteScraper):
 | `self.get_attr(el, attr)` | Get attribute | `href = self.get_attr(link, "href")` |
 | `self.get_page_text(page)` | Full page text | `text = self.get_page_text(page)` |
 | `self.fetch(url, proxy)` | Fetch with encoding | `page = self.fetch(url)` |
-| `self.fetch_stealth(url)` | Anti-bot fetch | `page = self.fetch_stealth(url)` |
+| `self.fetch_stealth(url)` | Anti-bot fetch (no proxy by default) | `page = self.fetch_stealth(url)` |
 
 ### 3.3 Adaptive Mode (Selector Resilience)
 

@@ -19,7 +19,8 @@ from typing import Any, Optional
 from dotenv import load_dotenv
 from loguru import logger
 
-from browsers.browsers_main import create_instance
+from scrapling.fetchers import Fetcher, StealthyFetcher
+
 from data import data_store_main
 from paths import LOGS_DIR, PROXIES_DIR
 from proxies.proxies_main import (
@@ -30,9 +31,11 @@ from proxies.proxy_scorer import ScoredProxyPool
 from proxies.proxy_validator import preflight_check
 from utils.log_config import setup_logging
 
+# Default mubeng proxy endpoint - ALWAYS use proxy for scraping
+MUBENG_PROXY = "http://localhost:8089"
+
 
 async def _collect_listing_urls(
-    page,
     scraper,
     start_url: str,
     limit: int,
@@ -42,6 +45,8 @@ async def _collect_listing_urls(
 ) -> list[str]:
     """
     Phase 1: Collect listing URLs from search pages with pagination.
+
+    Uses Fetcher (fast HTTP) for search pages - no JS needed.
 
     Returns:
         List of listing URLs found (up to limit).
@@ -54,8 +59,13 @@ async def _collect_listing_urls(
         logger.info(f"[Page {current_page}] Loading: {current_url}")
 
         try:
-            await page.goto(current_url, wait_until="domcontentloaded")
-            html = await page.content()
+            # Use fast Fetcher for search pages (no JS needed)
+            response = Fetcher.fetch(
+                url=current_url,
+                proxy=proxy or MUBENG_PROXY,
+                timeout=15000
+            )
+            html = response.html_content
 
             # Check if this is the last page
             if hasattr(scraper, "is_last_page") and scraper.is_last_page(html, current_page):
@@ -92,13 +102,12 @@ async def _collect_listing_urls(
         else:
             break
 
-        await asyncio.sleep(delay)
+        time.sleep(delay)
 
     return all_listing_urls[:limit]
 
 
 async def _scrape_listings(
-    page,
     scraper,
     urls: list[str],
     delay: float,
@@ -107,6 +116,8 @@ async def _scrape_listings(
 ) -> dict:
     """
     Phase 2: Scrape individual listings from collected URLs.
+
+    Uses StealthyFetcher for listing pages - anti-bot protection.
 
     Returns:
         Dictionary with stats: {scraped: int, failed: int, total_attempts: int}
@@ -118,8 +129,16 @@ async def _scrape_listings(
         stats["total_attempts"] += 1
 
         try:
-            await page.goto(url, wait_until="domcontentloaded")
-            html = await page.content()
+            # Use StealthyFetcher for listings (anti-bot bypass)
+            response = StealthyFetcher.fetch(
+                url=url,
+                proxy=proxy or MUBENG_PROXY,
+                humanize=True,
+                block_webrtc=True,
+                network_idle=True,
+                timeout=30000
+            )
+            html = response.html_content
 
             listing = await scraper.extract_listing(html, url)
             if listing:
@@ -141,7 +160,7 @@ async def _scrape_listings(
                 proxy_pool.record_result(proxy, success=False)
             continue
 
-        await asyncio.sleep(delay)
+        time.sleep(delay)
 
     return stats
 
@@ -171,39 +190,18 @@ async def scrape_from_start_url(
     logger.info(f"Starting crawl from: {start_url}")
     logger.info(f"Rate limit: {60/delay:.1f} URLs/min ({delay} sec delay)")
     logger.info(f"Target: {limit} listings")
-    if proxy:
-        logger.info(f"Using proxy: {proxy}")
+    effective_proxy = proxy or MUBENG_PROXY
+    logger.info(f"Using proxy: {effective_proxy}")
 
-    stats = {"scraped": 0, "failed": 0, "total_attempts": 0}
+    # Phase 1: Collect listing URLs from search pages
+    urls = await _collect_listing_urls(scraper, start_url, limit, delay, proxy, proxy_pool)
+    logger.info(f"Collected {len(urls)} listing URLs to scrape")
 
-    browser_handle = await create_instance(browser_type="chromiumstealth", proxy=proxy)
-    if not browser_handle:
-        logger.error("Failed to initialize browser")
-        return stats
-
-    try:
-        page = await browser_handle.new_tab()
-        urls = await _collect_listing_urls(page, scraper, start_url, limit, delay, proxy, proxy_pool)
-        logger.info(f"Collected {len(urls)} listing URLs to scrape")
-        stats = await _scrape_listings(page, scraper, urls, delay, proxy, proxy_pool)
-        logger.info(f"Scraping complete. Saved {stats['scraped']}/{len(urls)} listings.")
-    finally:
-        await browser_handle._browser.close()
+    # Phase 2: Scrape individual listings
+    stats = await _scrape_listings(scraper, urls, delay, proxy, proxy_pool)
+    logger.info(f"Scraping complete. Saved {stats['scraped']}/{len(urls)} listings.")
 
     return stats
-
-
-async def cleanup_browser(browser_instance: Optional[Any], browser_type: str) -> None:
-    """Clean up browser resources."""
-    if browser_instance:
-        logger.info(f"Cleaning up browser connection for '{browser_type}'.")
-        try:
-            if browser_type == "my_browser_gui":
-                await browser_instance.disconnect()
-            else:
-                await browser_instance.close()
-        except Exception as e:
-            logger.error(f"Error during browser cleanup: {e}")
 
 
 def _print_banner() -> None:
@@ -340,12 +338,14 @@ def _run_preflight_level3(orch, proxy_pool: Optional[ScoredProxyPool]) -> tuple[
 
     mtime_before, task_id = orch.trigger_proxy_refresh()
     if not orch.wait_for_refresh_completion(mtime_before, min_count=5, task_id=task_id):
-        print("[ERROR] Proxy refresh timed out or failed. Aborting.")
+        print("[ERROR] Proxy refresh timed out or failed. Aborting.", flush=True)
         return False, None, "", None
+
+    print("[DEBUG] wait_for_refresh_completion returned True, continuing...", flush=True)
 
     # Reload proxy pool after refresh
     if proxy_pool:
-        print("[INFO] Reloading proxy pool after refresh...")
+        print("[INFO] Reloading proxy pool after refresh...", flush=True)
         proxy_pool.reload_proxies()
         stats = proxy_pool.get_stats()
         print(f"[SUCCESS] Proxy pool reloaded: {stats['total_proxies']} proxies")
