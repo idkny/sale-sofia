@@ -18,7 +18,7 @@
 | Chunk Processing Timing Bug | 12 | Completed |
 | Celery + Mubeng + PSC Integration (Phases 1-2) | 14 | Completed |
 | Page Change Detection (Phases 1-3) | 8 | Completed |
-| Ollama Integration (Phases 1-5) | 45+ | Completed |
+| Ollama Integration (Phases 1-5, 3.6) | 45+ | Completed |
 | Crawler Validation (Phase 0) | 7 | Completed |
 | Historical Completed Work | 35+ | Completed |
 
@@ -28,9 +28,11 @@
 
 | Instance | Current Task |
 |----------|--------------|
-| 1 | Available |
+| 1 | Spec 112 Phase 1: Foundation (7 tasks) |
 | 2 | Available |
 | 3 | Available |
+
+**Session 28 (2025-12-27)**: Instance 2 - Ollama Phase 3.6 complete. Fixed has_elevator extraction (was 0%, now 100%). Dictionary now extracts booleans directly instead of relying on LLM. Overall accuracy: 100%. Phases 4-5 skipped (conditions not met - already above thresholds).
 
 **Session 28 (2025-12-27)**: Instance 1 - Scraper Resilience Research. Analyzed current error handling gaps, researched best practices, explored AutoBiz codebase for production-grade patterns. Created research doc, spec 112, and 18 implementation tasks. Found 5 modules to port: circuit breaker, error system, rate limiter, bulkhead, timeout budget.
 
@@ -89,14 +91,11 @@
 
 ---
 
-### Ollama Integration - Remaining Tasks
+### Ollama Integration - Future Enhancements
 
 **Spec**: [107_OLLAMA_INTEGRATION.md](../specs/107_OLLAMA_INTEGRATION.md)
 
-#### Phase 3.6: Achieve 95%+ Accuracy (Remaining)
-- [ ] Phase 4: Hybrid CSS/LLM (If < 95%) - Extract structured fields with CSS, LLM for free-text
-- [ ] Phase 5: Field-Specific Prompts (If < 98%) - Focused prompts for problematic fields
-- [ ] No field below 80% accuracy - has_elevator at 0% (1 sample)
+> **Phase 3.6 Complete**: Achieved 100% accuracy. Dictionary extracts booleans directly (has_elevator fix). Phases 4-5 skipped (thresholds already exceeded).
 
 #### Future: Scrapling + LLM Synergy
 - [ ] Research element-aware prompts vs raw text prompts
@@ -107,16 +106,17 @@
 ### Scraper Resilience & Error Handling (P1)
 
 **Spec**: [112_SCRAPER_RESILIENCE.md](../specs/112_SCRAPER_RESILIENCE.md)
+**Tasks**: [112_RESILIENCE_IMPLEMENTATION.md](112_RESILIENCE_IMPLEMENTATION.md) (detailed breakdown with AutoBiz refs)
 **Research**: [SCRAPER_RESILIENCE_RESEARCH.md](../research/SCRAPER_RESILIENCE_RESEARCH.md)
 
 #### Phase 1: Foundation
-- [ ] Create `resilience/` module structure
-- [ ] Implement `resilience/exceptions.py` (exception hierarchy)
-- [ ] Implement `resilience/error_classifier.py`
-- [ ] Implement `resilience/retry.py` (sync + async with backoff + jitter)
-- [ ] Add resilience settings to `config/settings.py`
-- [ ] Integrate retry decorator into `main.py`
-- [ ] Write unit tests for Phase 1
+- [ ] [Instance 1] Create `resilience/` module structure
+- [ ] [Instance 1] Implement `resilience/exceptions.py` (exception hierarchy)
+- [ ] [Instance 1] Implement `resilience/error_classifier.py`
+- [ ] [Instance 1] Implement `resilience/retry.py` (sync + async with backoff + jitter)
+- [ ] [Instance 1] Add resilience settings to `config/settings.py`
+- [ ] [Instance 1] Integrate retry decorator into `main.py`
+- [ ] [Instance 1] Write unit tests for Phase 1
 
 #### Phase 2: Domain Protection
 - [ ] Implement `resilience/circuit_breaker.py`
@@ -162,4 +162,4 @@
 
 ---
 
-**Last Updated**: 2025-12-27 (Archived completed sections)
+**Last Updated**: 2025-12-27 (Ollama Phase 3.6 complete - 100% accuracy)

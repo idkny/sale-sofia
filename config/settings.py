@@ -44,3 +44,30 @@ SCORE_FAILURE_MULTIPLIER = 0.5  # -50% penalty on failure
 # Thresholds for auto-removal
 MAX_PROXY_FAILURES = 3   # Auto-remove after this many consecutive failures
 MIN_PROXY_SCORE = 0.01   # Auto-remove if score drops below this
+
+# =============================================================================
+# RESILIENCE SETTINGS
+# =============================================================================
+
+# Retry settings
+RETRY_MAX_ATTEMPTS = 5
+RETRY_BASE_DELAY = 2.0       # seconds
+RETRY_MAX_DELAY = 60.0       # seconds cap
+RETRY_JITTER_FACTOR = 0.5    # 50% random jitter
+
+# Circuit breaker settings
+CIRCUIT_BREAKER_FAIL_MAX = 5
+CIRCUIT_BREAKER_RESET_TIMEOUT = 60  # seconds
+CIRCUIT_BREAKER_HALF_OPEN_CALLS = 2
+CIRCUIT_BREAKER_ENABLED = True
+
+# Rate limiting (requests per minute per domain)
+DOMAIN_RATE_LIMITS = {
+    "imot.bg": 10,
+    "bazar.bg": 10,
+    "default": 10,
+}
+
+# Checkpoint settings
+CHECKPOINT_BATCH_SIZE = 10  # Save every N URLs
+CHECKPOINT_DIR = "data/checkpoints"

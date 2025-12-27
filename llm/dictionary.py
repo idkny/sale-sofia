@@ -14,7 +14,6 @@ import yaml
 logger = logging.getLogger(__name__)
 
 DICT_PATH = Path(__file__).parent.parent / "config" / "bulgarian_dictionary.yaml"
-UNKNOWN_LOG_PATH = Path(__file__).parent.parent / "data" / "logs" / "unknown_bulgarian_words.log"
 
 
 class BulgarianDictionary:
@@ -132,16 +131,6 @@ class BulgarianDictionary:
 
         return '\n'.join(lines)
 
-    def log_unknown(self, words: List[str]):
-        """Log unknown Bulgarian words for future dictionary updates."""
-        if not words:
-            return
-        UNKNOWN_LOG_PATH.parent.mkdir(parents=True, exist_ok=True)
-        with open(UNKNOWN_LOG_PATH, 'a', encoding='utf-8') as f:
-            for word in words:
-                f.write(f"{word}\n")
-        logger.info(f"Logged {len(words)} unknown Bulgarian words")
-
 
 # Module-level singleton
 _dictionary: Optional[BulgarianDictionary] = None
@@ -155,13 +144,37 @@ def get_dictionary() -> BulgarianDictionary:
     return _dictionary
 
 
-def scan_and_build_hints(text: str) -> Tuple[str, dict]:
+def scan_and_build_hints(text: str) -> Tuple[str, dict, dict, dict]:
     """Convenience function: scan text and return hints + extractions.
 
     Returns:
-        (hints_text, numeric_extractions)
+        (hints_text, numeric_extractions, boolean_extractions, enum_extractions)
+
+    Dictionary-First Approach:
+    - Numeric: regex extraction (100% reliable for patterns)
+    - Boolean: keyword matching (100% reliable)
+    - Enum: keyword matching (100% reliable for known words)
+    - LLM only handles fields dictionary didn't find
     """
     dictionary = get_dictionary()
     result = dictionary.scan(text)
     hints = dictionary.build_hints_text(result)
-    return hints, result['numeric_extractions']
+
+    # Convert boolean_hints to actual boolean values
+    # If dictionary found keywords for a boolean field, set it to True
+    boolean_extractions = {}
+    for field, keywords in result.get('boolean_hints', {}).items():
+        if keywords:  # If any keywords were found for this field
+            boolean_extractions[field] = True
+
+    # Convert enum_hints to actual enum values
+    # Use the longest matching keyword (most specific match)
+    enum_extractions = {}
+    for field, matches in result.get('enum_hints', {}).items():
+        if matches:
+            # Sort by keyword length (longest first) for most specific match
+            sorted_matches = sorted(matches, key=lambda x: len(x[0]), reverse=True)
+            # Use the English value from the longest match
+            enum_extractions[field] = sorted_matches[0][1]
+
+    return hints, result['numeric_extractions'], boolean_extractions, enum_extractions

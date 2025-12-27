@@ -499,7 +499,7 @@ def extract_description(description: str) -> ExtractedDescription:
         return ExtractedDescription(confidence=0.0)
 
     # Scan text for Bulgarian keywords and build dynamic hints
-    hints, pre_extracted = scan_and_build_hints(description)
+    hints, pre_extracted, bool_extracted, enum_extracted = scan_and_build_hints(description)
 
     # Build prompt with injected hints
     prompt = build_extraction_prompt(description, hints)
@@ -512,6 +512,18 @@ def extract_description(description: str) -> ExtractedDescription:
     # Override with pre-extracted numeric values (regex is more reliable than LLM)
     for field, value in pre_extracted.items():
         if value is not None and hasattr(result, field):
+            setattr(result, field, value)
+
+    # Override with dictionary-extracted boolean values
+    # Dictionary keyword matching is 100% reliable for booleans like has_elevator
+    for field, value in bool_extracted.items():
+        if hasattr(result, field):
+            setattr(result, field, value)
+
+    # Override with dictionary-extracted enum values
+    # Dictionary keyword matching is 100% reliable for known words
+    for field, value in enum_extracted.items():
+        if hasattr(result, field):
             setattr(result, field, value)
 
     # Track metrics

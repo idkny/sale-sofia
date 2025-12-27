@@ -88,6 +88,27 @@ archive/research/  archive/specs/          (code supersedes)
 
 ## Session History
 
+### 2025-12-27 (Session 29 - Task Archiving)
+
+| Task | Status |
+|------|--------|
+| Archive completed TASKS.md sections | Complete |
+| Archive completed REFACTORING_TASKS.md sections | Complete |
+| Create archive/tasks/ directory | Complete |
+| Streamline active task files | Complete |
+
+**Summary**: Archived completed task sections following ZohoCentral pattern. Created `archive/tasks/TASKS_COMPLETED_2025-12-27.md` (353 lines) and `archive/tasks/REFACTORING_TASKS_COMPLETED_2025-12-27.md` (406 lines). Reduced TASKS.md from 765 to 129 lines and REFACTORING_TASKS.md from 740 to 65 lines.
+
+**Files Created**:
+- `archive/tasks/TASKS_COMPLETED_2025-12-27.md` - archived Bugs, Solution F, Chunk Timing, Celery/Mubeng, Page Change Detection, Ollama, Historical Work
+- `archive/tasks/REFACTORING_TASKS_COMPLETED_2025-12-27.md` - archived all 26 refactoring tasks (22 complete, 2 skipped, 2 superseded)
+
+**Files Modified**:
+- `docs/tasks/TASKS.md` - streamlined with summary table + pending tasks only
+- `docs/tasks/REFACTORING_TASKS.md` - streamlined with summary + optional follow-up tests
+
+---
+
 ### 2025-12-27 (Session 27 - Consolidate Scoring Constants)
 
 | Task | Status |
@@ -130,28 +151,6 @@ archive/research/  archive/specs/          (code supersedes)
 - `proxies/mubeng_manager.py` - use PROXY_TIMEOUT_MUBENG
 - `proxies/quality_checker.py` - use PROXY_TIMEOUT_SECONDS
 - `proxies/tasks.py` - use PROXY_TIMEOUT_SECONDS
-
----
-
-### 2025-12-27 (Session 24 - Page Change Detection Phases 1-2)
-
-| Task | Status |
-|------|--------|
-| Create data/change_detector.py | Complete |
-| Add 5 DB columns (migration) | Complete |
-| Update save_listing() | Complete |
-| Integrate into main.py | Complete |
-| Create unit tests (24 tests) | Complete |
-
-**Summary**: Implemented Page Change Detection (Spec 111) Phases 1-2. Created `data/change_detector.py` with compute_hash (SHA256 of key fields), has_changed (comparison), and track_price_change (history with 10-entry max). Added 5 DB columns. Integrated via `_check_and_save_listing()` in main.py. Unchanged listings now skipped, price changes logged.
-
-**Files Created**:
-- `data/change_detector.py` - core change detection (compute_hash, has_changed, track_price_change)
-- `tests/test_change_detector.py` - 24 unit tests
-
-**Files Modified**:
-- `data/data_store_main.py` - migration (5 columns), save_listing(), increment_unchanged_counter()
-- `main.py:25,45-92,206,241-253,602-604` - import, helper, stats, integration, summary
 
 ---
 

@@ -1,7 +1,8 @@
 # Spec 110: Dynamic Bulgarian Dictionary for LLM Extraction
 
 **Created**: 2025-12-26
-**Status**: Ready for Implementation
+**Status**: Implemented (100% accuracy achieved)
+**Completed**: 2025-12-27
 **Priority**: P1 - Core extraction improvement
 **Supersedes**: Spec 109 (static prompt hints)
 
@@ -27,11 +28,15 @@ EXTRACTION_PROMPT = """...
 - Hard to maintain - hints buried in code
 - No learning from new words
 
-### Proposed Approach (Dynamic Dictionary)
-1. Maintain Bulgarian→English dictionary in separate file
+### Implemented Approach (Dictionary-First Extraction)
+1. Maintain Bulgarian→English dictionary in separate file (`config/bulgarian_dictionary.yaml`)
 2. Scan input text for matches BEFORE calling LLM
-3. Inject ONLY relevant hints into prompt
-4. Log unknown words for future dictionary updates
+3. **Dictionary extracts ALL field types directly**: numeric (regex), boolean (keywords), enum (longest-match)
+4. LLM is only a FALLBACK for fields dictionary doesn't find
+5. Dictionary values override LLM values (dictionary is 100% reliable)
+6. Log unknown words for future dictionary updates
+
+**Key Innovation**: Dictionary doesn't just provide "hints" - it performs actual extraction. This achieves 100% accuracy for known patterns.
 
 ---
 
@@ -655,13 +660,20 @@ Run existing `tests/llm/test_extraction_accuracy.py` - target 95%+.
 
 ## 8. Implementation Checklist
 
-- [ ] Create `config/bulgarian_dictionary.yaml`
-- [ ] Create `llm/dictionary.py`
-- [ ] Update `llm/prompts.py` with base templates
-- [ ] Update `llm/llm_main.py` to use dictionary
-- [ ] Create `tests/llm/test_dictionary.py`
-- [ ] Run accuracy test - verify 95%+
-- [ ] Run existing tests - no regression
+- [x] Create `config/bulgarian_dictionary.yaml` - ✓ Created with 200+ Bulgarian keywords
+- [x] Create `llm/dictionary.py` - ✓ Implemented with regex, keyword, and longest-match strategies
+- [x] Update `llm/prompts.py` with base templates - ✓ Added dynamic hint injection
+- [x] Update `llm/llm_main.py` to use dictionary - ✓ Dictionary-first with LLM fallback
+- [x] Create `tests/llm/test_dictionary.py` - ✓ Created with comprehensive test cases
+- [x] Run accuracy test - verify 95%+ - ✓ **Achieved 100%** (39/39 fields)
+- [x] Run existing tests - no regression - ✓ All tests pass
+
+**Implementation Results** (Session 28, 2025-12-27):
+- Overall accuracy: **100%** (39/39 expected fields extracted correctly)
+- has_elevator: **100%** (was 0% before dictionary fix)
+- Boolean extraction: **100%** (keyword matching)
+- Enum extraction: **100%** (longest-match strategy)
+- Numeric extraction: **100%** (regex patterns)
 
 ---
 

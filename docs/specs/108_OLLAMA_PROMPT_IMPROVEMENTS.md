@@ -1,9 +1,18 @@
 # Spec 108: Ollama Prompt Accuracy Improvements
 
 **Created**: 2025-12-26
-**Status**: Planning
+**Status**: Superseded by Spec 110
 **Priority**: P1 - Critical accuracy improvement (40% → 90%+)
 **Depends On**: Spec 107 (Ollama Integration)
+
+**OUTCOME**: While this spec proposed English prompts + JSON schema enforcement to improve accuracy, **Spec 110 (Dictionary-First Extraction)** achieved superior results (100% accuracy) by bypassing LLM for most fields. The dictionary approach extracts numeric, boolean, and enum fields directly via regex/keyword matching, using LLM only as fallback. This is more reliable and faster than prompt engineering alone.
+
+**Key Learnings Applied**:
+- English prompts with "RESPOND IN ENGLISH ONLY" (implemented in `llm/prompts.py`)
+- JSON schema enforcement via `model_json_schema()` (implemented in `llm/llm_main.py`)
+- Post-processing translation fallback (kept as defense-in-depth)
+
+**Recommendation**: Read Spec 110 for the implemented solution. This spec remains as reference for prompt engineering best practices.
 
 ---
 
