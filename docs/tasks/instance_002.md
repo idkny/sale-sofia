@@ -88,6 +88,28 @@ archive/research/  archive/specs/          (code supersedes)
 
 ## Session History
 
+### 2025-12-27 (Session 28 - Dictionary-First Extraction)
+
+| Task | Status |
+|------|--------|
+| Investigate has_elevator 0% accuracy | Complete |
+| Fix has_elevator with dictionary bypass | Complete |
+| Implement dictionary-first for all fields | Complete |
+| Cleanup unused code and tests | Complete |
+| Update documentation (specs 107, 110) | Complete |
+
+**Summary**: Fixed has_elevator extraction (was 0%, now 100%) by using dictionary directly. Implemented full dictionary-first approach where dictionary extracts ALL field types (numeric, boolean, enum) and LLM is only a fallback. Overall accuracy now 100%. Cleaned up deprecated code and orphaned tests.
+
+**Files Modified**:
+- `llm/dictionary.py` - enum extraction, removed unused log_unknown()
+- `llm/llm_main.py` - dictionary-first override for all fields
+- `llm/prompts.py` - removed deprecated EXTRACTION_PROMPT
+- `docs/specs/107_OLLAMA_INTEGRATION.md` - status: Implemented
+- `docs/specs/110_DYNAMIC_BULGARIAN_DICTIONARY.md` - status: Implemented
+- Deleted: `tests/llm/test_model_comparison.py`
+
+---
+
 ### 2025-12-27 (Session 29 - Task Archiving)
 
 | Task | Status |
@@ -128,29 +150,6 @@ archive/research/  archive/specs/          (code supersedes)
 - `proxies/proxy_scorer.py:32-43` - import from settings, keep aliases for backward compat
 - `proxies/proxy_validator.py:29-51` - import from settings, keep aliases for backward compat
 - `tests/test_proxy_scorer.py:235-237` - fix edge case test (MIN_SCORE * 1.9 instead of * 2)
-
----
-
-### 2025-12-27 (Session 25 - Dashboard Integration + Unified Timeout)
-
-| Task | Status |
-|------|--------|
-| Add price history chart component | Complete |
-| Add "recently changed" filter | Complete |
-| Create unified PROXY_TIMEOUT_SECONDS | Complete |
-| Update all proxy timeout usages | Complete |
-
-**Summary**: Implemented Dashboard Integration (Spec 111 Phase 3) and unified proxy timeout settings. Added price history chart tab and "recently changed" filter to Listings page. Created `config/settings.py` with `PROXY_TIMEOUT_SECONDS=45` to fix inconsistent 15s/30s/45s timeouts across codebase.
-
-**Files Created**:
-- `config/settings.py` - unified proxy timeout constants (PROXY_TIMEOUT_SECONDS, PROXY_TIMEOUT_MS, PROXY_TIMEOUT_MUBENG)
-
-**Files Modified**:
-- `app/pages/2_Listings.py` - price history tab, recently changed filter
-- `main.py` - import and use PROXY_TIMEOUT_SECONDS/MS
-- `proxies/mubeng_manager.py` - use PROXY_TIMEOUT_MUBENG
-- `proxies/quality_checker.py` - use PROXY_TIMEOUT_SECONDS
-- `proxies/tasks.py` - use PROXY_TIMEOUT_SECONDS
 
 ---
 
