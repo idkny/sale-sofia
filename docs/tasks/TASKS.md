@@ -75,11 +75,11 @@
 
 ---
 
-## CRITICAL BUG: Proxy Scoring System Broken (P0)
+## CRITICAL BUG: Proxy Scoring System Broken (P0) ✅ FIXED
 
 **Found by**: Instance 3 (Session 1, 2025-12-26)
-**Status**: Not started
-**Blocks**: Automatic threshold-based proxy refresh
+**Status**: ✅ Complete (Solution F - Sessions 14-23)
+**Unblocks**: Automatic threshold-based proxy refresh
 
 ### Finding 1: Wrong Proxy Being Tracked
 
@@ -311,7 +311,7 @@ Each step is atomic and testable. Must complete in order.
 
 ---
 
-#### Phase 7: Edge Cases & Hardening
+#### Phase 7: Edge Cases & Hardening ✅
 
 **Goal**: Handle edge cases to prevent bugs in production.
 
@@ -352,73 +352,6 @@ If Solution F causes regressions:
 
 **After this is fixed**, we can implement:
 - [ ] Automatic threshold-based proxy refresh (check count every N minutes, refresh if < X)
-
----
-
-## FEATURE: Just-In-Time Proxy Validation (P1)
-
-**Found by**: Instance 3 (Session 13, 2025-12-26)
-**Status**: Blocked by Solution F Phase 1-2
-**Depends on**: Proxy Scoring System fix (Solution F)
-
-### Problem Statement
-
-Free proxies are short-lived. A proxy that worked 1 hour ago may be dead now. Currently, there is **no validation before using a proxy** for scraping - the system just sends requests and hopes for the best.
-
-### Solution: Integrated with Solution F
-
-With Solution F (X-Proxy-Offset + --watch), JIT validation becomes straightforward:
-
-```python
-# main.py - JIT flow with Solution F
-for attempt in range(3):  # Max 3 proxies per URL
-    proxy_dict = proxy_pool.select_proxy()
-    proxy_key = f"{proxy_dict['host']}:{proxy_dict['port']}"
-    index = proxy_pool.get_proxy_index(proxy_key)
-
-    # Optional: Quick liveness check (1-2 seconds)
-    # if not preflight_check(proxy_url, timeout=2):
-    #     proxy_pool.remove_proxy(proxy_key)
-    #     continue
-
-    try:
-        response = StealthyFetcher.fetch(
-            url=url,
-            proxy=MUBENG_PROXY,
-            headers={"X-Proxy-Offset": str(index)}
-        )
-        proxy_pool.record_result(proxy_key, success=True)
-        break  # Success
-    except Exception:
-        proxy_pool.record_result(proxy_key, success=False)
-        # After 3 failures, proxy auto-removed by ScoredProxyPool
-        continue  # Try different proxy
-```
-
-### Why This Works
-
-| Feature | How Solution F Enables It |
-|---------|--------------------------|
-| Know which proxy failed | X-Proxy-Offset tells mubeng exactly which proxy to use |
-| Remove dead proxies | `remove_proxy()` updates file → `--watch` reloads mubeng |
-| Retry with different proxy | Our retry loop selects different proxy each attempt |
-| Persist removals | `_save_proxies()` writes to file |
-
-### Tasks (After Solution F Phase 1-2)
-
-- [ ] Add retry loop to `main.py` (max 3 proxies per URL)
-- [ ] Optional: Add quick liveness check before each request
-- [ ] Test: Verify dead proxy triggers retry with different proxy
-- [ ] Test: Verify proxy count decreases as dead proxies removed
-- [ ] Test: Measure time savings vs current approach
-
-### Acceptance Criteria
-
-- [ ] At least 1 retry with different proxy before skipping URL
-- [ ] Failed proxies removed from pool after 3 consecutive failures
-- [ ] Proxy removals persist to `live_proxies.json`
-- [ ] Mubeng reloads updated proxy list (--watch)
-- [ ] When count drops below threshold, refresh is triggered
 
 ---
 
@@ -541,9 +474,9 @@ Test only waited 5 minutes → FAIL
 - [x] Log price changes (logger.info for drops/increases)
 - [x] Price history stored in `price_history` column
 
-### Phase 3: Dashboard Integration (Optional)
-- [ ] Show price history chart in Streamlit
-- [ ] Filter by "recently changed"
+### Phase 3: Dashboard Integration (Optional) ✅
+- [x] Show price history chart in Streamlit
+- [x] Filter by "recently changed"
 
 ---
 
@@ -697,16 +630,22 @@ Test only waited 5 minutes → FAIL
 - [ ] Create validation matrix (document what works)
 
 ### Phase 2: Description Extraction
-- [ ] Build `DescriptionExtractor` class (regex patterns)
-- [ ] Test extraction accuracy (target: >70%)
-- [ ] Optional: Add LLM fallback for complex descriptions
+- [x] Build `DescriptionExtractor` class (regex patterns)
+  - **Note**: Implemented via LLM instead of regex. See `llm/llm_main.py:extract_description()`
+- [x] Test extraction accuracy (target: >70%)
+  - **Note**: 97.4% accuracy achieved via LLM. See `tests/llm/test_extraction_accuracy.py`
+- [x] Optional: Add LLM fallback for complex descriptions
+  - **Note**: LLM is now PRIMARY method, not fallback. CSS extracts first, LLM fills gaps.
 
 ### Phase 3: Change Detection & History
 - [ ] Create `scrape_history` table
 - [ ] Create `listing_changes` table (track ALL field changes)
-- [ ] Build `ChangeDetector` class
-- [ ] Integrate into scraper flow
-- [ ] Add dashboard timeline view
+- [x] Build `ChangeDetector` class
+  - **Note**: Implemented as `data/change_detector.py` with `compute_hash()`, `has_changed()`, `track_price_change()`
+- [x] Integrate into scraper flow
+  - **Note**: Done in `main.py:_check_and_save_listing()`. Unchanged listings skipped.
+- [x] Add dashboard timeline view
+  - **Note**: Price history chart + "recently changed" filter in Streamlit dashboard
 
 ### Phase 3.5: Cross-Site Duplicate Detection & Merging
 - [ ] Create `listing_sources` table (track which sites list property)
@@ -731,15 +670,6 @@ Test only waited 5 minutes → FAIL
 
 - [ ] Improve floor extraction in bazar.bg scraper
 - [ ] Populate dashboard with scraped data
-
----
-
-## Research (P3)
-
-- [ ] Deep dive: Hadji Dimitar (street-level)
-- [ ] Deep dive: Krastova Vada (street-level)
-- [ ] Deep dive: Ovcha Kupel (street-level)
-- [ ] Contact agencies and get quotes
 
 ---
 

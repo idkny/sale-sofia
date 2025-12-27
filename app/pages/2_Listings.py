@@ -152,6 +152,73 @@ def _render_notes_tab(listing: dict, listing_id: int, get_viewings_for_listing) 
         st.info("No viewings recorded yet")
 
 
+def _render_price_history_tab(listing: dict) -> None:
+    """Render the Price History tab showing price changes over time."""
+    st.markdown("### 📈 Price History")
+
+    price_history_json = listing.get("price_history")
+    change_count = listing.get("change_count") or 0
+    last_change_at = listing.get("last_change_at")
+
+    # Show change stats
+    col1, col2, col3 = st.columns(3)
+    with col1:
+        st.metric("Total Changes", change_count)
+    with col2:
+        current_price = listing.get("price_eur")
+        st.metric("Current Price", f"€{current_price:,.0f}" if current_price else "N/A")
+    with col3:
+        if last_change_at:
+            st.metric("Last Changed", str(last_change_at)[:10])
+        else:
+            st.metric("Last Changed", "Never")
+
+    st.markdown("---")
+
+    # Parse and display price history
+    if price_history_json:
+        try:
+            history = json.loads(price_history_json)
+            if history and len(history) > 0:
+                # Build dataframe for chart
+                df_history = pd.DataFrame(history)
+                df_history["date"] = pd.to_datetime(df_history["date"])
+                df_history = df_history.sort_values("date")
+
+                # Line chart
+                st.markdown("**Price Over Time**")
+                chart_data = df_history.set_index("date")["price"]
+                st.line_chart(chart_data)
+
+                # Table with all price points
+                st.markdown("**Price History Table**")
+                df_display = df_history.copy()
+                df_display["date"] = df_display["date"].dt.strftime("%Y-%m-%d %H:%M")
+                df_display["price"] = df_display["price"].apply(lambda x: f"€{x:,.0f}")
+                df_display.columns = ["Date", "Price"]
+                st.dataframe(df_display, hide_index=True, use_container_width=True)
+
+                # Price change analysis
+                if len(history) >= 2:
+                    first_price = history[0]["price"]
+                    last_price = history[-1]["price"]
+                    change = last_price - first_price
+                    pct_change = (change / first_price) * 100 if first_price else 0
+
+                    if change < 0:
+                        st.success(f"📉 Price dropped by €{abs(change):,.0f} ({abs(pct_change):.1f}%)")
+                    elif change > 0:
+                        st.warning(f"📈 Price increased by €{change:,.0f} ({pct_change:.1f}%)")
+                    else:
+                        st.info("Price unchanged")
+            else:
+                st.info("No price history recorded yet. Price tracking begins when prices change.")
+        except (json.JSONDecodeError, KeyError, TypeError):
+            st.warning("Could not parse price history data")
+    else:
+        st.info("No price history recorded yet. Price tracking begins when prices change.")
+
+
 def _render_edit_tab(listing: dict, listing_id: int, update_listing_evaluation, add_viewing) -> None:
     """Render the Edit tab content with forms to update listing and add viewings."""
     st.markdown("### Update Listing")
@@ -282,6 +349,18 @@ try:
     # Deal breaker filter
     only_passing = st.sidebar.checkbox("Only show apartments passing all deal breakers", value=False)
 
+    # Recently changed filter
+    st.sidebar.markdown("---")
+    st.sidebar.markdown("**📈 Change Detection**")
+    show_recently_changed = st.sidebar.checkbox("Show recently changed only", value=False)
+    days_threshold = st.sidebar.slider(
+        "Changed within (days)",
+        min_value=1,
+        max_value=30,
+        value=7,
+        disabled=not show_recently_changed
+    )
+
     # Fetch listings
     district_param = None if selected_district == "All" else selected_district
     listings = get_listings(
@@ -308,6 +387,15 @@ try:
                 if passes:
                     passing_ids.append(row["id"])
             df = df[df["id"].isin(passing_ids)]
+
+        # Apply recently changed filter
+        if show_recently_changed:
+            from datetime import datetime, timedelta
+            cutoff_date = datetime.utcnow() - timedelta(days=days_threshold)
+            # Filter by last_change_at column
+            if "last_change_at" in df.columns:
+                df["last_change_at"] = pd.to_datetime(df["last_change_at"], errors="coerce")
+                df = df[df["last_change_at"].notna() & (df["last_change_at"] >= cutoff_date)]
 
         st.markdown(f"**Showing {len(df)} listings**")
 
@@ -381,8 +469,8 @@ try:
                     st.warning(f"❌ Fails {len(failed)} deal breaker(s) | Status: {status} | Decision: {decision or 'None'}")
 
                 # Main content in tabs
-                tab1, tab2, tab3, tab4, tab5 = st.tabs([
-                    "📋 Details", "📊 Scoring", "🚫 Deal Breakers", "📝 Notes & Viewings", "✏️ Edit"
+                tab1, tab2, tab3, tab4, tab5, tab6 = st.tabs([
+                    "📋 Details", "📊 Scoring", "📈 Price History", "🚫 Deal Breakers", "📝 Notes & Viewings", "✏️ Edit"
                 ])
 
                 with tab1:
@@ -392,12 +480,15 @@ try:
                     _render_scoring_tab(listing_dict, score)
 
                 with tab3:
-                    _render_deal_breakers_tab(deal_breakers)
+                    _render_price_history_tab(listing)
 
                 with tab4:
-                    _render_notes_tab(listing, listing_id, get_viewings_for_listing)
+                    _render_deal_breakers_tab(deal_breakers)
 
                 with tab5:
+                    _render_notes_tab(listing, listing_id, get_viewings_for_listing)
+
+                with tab6:
                     _render_edit_tab(listing, listing_id, update_listing_evaluation, add_viewing)
 
     else:

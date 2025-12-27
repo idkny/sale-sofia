@@ -79,6 +79,31 @@ archive/research/  archive/specs/          (code supersedes)
 
 ## Session History
 
+### 2025-12-26 (Session 13 - Service Lifecycle + TimeLimitExceeded Fix)
+
+| Task | Status |
+|------|--------|
+| Implement automatic service lifecycle management | ✅ Complete |
+| Fix TimeLimitExceeded (chunk tasks killed after 8min) | ✅ Complete |
+| Run live test to verify | ✅ Complete (both chords succeeded) |
+
+**Summary**: Implemented automatic cleanup of stale processes on startup using psutil, added Redis/Celery health checks. Fixed TimeLimitExceeded bug by reducing quality check timeout (60s→45s) and increasing task time_limit (8min→15min).
+
+**Key Changes:**
+- `orchestrator.py` - Added `cleanup_stale_processes()`, `_kill_process_by_pattern()`, `_health_check_redis()`, `_health_check_celery()`
+- `orchestrator.py:673` - `time_per_chunk` changed from 400 to 900 seconds
+- `proxies/tasks.py:253` - Quality check timeout: 60s → 45s
+- `proxies/tasks.py:279` - Task limits: 7min/8min → 13min/15min
+
+**Test Results:**
+- Chord 1: 38/38 chunks completed in 12m 46s (64 proxies)
+- Chord 2: 33/33 chunks completed in 13m 15s (115 proxies)
+- No TimeLimitExceeded errors
+
+**Issue Found:** Pre-flight check fails even with 64+ proxies. Proxies pass mubeng liveness check but fail actual HTTP requests. Likely proxy quality issue (dead or blocked proxies pass simple check but fail real requests).
+
+---
+
 ### 2025-12-26 (Session 12 - Signal-Based Wait + Timeout Fix)
 
 | Task | Status |
@@ -230,54 +255,7 @@ def wait_for_proxies(self, min_count=5, timeout=2400):
 
 ---
 
-### 2025-12-26 (Session 10 - Live Test Verification)
-
-| Task | Status |
-|------|--------|
-| Kill stale processes | Complete |
-| Clean proxy files | Complete |
-| Run main.py live test | Complete |
-| Verify chord timeout fix | ✅ VERIFIED |
-
-**Summary**: Ran full live test to verify Session 9's chord timeout fix. The fix is WORKING.
-
-**Key Evidence from Test Output**:
-1. **Dynamic timeout active**:
-   ```
-   [INFO] Dynamic timeout: 600s (1 chunks, 1 rounds)
-   ```
-
-2. **Chord completed successfully** (no infinite hang!):
-   ```
-   [INFO] Using chord_id eec13782-7627-4c50-994c-3213c08a1dea for event-based wait
-   [INFO] Blocking on chord completion...
-   [SUCCESS] Chord complete! 4 usable proxies after 3m 5s
-   ```
-
-3. **Multiple jobs completed via chord**:
-   - Job 4d90fe99: 8/8 chunks → COMPLETE (11 proxies)
-   - Job cf3da80a: 4/4 chunks → COMPLETE
-   - Job 1c967754: 1/1 chunks → COMPLETE (4 proxies)
-
-4. **Clean exit** (exit code 0, all processes stopped)
-
-**Test Outcome**:
-| Aspect | Result |
-|--------|--------|
-| Chord timeout fix | ✅ WORKING |
-| Dynamic timeout calculation | ✅ WORKING |
-| Event-based completion | ✅ WORKING |
-| No infinite hangs | ✅ VERIFIED |
-
-**Why Pipeline "Failed"**: Only 4 usable proxies found (< 5 minimum threshold). This is a proxy quality issue, **not** the original hanging bug. The chord completed successfully and returned results.
-
-**Minor Issue Found**: After chord completed successfully, fallback message still printed:
-```
-[INFO] Chord wait timed out, falling back to Redis polling...
-```
-This is a false positive - the chord DID complete. Minor logic bug in return path.
-
-*(Session 9 archived to `archive/sessions/instance_001_session_9_2025-12-26.md`)*
+*(Session 10 archived to `archive/sessions/instance_001_session_10_2025-12-26.md`)*
 
 ---
 

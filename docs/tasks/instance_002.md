@@ -88,6 +88,24 @@ archive/research/  archive/specs/          (code supersedes)
 
 ## Session History
 
+### 2025-12-27 (Session 25 - Dashboard Integration Phase 3)
+
+| Task | Status |
+|------|--------|
+| Add price history chart component | Complete |
+| Add "recently changed" filter | Complete |
+| Test dashboard with sample data | Complete |
+
+**Summary**: Implemented Dashboard Integration (Spec 111 Phase 3). Added `_render_price_history_tab()` to Listings page showing price history chart, price change analysis, and change statistics. Added "Show recently changed only" filter with configurable days threshold (1-30 days).
+
+**Files Modified**:
+- `app/pages/2_Listings.py:155-219` - new `_render_price_history_tab()` function
+- `app/pages/2_Listings.py:352-362` - added sidebar filter section
+- `app/pages/2_Listings.py:391-398` - filter logic for recently changed
+- `app/pages/2_Listings.py:451-471` - added 6th tab for Price History
+
+---
+
 ### 2025-12-27 (Session 24 - Page Change Detection Phases 1-2)
 
 | Task | Status |
@@ -133,24 +151,6 @@ archive/research/  archive/specs/          (code supersedes)
 - `docs/research/page_change_detection.md` - new research
 - `docs/specs/111_PAGE_CHANGE_DETECTION.md` - new spec
 - `websites/SCRAPER_GUIDE.md` - added LLM integration section
-
----
-
-### 2025-12-26 (Session 17 - Scrapling Integration)
-
-| Task | Status |
-|------|--------|
-| Phase 3: Temperature = 0 | Complete (no effect) |
-| Phase 4: Scrapling Integration | Complete |
-
-**Summary**: Tested Phase 3 (temperature 0.1→0.0) - no effect on accuracy. Implemented Phase 4 Scrapling Integration: added `use_llm` flag, integrated LLM extraction into imot_scraper.py. LLM fills gaps where CSS returns None (e.g., orientation). Tested end-to-end with 0.95 confidence.
-
-**Files Modified**:
-- `config/ollama.yaml` - temperature 0.1 → 0.0
-- `websites/scrapling_base.py:216` - added `use_llm` flag
-- `websites/imot_bg/imot_scraper.py:20-25, 92-118` - LLM import + enrichment logic
-
-**Usage**: `scraper.use_llm = True` enables LLM enrichment after CSS extraction.
 
 ---
 
