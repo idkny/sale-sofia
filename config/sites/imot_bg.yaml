@@ -1,0 +1,12 @@
+# imot.bg - Less aggressive anti-bot
+# Override only what differs from defaults
+
+timing:
+  delay_seconds: 1.5          # Faster OK for this site
+
+concurrency:
+  max_per_domain: 3           # Can handle more
+
+fetcher:
+  search_pages: http
+  listing_pages: http

@@ -1,0 +1,53 @@
+# Scraping Configuration Defaults
+# Based on Scrapy, Colly, Crawlee best practices
+# Override per-site in config/sites/<site>.yaml
+
+# --- Concurrency ---
+concurrency:
+  max_global: 16              # Max total concurrent requests
+  max_per_domain: 2           # Max per domain (conservative)
+
+# --- Timing ---
+timing:
+  delay_seconds: 2.0          # Base delay between requests
+  randomize_delay: true       # Add 0.5x-1.5x randomization
+  random_delay_min: 0.5       # Multiplier min (delay * 0.5)
+  random_delay_max: 1.5       # Multiplier max (delay * 1.5)
+
+# --- Timeouts ---
+timeouts:
+  request_seconds: 60         # HTTP request timeout
+  page_load_seconds: 30       # Browser page load timeout
+  navigation_seconds: 30      # Browser navigation timeout
+
+# --- Retry ---
+retry:
+  max_attempts: 3             # Total attempts (1 initial + 2 retries)
+  backoff_base: 1.0           # Initial backoff delay
+  backoff_max: 300.0          # Max backoff (5 minutes)
+  backoff_multiplier: 2.0     # Exponential multiplier
+  http_codes:                 # Codes that trigger retry
+    - 429                     # Too Many Requests
+    - 500                     # Internal Server Error
+    - 502                     # Bad Gateway
+    - 503                     # Service Unavailable
+    - 504                     # Gateway Timeout
+    - 522                     # Cloudflare timeout
+    - 524                     # Cloudflare timeout
+
+# --- Fetcher Selection ---
+fetcher:
+  search_pages: http          # http | browser | stealth
+  listing_pages: http         # http | browser | stealth
+
+# --- Anti-Detection ---
+anti_detection:
+  rotate_user_agent: true     # Rotate UA per request
+  block_webrtc: false         # Block WebRTC (browser only)
+  humanize_actions: false     # Random mouse/scroll (browser only)
+
+# --- Behavior ---
+behavior:
+  respect_robots_txt: true    # Honor robots.txt
+  follow_crawl_delay: true    # Honor Crawl-Delay directive
+  cookies_enabled: true       # Enable cookie handling

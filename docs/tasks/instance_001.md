@@ -79,6 +79,29 @@ archive/research/  archive/specs/          (code supersedes)
 
 ## Session History
 
+### 2025-12-27 (Session 34 - Database Concurrency Analysis)
+
+| Task | Status |
+|------|--------|
+| Review codebase for database concurrency issues | ✅ Complete |
+| Read architecture docs (DESIGN_PATTERNS, CONVENTIONS) | ✅ Complete |
+| Analyze `data_store_main.py` for SQLite limitations | ✅ Complete |
+| Add Phase 4.0 Database Concurrency tasks to TASKS.md | ✅ Complete |
+
+**Summary**: Research session - no code written. Identified critical database concurrency issue: SQLite in `data_store_main.py` has no WAL mode, no timeout, no retry on BUSY errors. When Phase 4 enables parallel Celery workers, `save_listing()` calls will collide causing "database is locked" errors and data loss. Added Phase 4.0 as BLOCKER before Phase 4.1.
+
+**Files Modified**:
+- `docs/tasks/TASKS.md` - Added Phase 4.0 Database Concurrency (6 tasks)
+
+**Key Findings**:
+- Current scraping is sequential (no issue today)
+- Celery `worker_concurrency=8` means 8 parallel workers
+- SQLite default timeout is 5 seconds (too short under contention)
+- No WAL mode = single-writer lock
+- Solution: WAL + timeout + retry decorator (following `resilience/retry.py` pattern)
+
+---
+
 ### 2025-12-27 (Session 33 - Phase 4 Task Consolidation)
 
 | Task | Status |
@@ -131,33 +154,7 @@ archive/research/  archive/specs/          (code supersedes)
 
 ---
 
-### 2025-12-27 (Session 31 - Spec 112 Phase 3: Session Recovery)
-
-| Task | Status |
-|------|--------|
-| CTO Review: Read architecture docs | ✅ Complete |
-| Implement resilience/checkpoint.py | ✅ Complete |
-| Add checkpoint save/restore to main.py | ✅ Complete |
-| Add SIGTERM/SIGINT handlers to main.py | ✅ Complete |
-| Write unit tests for Phase 3 | ✅ Complete |
-| Run Phase Completion Checklist | ✅ Complete |
-
-**Summary**: Implemented Spec 112 Phase 3 (Session Recovery). Created CheckpointManager for crash recovery with batched saves, graceful shutdown via SIGTERM/SIGINT signal handlers, per-site checkpoint files. Updated architecture docs and manifest. All 105 resilience tests passing (45 Phase 1 + 42 Phase 2 + 18 Phase 3).
-
-**Files Created**:
-- `resilience/checkpoint.py` - CheckpointManager with save/load/clear
-- `tests/test_resilience_phase3.py` (18 tests)
-
-**Files Modified**:
-- `main.py` - Signal handlers, checkpoint integration in _scrape_listings/_crawl_all_sites
-- `resilience/__init__.py` - Exports CheckpointManager
-- `docs/architecture/FILE_STRUCTURE.md` - Added checkpoint.py
-- `docs/architecture/DESIGN_PATTERNS.md` - Added pattern 14 (Checkpoint)
-- `admin/config/project_structure_manifest.json` - Added checkpoint.py
-- `docs/tasks/112_RESILIENCE_IMPLEMENTATION.md` - Marked Phase 3 complete
-- `docs/tasks/TASKS.md` - Marked Phase 3 complete
-
-*(Sessions 30 and earlier archived to `archive/sessions/`)*
+*(Sessions 31 and earlier archived to `archive/sessions/`)*
 
 ---
 

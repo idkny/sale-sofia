@@ -39,6 +39,7 @@
 | Page Change Detection (Phases 1-3) | 8 | Completed |
 | Ollama Integration (Phases 1-5, 3.6) | 45+ | Completed |
 | Crawler Validation (Phase 0) | 7 | Completed |
+| Scraper Resilience (Phases 1-4) | 33 | Completed (153 tests) |
 | Historical Completed Work | 35+ | Completed |
 
 ---
@@ -50,6 +51,8 @@
 | 1 | Available |
 | 2 | Available |
 | 3 | Available |
+
+**Session 34 (2025-12-27)**: Instance 2 - Phase 4.1 Scraping Configuration COMPLETE. Created 2-level config system (scraping_defaults.yaml + sites/*.yaml), ScrapingConfig loader with 8 dataclasses, 7 tests passing (99% coverage).
 
 **Session 33 (2025-12-27)**: Instance 2 - Phase 3.5 Cross-Site Duplicate Detection COMPLETE. Created listing_sources table, PropertyFingerprinter, PropertyMerger, price discrepancy tracking, dashboard page. 527 tests passing.
 
@@ -73,14 +76,6 @@
 ---
 
 ## Pending Tasks
-
-### Testing (P1)
-
-- [ ] Test 3.2: Concurrent task handling
-- [ ] Test full proxy refresh + quality detection flow
-- [ ] Test imot.bg scraper with real listings
-
----
 
 ### Crawler Validation & Enhancement (P1)
 
@@ -121,28 +116,55 @@
 > **Consolidates**: "Build async orchestrator" + "Integrate with Celery" (same goal).
 > **Dependencies**: Resilience module (complete), Rate limiter (complete).
 
-##### Phase 4.1: Scraping Settings Configuration
-> **Why first**: Settings define the contract for how Celery tasks behave.
-> Create 2-level config: general defaults + per-site overrides.
+##### Phase 4.0: Database Concurrency (BLOCKER)
+> **Why first**: SQLite has single-writer limitation. Without fixes, parallel Celery workers
+> calling `save_listing()` simultaneously WILL cause `database is locked` errors and data loss.
+> **Risk**: HIGH - Phase 4.1+ will fail without this.
 >
-> **⚠️ Cleanup Note (Instance 3)**: Dead code in `config/__init__.py`:
-> - `SCRAPER_CONFIG` dict is never used - remove it when working on this phase
+> **Current issues in `data/data_store_main.py`**:
+> - No WAL mode (single-writer lock)
+> - No timeout on `sqlite3.connect()` (5s default too short)
+> - No retry on `SQLITE_BUSY` errors
+> - No database settings in `config/settings.py`
 
-- [ ] 4.1.1 Create `config/scraping_defaults.yaml` (general settings)
-  - Rate limiting: `requests_per_minute`, `delay_between_requests`
-  - Concurrency: `max_concurrent_requests` (async within task)
-  - Anti-detection: `humanize`, `random_delay_range`, `block_webrtc`
-  - Timeouts: `request_timeout`, `page_load_timeout`
-  - Fetcher selection: `search_pages`, `listing_pages` (Fetcher vs StealthyFetcher)
-- [ ] 4.1.2 Create `config/sites/` directory with per-site overrides
-  - `config/sites/imot_bg.yaml` - faster settings (less anti-bot)
-  - `config/sites/bazar_bg.yaml` - slower settings (has anti-bot)
-- [ ] 4.1.3 Create `config/scraping_config.py` loader
-  - `load_scraping_config(site: str) -> ScrapingConfig`
-  - Merge logic: defaults <- site overrides
-  - Dataclass for type safety
-- [ ] 4.1.4 Write unit tests for config loading/merging
-- [ ] 4.1.5 **Run Phase Completion Checklist** (no hardcoded values)
+- [ ] 4.0.1 Add database settings to `config/settings.py`
+  - `SQLITE_TIMEOUT = 30.0` (seconds to wait for lock)
+  - `SQLITE_BUSY_RETRIES = 3` (retry attempts on busy)
+  - `SQLITE_BUSY_DELAY = 0.5` (delay between retries)
+  - `SQLITE_WAL_MODE = True` (enable Write-Ahead Logging)
+- [ ] 4.0.2 Update `get_db_connection()` in `data/data_store_main.py`
+  - Add `timeout=SQLITE_TIMEOUT` to `sqlite3.connect()`
+  - Add `PRAGMA journal_mode = WAL` when `SQLITE_WAL_MODE` is True
+  - Add `PRAGMA busy_timeout` as fallback
+- [ ] 4.0.3 Create `data/db_retry.py` with retry decorator
+  - Follow `resilience/retry.py` pattern (exponential backoff)
+  - Catch `sqlite3.OperationalError` with "database is locked"
+  - `@retry_on_busy(max_attempts=SQLITE_BUSY_RETRIES)`
+  - Log warnings on retry, error after exhausted
+- [ ] 4.0.4 Apply `@retry_on_busy` to write functions in `data_store_main.py`
+  - `save_listing()`, `update_listing_evaluation()`, `add_viewing()`
+  - `upsert_scrape_history()`, `record_field_change()`
+  - `add_listing_source()`, `update_source_price()`
+- [ ] 4.0.5 Write concurrent write tests (`tests/test_db_concurrency.py`)
+  - Test: 10 parallel threads calling `save_listing()`
+  - Test: Mixed reads/writes under load
+  - Verify: All writes succeed, no data loss
+- [ ] 4.0.6 **Run Phase Completion Checklist** (settings centralized, no hardcoded values)
+
+##### Phase 4.1: Scraping Settings Configuration
+> **Spec**: [113_SCRAPING_CONFIGURATION.md](../specs/113_SCRAPING_CONFIGURATION.md)
+> **Why**: Settings define the contract for how Celery tasks behave.
+> Create 2-level config: general defaults + per-site overrides.
+> Based on Scrapy, Colly, Crawlee best practices.
+>
+> **Cleanup Done**: Removed dead `SCRAPER_CONFIG` from `config/__init__.py`
+
+- [x] 4.1.1 Create `config/scraping_defaults.yaml` (general settings)
+- [x] 4.1.2 Create `config/sites/` with `imot_bg.yaml` and `bazar_bg.yaml`
+- [x] 4.1.3 Create `config/scraping_config.py` loader (8 dataclasses, deep merge)
+- [x] 4.1.4 Write unit tests (7 tests, 99% coverage)
+- [x] 4.1.5 **Phase Completion Checklist** - Passed
+  - Legacy `DEFAULT_SCRAPE_DELAY` + `SiteConfig` remain until main.py updated (Phase 4.2)
 
 ##### Phase 4.2: Async Implementation (Fix Fake Async)
 > **Why second**: Clean foundation before Celery integration.
@@ -215,68 +237,12 @@
 
 ---
 
-### Ollama Integration - Future Enhancements
-
-**Spec**: [107_OLLAMA_INTEGRATION.md](../specs/107_OLLAMA_INTEGRATION.md)
-
-> **Phase 3.6 Complete**: Achieved 100% accuracy. Dictionary extracts booleans directly (has_elevator fix). Phases 4-5 skipped (thresholds already exceeded).
-
-#### Future: Scrapling + LLM Synergy
-- [ ] Research element-aware prompts vs raw text prompts
-- [ ] Implement hybrid extraction: Scrapling CSS -> LLM fallback
-
----
-
-### Scraper Resilience & Error Handling (P1) - PHASES 1-4 COMPLETE
-
-**Tasks**: [112_RESILIENCE_IMPLEMENTATION.md](112_RESILIENCE_IMPLEMENTATION.md) (detailed breakdown)
-> Spec and research archived (code is source of truth). 153 tests passing.
-
-#### Phase 1: Foundation (COMPLETE)
-- [x] Create `resilience/` module structure
-- [x] Implement `resilience/exceptions.py` (exception hierarchy)
-- [x] Implement `resilience/error_classifier.py`
-- [x] Implement `resilience/retry.py` (sync + async with backoff + jitter)
-- [x] Add resilience settings to `config/settings.py`
-- [x] Integrate retry decorator into `main.py`
-- [x] Write unit tests for Phase 1 (45 tests, 100% pass)
-
-#### Phase 2: Domain Protection (COMPLETE)
-- [x] Implement `resilience/circuit_breaker.py`
-- [x] Implement `resilience/rate_limiter.py` (token bucket)
-- [x] Integrate circuit breaker into main.py
-- [x] Integrate rate limiter into main.py
-- [x] Write unit tests for Phase 2 (42 tests, 100% pass)
-
-#### Phase 3: Session Recovery (COMPLETE)
-- [x] Implement `resilience/checkpoint.py`
-- [x] Add checkpoint save/restore to main.py
-- [x] Add SIGTERM/SIGINT graceful shutdown handlers
-- [x] Write unit tests for Phase 3 (18 tests, 100% pass)
-- [x] **Run Phase Completion Checklist** (consistency + alignment)
-
-#### Phase 4: Detection (COMPLETE)
-- [x] Implement `resilience/response_validator.py` (CAPTCHA/soft block detection)
-- [x] Add 429/Retry-After header handling
-- [x] Write unit tests for Phase 4 (48 tests, 100% pass)
-- [x] **Run Phase Completion Checklist** (consistency + alignment)
-
----
-
-### Features (P2)
-
-- [ ] Improve floor extraction in bazar.bg scraper
-- [ ] Populate dashboard with scraped data
-
----
-
 ## Related Documents
 
-- [REFACTORING_TASKS.md](REFACTORING_TASKS.md) - Code quality refactoring tasks
 - [docs/specs/](../specs/) - Active specifications
 - [docs/research/](../research/) - Active research
 - [archive/](../../archive/) - Completed work archives
 
 ---
 
-**Last Updated**: 2025-12-27 (Phase 3.5 COMPLETE - Cross-Site Duplicate Detection)
+**Last Updated**: 2025-12-27 (Added Phase 4.0 Database Concurrency - BLOCKER for parallel scraping)

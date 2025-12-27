@@ -1,0 +1,16 @@
+# bazar.bg - Has anti-bot protection
+# More conservative settings
+
+timing:
+  delay_seconds: 3.0          # Slower to avoid detection
+
+concurrency:
+  max_per_domain: 1           # Single request at a time
+
+fetcher:
+  search_pages: stealth       # Use stealth browser
+  listing_pages: http         # Regular HTTP OK for listings
+
+anti_detection:
+  rotate_user_agent: true
+  humanize_actions: true      # More human-like

@@ -14,6 +14,7 @@
 | Page Change Detection Phases 1-3 | 8 | Completed |
 | Ollama Integration Phases 1-5 | 45+ | Completed |
 | Crawler Validation Phase 0 | 7 | Completed |
+| Scraper Resilience Phases 1-4 | 33 | Completed (153 tests) |
 | Historical Completed Work | 35+ | Completed |
 
 ---
@@ -286,6 +287,42 @@
 - [x] Build `ChangeDetector` class - Implemented as `data/change_detector.py`
 - [x] Integrate into scraper flow - Done in `main.py:_check_and_save_listing()`
 - [x] Add dashboard timeline view - Price history chart + "recently changed" filter
+
+---
+
+## Scraper Resilience & Error Handling (P1) - PHASES 1-4 COMPLETE
+
+**Implementation File**: [112_RESILIENCE_IMPLEMENTATION.md](../specs/112_RESILIENCE_IMPLEMENTATION.md) (archived)
+> 153 tests passing. Code is source of truth.
+
+### Phase 1: Foundation (COMPLETE)
+- [x] Create `resilience/` module structure
+- [x] Implement `resilience/exceptions.py` (exception hierarchy)
+- [x] Implement `resilience/error_classifier.py`
+- [x] Implement `resilience/retry.py` (sync + async with backoff + jitter)
+- [x] Add resilience settings to `config/settings.py`
+- [x] Integrate retry decorator into `main.py`
+- [x] Write unit tests for Phase 1 (45 tests, 100% pass)
+
+### Phase 2: Domain Protection (COMPLETE)
+- [x] Implement `resilience/circuit_breaker.py`
+- [x] Implement `resilience/rate_limiter.py` (token bucket)
+- [x] Integrate circuit breaker into main.py
+- [x] Integrate rate limiter into main.py
+- [x] Write unit tests for Phase 2 (42 tests, 100% pass)
+
+### Phase 3: Session Recovery (COMPLETE)
+- [x] Implement `resilience/checkpoint.py`
+- [x] Add checkpoint save/restore to main.py
+- [x] Add SIGTERM/SIGINT graceful shutdown handlers
+- [x] Write unit tests for Phase 3 (18 tests, 100% pass)
+- [x] **Run Phase Completion Checklist** (consistency + alignment)
+
+### Phase 4: Detection (COMPLETE)
+- [x] Implement `resilience/response_validator.py` (CAPTCHA/soft block detection)
+- [x] Add 429/Retry-After header handling
+- [x] Write unit tests for Phase 4 (48 tests, 100% pass)
+- [x] **Run Phase Completion Checklist** (consistency + alignment)
 
 ---
 
