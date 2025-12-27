@@ -88,6 +88,32 @@ archive/research/  archive/specs/          (code supersedes)
 
 ## Session History
 
+### 2025-12-27 (Session 33 - Phase 3.5 Cross-Site Duplicate Detection)
+
+| Task | Status |
+|------|--------|
+| Create spec 106B | Complete |
+| Create `listing_sources` table | Complete |
+| Build `PropertyFingerprinter` class | Complete |
+| Build `PropertyMerger` class | Complete |
+| Track price discrepancies across sites | Complete |
+| Add cross-site comparison dashboard page | Complete |
+| Run Phase Completion Checklist | Complete |
+
+**Summary**: Implemented Phase 3.5 Cross-Site Duplicate Detection. Created fingerprinting system to identify same property across imot.bg and bazar.bg. Added price discrepancy tracking and dashboard comparison view. 527 tests passing.
+
+**Files Created**:
+- `docs/specs/106B_CROSS_SITE_DEDUPLICATION.md` - spec for cross-site deduplication
+- `data/property_fingerprinter.py` - PropertyFingerprinter class with neighborhood normalization
+- `data/property_merger.py` - PropertyMerger class for smart data merging
+- `app/pages/4_Cross_Site.py` - Streamlit dashboard page for cross-site comparison
+
+**Files Modified**:
+- `data/data_store_main.py` - added listing_sources table + 8 CRUD functions
+- `config/settings.py` - added FINGERPRINT_FIELDS, PRICE_DISCREPANCY thresholds
+
+---
+
 ### 2025-12-27 (Session 31 - Phase 3 Change Detection + Phase 1 Finish)
 
 | Task | Status |
@@ -134,27 +160,6 @@ archive/research/  archive/specs/          (code supersedes)
 - `websites/bazar_bg/selectors.py` - floor patterns (Cyrillic Е), price JS, sqm patterns
 - `websites/bazar_bg/bazar_scraper.py` - handle EUR text in price fallback
 - `tests/scrapers/conftest.py` - fixed bazar_search_html fixture with proper CSS classes
-
----
-
-### 2025-12-27 (Session 29 - Task Archiving)
-
-| Task | Status |
-|------|--------|
-| Archive completed TASKS.md sections | Complete |
-| Archive completed REFACTORING_TASKS.md sections | Complete |
-| Create archive/tasks/ directory | Complete |
-| Streamline active task files | Complete |
-
-**Summary**: Archived completed task sections following ZohoCentral pattern. Created `archive/tasks/TASKS_COMPLETED_2025-12-27.md` (353 lines) and `archive/tasks/REFACTORING_TASKS_COMPLETED_2025-12-27.md` (406 lines). Reduced TASKS.md from 765 to 129 lines and REFACTORING_TASKS.md from 740 to 65 lines.
-
-**Files Created**:
-- `archive/tasks/TASKS_COMPLETED_2025-12-27.md` - archived Bugs, Solution F, Chunk Timing, Celery/Mubeng, Page Change Detection, Ollama, Historical Work
-- `archive/tasks/REFACTORING_TASKS_COMPLETED_2025-12-27.md` - archived all 26 refactoring tasks (22 complete, 2 skipped, 2 superseded)
-
-**Files Modified**:
-- `docs/tasks/TASKS.md` - streamlined with summary table + pending tasks only
-- `docs/tasks/REFACTORING_TASKS.md` - streamlined with summary + optional follow-up tests
 
 ---
 

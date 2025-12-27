@@ -48,8 +48,10 @@
 | Instance | Current Task |
 |----------|--------------|
 | 1 | Available |
-| 2 | Phase 3.5: Cross-Site Duplicate Detection |
+| 2 | Available |
 | 3 | Available |
+
+**Session 33 (2025-12-27)**: Instance 2 - Phase 3.5 Cross-Site Duplicate Detection COMPLETE. Created listing_sources table, PropertyFingerprinter, PropertyMerger, price discrepancy tracking, dashboard page. 527 tests passing.
 
 **Session 33 (2025-12-27)**: Instance 1 - Phase 4 Task Consolidation. Analyzed async/parallel patterns, researched Celery best practices, consolidated "async orchestrator" + "Celery integration" into unified Phase 4 with 4 sub-phases (22 tasks).
 
@@ -103,15 +105,16 @@
 - [x] Write 30 tests (`tests/test_change_detection.py`) - 100% pass
 - [x] **Phase Completion Checklist** - Passed (no hardcoded values, spec aligned)
 
-#### Phase 3.5: Cross-Site Duplicate Detection & Merging [Instance 2]
+#### Phase 3.5: Cross-Site Duplicate Detection & Merging (COMPLETE)
 > **Spec**: [106B_CROSS_SITE_DEDUPLICATION.md](../specs/106B_CROSS_SITE_DEDUPLICATION.md)
+> Files: `data/property_fingerprinter.py`, `data/property_merger.py`, `app/pages/4_Cross_Site.py`
 
-- [ ] [Instance 2] Create `listing_sources` table (track which sites list property)
-- [ ] [Instance 2] Build `PropertyFingerprinter` class (identify duplicates)
-- [ ] [Instance 2] Build `PropertyMerger` class (smart data merging)
-- [ ] [Instance 2] Track price discrepancies across sites
-- [ ] [Instance 2] Add cross-site comparison view to dashboard
-- [ ] [Instance 2] **Run Phase Completion Checklist** (consistency + alignment)
+- [x] Create `listing_sources` table (track which sites list property)
+- [x] Build `PropertyFingerprinter` class (identify duplicates)
+- [x] Build `PropertyMerger` class (smart data merging)
+- [x] Track price discrepancies across sites
+- [x] Add cross-site comparison view to dashboard
+- [x] **Phase Completion Checklist** - Passed (added settings to config/settings.py)
 
 #### Phase 4: Celery Site Orchestration (CONSOLIDATED)
 > **Goal**: Parallel site scraping via Celery with proper async and per-site configuration.
@@ -121,6 +124,9 @@
 ##### Phase 4.1: Scraping Settings Configuration
 > **Why first**: Settings define the contract for how Celery tasks behave.
 > Create 2-level config: general defaults + per-site overrides.
+>
+> **⚠️ Cleanup Note (Instance 3)**: Dead code in `config/__init__.py`:
+> - `SCRAPER_CONFIG` dict is never used - remove it when working on this phase
 
 - [ ] 4.1.1 Create `config/scraping_defaults.yaml` (general settings)
   - Rate limiting: `requests_per_minute`, `delay_between_requests`
@@ -273,4 +279,4 @@
 
 ---
 
-**Last Updated**: 2025-12-27 (Phase 4 CONSOLIDATED - Celery Site Orchestration with 4 sub-phases)
+**Last Updated**: 2025-12-27 (Phase 3.5 COMPLETE - Cross-Site Duplicate Detection)

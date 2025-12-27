@@ -1,8 +1,5 @@
 # config package - Sofia Real Estate Scraper Configuration
 
-# --- Proxy Settings ---
-PROXY_VALID_THRESHOLD = 50
-
 # --- Scraper Settings ---
 SCRAPER_CONFIG = {
     "request_delay": 2,  # Seconds between requests (be polite)

@@ -7,8 +7,7 @@ from typing import List, Optional, Tuple
 
 from celery import chain
 
-import config
-from config.settings import MIN_PROXIES_TO_START
+from config.settings import MIN_PROXIES_TO_START, MIN_PROXIES_FOR_SCRAPING
 from paths import PROXIES_DIR
 from proxies import proxy_to_url
 from utils.utils import free_port
@@ -124,9 +123,9 @@ def _check_and_refresh_proxies():
             except json.JSONDecodeError:
                 logger.warning("Could not parse live_proxies.json, assuming 0 proxies.")
 
-    if proxy_count < config.PROXY_VALID_THRESHOLD:
+    if proxy_count < MIN_PROXIES_FOR_SCRAPING:
         logger.warning(
-            f"Proxy count ({proxy_count}) is below threshold ({config.PROXY_VALID_THRESHOLD}). "
+            f"Proxy count ({proxy_count}) is below threshold ({MIN_PROXIES_FOR_SCRAPING}). "
             "Triggering a background refresh via Celery."
         )
         print("[WARNING] Proxy count is low. Starting a refresh in the background...")

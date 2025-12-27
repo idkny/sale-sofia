@@ -927,8 +927,360 @@ def mark_url_status(url: str, status: str) -> bool:
         conn.close()
 
 
+# ============================================================
+# Cross-Site Deduplication Tables (Spec 106B)
+# ============================================================
+
+
+def init_listing_sources_table():
+    """Create listing_sources table for cross-site duplicate tracking."""
+    conn = get_db_connection()
+
+    conn.execute("""
+        CREATE TABLE IF NOT EXISTS listing_sources (
+            id INTEGER PRIMARY KEY,
+            property_fingerprint TEXT NOT NULL,
+            listing_id INTEGER NOT NULL REFERENCES listings(id),
+            source_site TEXT NOT NULL,
+            source_url TEXT NOT NULL,
+            source_price_eur REAL,
+            first_seen TEXT NOT NULL,
+            last_seen TEXT NOT NULL,
+            is_primary BOOLEAN DEFAULT 0,
+            UNIQUE(property_fingerprint, source_site)
+        )
+    """)
+
+    conn.execute("CREATE INDEX IF NOT EXISTS idx_sources_fingerprint ON listing_sources(property_fingerprint)")
+    conn.execute("CREATE INDEX IF NOT EXISTS idx_sources_listing ON listing_sources(listing_id)")
+
+    conn.commit()
+    conn.close()
+    logger.info("Listing sources table initialized")
+
+
+def add_listing_source(
+    property_fingerprint: str,
+    listing_id: int,
+    source_site: str,
+    source_url: str,
+    source_price_eur: Optional[float] = None,
+) -> Optional[int]:
+    """
+    Add or update a listing source record.
+
+    Args:
+        property_fingerprint: SHA256 fingerprint of property characteristics
+        listing_id: ID of the listing in listings table
+        source_site: Source website (e.g., 'imot.bg', 'bazar.bg')
+        source_url: URL of the listing on the source site
+        source_price_eur: Price in EUR from this source
+
+    Returns:
+        Source record ID or None if failed
+    """
+    conn = get_db_connection()
+    now = datetime.utcnow().isoformat()
+
+    try:
+        cursor = conn.execute("""
+            INSERT INTO listing_sources
+                (property_fingerprint, listing_id, source_site, source_url,
+                 source_price_eur, first_seen, last_seen)
+            VALUES (?, ?, ?, ?, ?, ?, ?)
+            ON CONFLICT(property_fingerprint, source_site) DO UPDATE SET
+                listing_id = excluded.listing_id,
+                source_url = excluded.source_url,
+                source_price_eur = excluded.source_price_eur,
+                last_seen = excluded.last_seen
+        """, (property_fingerprint, listing_id, source_site, source_url,
+              source_price_eur, now, now))
+        conn.commit()
+        return cursor.lastrowid
+    except sqlite3.Error as e:
+        logger.error(f"Error adding listing source: {e}")
+        return None
+    finally:
+        conn.close()
+
+
+def get_sources_by_fingerprint(fingerprint: str) -> List[sqlite3.Row]:
+    """
+    Get all sources for a property fingerprint.
+
+    Args:
+        fingerprint: Property fingerprint
+
+    Returns:
+        List of source records
+    """
+    conn = get_db_connection()
+    cursor = conn.execute(
+        "SELECT * FROM listing_sources WHERE property_fingerprint = ? ORDER BY is_primary DESC, first_seen ASC",
+        (fingerprint,)
+    )
+    rows = cursor.fetchall()
+    conn.close()
+    return rows
+
+
+def get_sources_by_listing(listing_id: int) -> List[sqlite3.Row]:
+    """
+    Get all sources for a listing ID.
+
+    Args:
+        listing_id: Listing ID
+
+    Returns:
+        List of source records
+    """
+    conn = get_db_connection()
+    cursor = conn.execute(
+        "SELECT * FROM listing_sources WHERE listing_id = ? ORDER BY is_primary DESC, first_seen ASC",
+        (listing_id,)
+    )
+    rows = cursor.fetchall()
+    conn.close()
+    return rows
+
+
+def update_source_price(fingerprint: str, source_site: str, price: float) -> bool:
+    """
+    Update price for a specific source.
+
+    Args:
+        fingerprint: Property fingerprint
+        source_site: Source website
+        price: New price in EUR
+
+    Returns:
+        True if updated successfully
+    """
+    conn = get_db_connection()
+    now = datetime.utcnow().isoformat()
+
+    try:
+        conn.execute("""
+            UPDATE listing_sources
+            SET source_price_eur = ?, last_seen = ?
+            WHERE property_fingerprint = ? AND source_site = ?
+        """, (price, now, fingerprint, source_site))
+        conn.commit()
+        return True
+    except sqlite3.Error as e:
+        logger.error(f"Error updating source price: {e}")
+        return False
+    finally:
+        conn.close()
+
+
+def set_primary_source(fingerprint: str, source_site: str) -> bool:
+    """
+    Mark a source as primary for a property (unmarks others).
+
+    Args:
+        fingerprint: Property fingerprint
+        source_site: Source website to mark as primary
+
+    Returns:
+        True if updated successfully
+    """
+    conn = get_db_connection()
+
+    try:
+        # First, unmark all sources for this fingerprint
+        conn.execute("""
+            UPDATE listing_sources
+            SET is_primary = 0
+            WHERE property_fingerprint = ?
+        """, (fingerprint,))
+
+        # Then mark the specified source as primary
+        conn.execute("""
+            UPDATE listing_sources
+            SET is_primary = 1
+            WHERE property_fingerprint = ? AND source_site = ?
+        """, (fingerprint, source_site))
+
+        conn.commit()
+        return True
+    except sqlite3.Error as e:
+        logger.error(f"Error setting primary source: {e}")
+        return False
+    finally:
+        conn.close()
+
+
+# ============================================================
+# Cross-Site Duplicate Detection (Spec 106B)
+# ============================================================
+
+
+def get_properties_with_multiple_sources() -> List[Dict]:
+    """
+    Get properties that appear on 2+ sites.
+
+    Queries listing_sources grouped by property_fingerprint,
+    returns only fingerprints with multiple sources.
+
+    Returns:
+        List of dicts with:
+        - fingerprint: str
+        - sources: List[Dict] with source_site, source_url, source_price_eur
+        - price_discrepancy: Dict or None (from PropertyMerger.get_price_discrepancy)
+    """
+    from data.property_merger import PropertyMerger
+
+    conn = get_db_connection()
+    merger = PropertyMerger()
+
+    # Get fingerprints with 2+ sources
+    cursor = conn.execute("""
+        SELECT property_fingerprint, COUNT(*) as source_count
+        FROM listing_sources
+        GROUP BY property_fingerprint
+        HAVING COUNT(*) >= 2
+        ORDER BY source_count DESC
+    """)
+
+    fingerprints = cursor.fetchall()
+    results = []
+
+    for row in fingerprints:
+        fingerprint = row["property_fingerprint"]
+
+        # Get all sources for this fingerprint
+        sources_cursor = conn.execute("""
+            SELECT source_site, source_url, source_price_eur, is_primary,
+                   first_seen, last_seen
+            FROM listing_sources
+            WHERE property_fingerprint = ?
+            ORDER BY is_primary DESC, first_seen ASC
+        """, (fingerprint,))
+
+        sources = [dict(s) for s in sources_cursor.fetchall()]
+
+        # Build listing-like dicts for price discrepancy calculation
+        listings_for_discrepancy = [
+            {"source_site": s["source_site"], "price_eur": s["source_price_eur"]}
+            for s in sources
+            if s["source_price_eur"] is not None
+        ]
+
+        price_discrepancy = merger.get_price_discrepancy(listings_for_discrepancy)
+
+        results.append({
+            "fingerprint": fingerprint,
+            "sources": sources,
+            "price_discrepancy": price_discrepancy,
+        })
+
+    conn.close()
+    return results
+
+
+def get_price_discrepancies(min_pct: float = 5.0) -> List[Dict]:
+    """
+    Get all properties where price difference exceeds threshold.
+
+    Args:
+        min_pct: Minimum price discrepancy percentage (default 5.0%)
+
+    Returns:
+        List of dicts sorted by discrepancy_pct descending, with:
+        - fingerprint: str
+        - min_price: float
+        - max_price: float
+        - discrepancy_pct: float
+        - sources: List[Dict] with source_site and source_price_eur
+    """
+    # Get all properties with multiple sources
+    multi_source_properties = get_properties_with_multiple_sources()
+
+    discrepancies = []
+
+    for prop in multi_source_properties:
+        disc = prop.get("price_discrepancy")
+        if disc is None:
+            continue
+
+        if disc["discrepancy_pct"] >= min_pct:
+            discrepancies.append({
+                "fingerprint": prop["fingerprint"],
+                "min_price": disc["min_price"],
+                "max_price": disc["max_price"],
+                "discrepancy_pct": disc["discrepancy_pct"],
+                "sources": [
+                    {"source_site": s["source_site"], "source_price_eur": s["source_price_eur"]}
+                    for s in prop["sources"]
+                ],
+            })
+
+    # Sort by discrepancy_pct descending
+    discrepancies.sort(key=lambda x: x["discrepancy_pct"], reverse=True)
+
+    return discrepancies
+
+
+def link_listing_to_sources(
+    listing_id: int,
+    fingerprint: str,
+    source_site: str,
+    url: str,
+    price: float,
+) -> bool:
+    """
+    Convenience function to add a listing to sources and check for duplicates.
+
+    If fingerprint exists with a different source_site, logs duplicate detection.
+
+    Args:
+        listing_id: ID of the listing in listings table
+        fingerprint: Property fingerprint (SHA256)
+        source_site: Source website (e.g., 'imot.bg')
+        url: Listing URL
+        price: Price in EUR
+
+    Returns:
+        True if this is a new duplicate (same fingerprint, different site),
+        False if new property or same site update
+    """
+    conn = get_db_connection()
+
+    # Check for existing sources with same fingerprint but different site
+    cursor = conn.execute("""
+        SELECT source_site, source_url, source_price_eur
+        FROM listing_sources
+        WHERE property_fingerprint = ? AND source_site != ?
+    """, (fingerprint, source_site))
+
+    existing_sources = cursor.fetchall()
+    is_new_duplicate = len(existing_sources) > 0
+
+    conn.close()
+
+    if is_new_duplicate:
+        existing_sites = [s["source_site"] for s in existing_sources]
+        logger.info(
+            f"Duplicate detected: {source_site} listing matches existing sources: "
+            f"{existing_sites} (fingerprint: {fingerprint[:16]}...)"
+        )
+
+    # Add or update the source record
+    add_listing_source(
+        property_fingerprint=fingerprint,
+        listing_id=listing_id,
+        source_site=source_site,
+        source_url=url,
+        source_price_eur=price,
+    )
+
+    return is_new_duplicate
+
+
 # Initialize database on import
 init_db()
 migrate_listings_schema()
 init_viewings_table()
 init_change_detection_tables()
+init_listing_sources_table()

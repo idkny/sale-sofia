@@ -9,13 +9,15 @@ from typing import Dict, List, Union
 import yaml
 from loguru import logger
 
+from config.settings import DEFAULT_SCRAPE_DELAY
+
 
 @dataclass
 class SiteConfig:
     """Per-site scraping configuration."""
-    limit: int = 100      # Max listings per start URL
-    delay: float = 6.0    # Seconds between requests
-    timeout: int = 30     # Page load timeout
+    limit: int = 100                    # Max listings per start URL
+    delay: float = DEFAULT_SCRAPE_DELAY # Seconds between requests
+    timeout: int = 30                   # Page load timeout
 
 
 def get_start_urls() -> Dict[str, List[str]]:

@@ -112,6 +112,21 @@ PROXY_WAIT_TIMEOUT = 600
 MIN_CONTENT_LENGTH = 1000
 
 # =============================================================================
+# CROSS-SITE DEDUPLICATION SETTINGS
+# =============================================================================
+# Used in: data/property_fingerprinter.py, data/property_merger.py
+# Spec: 106B_CROSS_SITE_DEDUPLICATION.md
+
+# Fields used to generate property fingerprint
+FINGERPRINT_FIELDS = ["neighborhood", "sqm_total", "rooms_count", "floor_number", "building_type"]
+
+# Price discrepancy threshold (highlight if above this percentage)
+PRICE_DISCREPANCY_THRESHOLD_PCT = 5.0
+
+# High discrepancy threshold (red highlight in dashboard)
+PRICE_DISCREPANCY_HIGH_PCT = 10.0
+
+# =============================================================================
 # SCRAPING DEFAULTS
 # =============================================================================
 # Used in: main.py scrape_from_start_url
