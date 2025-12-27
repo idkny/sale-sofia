@@ -50,6 +50,10 @@
 
 ## Phase 1: Foundation (P1 - Critical) - COMPLETE
 
+- [x] **1.0** CTO Review: Read architecture docs before implementation
+  - Read: ALL files in `docs/architecture/` + `config/settings.py`
+  - Pass to agents: Project conventions, patterns, file structure
+
 - [x] **1.1** Create `resilience/` module structure
 - [x] **1.2** Implement `resilience/exceptions.py`
 - [x] **1.3** Implement `resilience/error_classifier.py`
@@ -72,9 +76,9 @@
 ## Phase 2: Domain Protection (P2) - COMPLETE
 
 - [x] **2.0** CTO Review: Read architecture docs before implementation
-  - Read: `docs/architecture/ARCHITECTURE.md`, `CONVENTIONS.md`, `DESIGN_PATTERNS.md`
-  - Ensure agents follow: single responsibility, 30-line functions, proper naming
-  - Pass relevant context to agents
+  - Read: ALL files in `docs/architecture/` + `config/settings.py`
+  - Pass to agents: Single responsibility, 30-line functions, proper naming, import from config.settings
+  - Reference: Phase 1 code as example for consistency
 
 - [x] **2.1** Implement `resilience/circuit_breaker.py`
   - Spec: [2.1 Circuit Breaker](../specs/112_SCRAPER_RESILIENCE.md#21-circuit-breaker)
@@ -120,8 +124,8 @@
 ## Phase 3: Session Recovery (P2)
 
 - [ ] **3.0** CTO Review: Read architecture docs before implementation
-  - Read: `docs/architecture/ARCHITECTURE.md`, `CONVENTIONS.md`, `DESIGN_PATTERNS.md`
-  - Review: `resilience/__init__.py` for export patterns, `config/settings.py` for settings
+  - Read: ALL files in `docs/architecture/` + `config/settings.py`
+  - Review: `resilience/__init__.py` for export patterns
   - Pass to agents: Single responsibility, 30-line functions, proper naming, import from config.settings
   - Reference: Phase 1-2 code as examples for consistency
 
@@ -158,8 +162,8 @@
 ## Phase 4: Detection (P3)
 
 - [ ] **4.0** CTO Review: Read architecture docs before implementation
-  - Read: `docs/architecture/ARCHITECTURE.md`, `CONVENTIONS.md`, `DESIGN_PATTERNS.md`
-  - Review: `resilience/__init__.py` for export patterns, `config/settings.py` for settings
+  - Read: ALL files in `docs/architecture/` + `config/settings.py`
+  - Review: `resilience/__init__.py` for export patterns
   - Pass to agents: Single responsibility, 30-line functions, proper naming, import from config.settings
   - Reference: Phase 1-2-3 code as examples for consistency
 
@@ -204,16 +208,17 @@
 
 | Phase | Tasks | Priority | Status |
 |-------|-------|----------|--------|
-| Phase 1: Foundation | 9 | P1 (Critical) | COMPLETE |
+| Phase 1: Foundation | 10 | P1 (Critical) | COMPLETE |
 | Phase 2: Domain Protection | 8 | P2 | COMPLETE |
 | Phase 3: Session Recovery | 7 | P2 | Pending |
 | Phase 4: Detection | 7 | P3 | Pending |
 | Verification | 1 | P1 | Pending |
-| **Total** | **32** | |
+| **Total** | **33** | |
 
-**Note**: Each phase includes TWO mandatory closing tasks:
-1. **Consistency check** - Audit for hardcoded values, add to config/settings.py
-2. **Integration validation** - Check harmony with other project features
+**Note**: Each phase includes THREE mandatory tasks:
+1. **CTO Review** (opening) - Read ALL `docs/architecture/` files before delegating
+2. **Consistency check** (closing) - Audit for hardcoded values, add to config/settings.py
+3. **Integration validation** (closing) - Check harmony with other project features
 
 ---
 
