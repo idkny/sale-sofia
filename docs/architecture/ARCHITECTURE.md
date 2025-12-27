@@ -90,7 +90,7 @@ We use [Scrapling](https://github.com/D4Vinci/Scrapling) instead of BeautifulSou
 |-------|----------|---------|
 | Presentation | `app/` | Streamlit dashboard, scoring |
 | Application | `main.py`, `orchestrator.py` | Workflows, service lifecycle |
-| Domain | `websites/`, `proxies/` | Business logic |
+| Domain | `websites/`, `proxies/`, `resilience/` | Business logic, error handling |
 | Infrastructure | `data/`, `browsers/`, `config/` | External services, persistence |
 
 ---
@@ -109,6 +109,7 @@ sale-sofia/
 ├── config/              # Configuration
 ├── data/                # SQLite, logs
 ├── proxies/             # Proxy management
+├── resilience/          # Error handling, retry logic
 ├── websites/            # Scrapers
 ├── tests/               # Tests
 ├── docs/                # Documentation

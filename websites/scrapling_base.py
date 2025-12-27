@@ -25,7 +25,7 @@ from loguru import logger
 from scrapling import Adaptor
 from scrapling.fetchers import Fetcher, StealthyFetcher
 
-from config.settings import MUBENG_PROXY
+from config.settings import MUBENG_PROXY, PROXY_TIMEOUT_MS, PROXY_TIMEOUT_SECONDS
 
 # Storage for adaptive selectors
 SELECTOR_STORAGE = Path(__file__).parent.parent / "data" / "scrapling_selectors"
@@ -112,7 +112,7 @@ def detect_encoding(content: bytes, headers: dict = None) -> str:
 def fetch_with_encoding(
     url: str,
     proxy: Optional[str] = None,
-    timeout: int = 30,
+    timeout: int = PROXY_TIMEOUT_SECONDS,
     headers: dict = None,
 ) -> Tuple[str, str]:
     """
@@ -402,7 +402,7 @@ class ScraplingMixin:
         self,
         url: str,
         proxy: Optional[str] = None,
-        timeout: int = 30,
+        timeout: int = PROXY_TIMEOUT_SECONDS,
     ) -> Adaptor:
         """
         Fetch page with automatic encoding detection.
@@ -429,7 +429,7 @@ class ScraplingMixin:
         self,
         url: str,
         humanize: bool = True,
-        timeout: int = 30000,
+        timeout: int = PROXY_TIMEOUT_MS,
         skip_proxy: bool = False,
     ) -> Adaptor:
         """
@@ -487,7 +487,7 @@ class ScraplingMixin:
     def fetch_fast(
         self,
         url: str,
-        timeout: int = 15000,
+        timeout: int = PROXY_TIMEOUT_MS // 3,
         skip_proxy: bool = False,
     ) -> Adaptor:
         """

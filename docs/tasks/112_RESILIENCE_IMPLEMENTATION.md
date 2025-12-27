@@ -18,42 +18,28 @@
 
 ---
 
-## Phase 1: Foundation (P1 - Critical)
+## Phase 1: Foundation (P1 - Critical) - COMPLETE
 
-- [ ] **1.1** Create `resilience/` module structure
-  - Spec: [Architecture section](../specs/112_SCRAPER_RESILIENCE.md#architecture)
-  - Create: `resilience/__init__.py`, `exceptions.py`, `error_classifier.py`, `retry.py`
-
-- [ ] **1.2** Implement `resilience/exceptions.py`
-  - Spec: [1.1 Exception Hierarchy](../specs/112_SCRAPER_RESILIENCE.md#11-exception-hierarchy)
-  - Classes: ScraperException, NetworkException, RateLimitException, BlockedException, ParseException, ProxyException
-
-- [ ] **1.3** Implement `resilience/error_classifier.py`
-  - Spec: [1.2 Error Classifier](../specs/112_SCRAPER_RESILIENCE.md#12-error-classifier)
-  - AutoBiz: `core/_scraper_errors.py:34-129` (ErrorType, RecoveryAction, ERROR_RECOVERY_MAP)
-  - Functions: classify_error(), get_recovery_info()
-
-- [ ] **1.4** Implement `resilience/retry.py`
-  - Spec: [1.3 Retry Decorator](../specs/112_SCRAPER_RESILIENCE.md#13-retry-decorator-with-backoff)
-  - Functions: _calculate_delay(), retry_with_backoff(), retry_with_backoff_async()
-  - Features: exponential backoff, jitter, skip non-retryable errors
-
-- [ ] **1.5** Add resilience settings to `config/settings.py`
-  - Spec: [Config Additions](../specs/112_SCRAPER_RESILIENCE.md#config-additions-configsettingspy)
-  - Settings: RETRY_*, CIRCUIT_BREAKER_*, DOMAIN_RATE_LIMITS, CHECKPOINT_*
-
-- [ ] **1.6** Integrate retry decorator into `main.py`
-  - Spec: [1.4 Integration](../specs/112_SCRAPER_RESILIENCE.md#14-integration-with-mainpy)
-  - Replace: lines 117-150 (`_collect_listing_urls` retry loop)
-  - Replace: lines 210-269 (`_scrape_listings` retry loop)
-
-- [ ] **1.7** Write unit tests for Phase 1
-  - Location: `tests/test_resilience_phase1.py`
-  - Cover: retry decorator, error classifier, backoff calculation
+- [x] **1.1** Create `resilience/` module structure
+- [x] **1.2** Implement `resilience/exceptions.py`
+- [x] **1.3** Implement `resilience/error_classifier.py`
+- [x] **1.4** Implement `resilience/retry.py`
+- [x] **1.5** Add resilience settings to `config/settings.py`
+- [x] **1.6** Integrate retry decorator into `main.py`
+- [x] **1.7** Write unit tests for Phase 1 (45 tests, 100% pass)
+- [x] **1.8** Consistency check: Audit for hardcoded values
+  - Fixed: `scrapling_base.py` timeouts → use PROXY_TIMEOUT_SECONDS/MS
+  - Fixed: `proxy_validator.py` → use PROXY_VALIDATION_TIMEOUT
+  - Added: `PROXY_VALIDATION_TIMEOUT = 10` to settings
 
 ---
 
 ## Phase 2: Domain Protection (P2)
+
+- [ ] **2.0** CTO Review: Read architecture docs before implementation
+  - Read: `docs/architecture/ARCHITECTURE.md`, `CONVENTIONS.md`, `DESIGN_PATTERNS.md`
+  - Ensure agents follow: single responsibility, 30-line functions, proper naming
+  - Pass relevant context to agents
 
 - [ ] **2.1** Implement `resilience/circuit_breaker.py`
   - Spec: [2.1 Circuit Breaker](../specs/112_SCRAPER_RESILIENCE.md#21-circuit-breaker)
@@ -78,9 +64,18 @@
   - Location: `tests/test_resilience_phase2.py`
   - Cover: state transitions, fail-open, token bucket
 
+- [ ] **2.6** Consistency check: Audit for hardcoded values
+  - Check circuit breaker/rate limiter use settings from config/settings.py
+  - No magic numbers for timeouts, thresholds, or limits
+
 ---
 
 ## Phase 3: Session Recovery (P2)
+
+- [ ] **3.0** CTO Review: Read architecture docs before implementation
+  - Read: `docs/architecture/ARCHITECTURE.md`, `CONVENTIONS.md`
+  - Review checkpoint patterns in existing code
+  - Pass relevant context to agents
 
 - [ ] **3.1** Implement `resilience/checkpoint.py`
   - Spec: [3.1 Checkpoint Manager](../specs/112_SCRAPER_RESILIENCE.md#31-checkpoint-manager)
@@ -99,9 +94,18 @@
   - Location: `tests/test_resilience_phase3.py`
   - Cover: save/load, batched saves, clear
 
+- [ ] **3.5** Consistency check: Audit for hardcoded values
+  - Check checkpoint uses CHECKPOINT_BATCH_SIZE, CHECKPOINT_DIR from settings
+  - No hardcoded paths or batch sizes
+
 ---
 
 ## Phase 4: Detection (P3)
+
+- [ ] **4.0** CTO Review: Read architecture docs before implementation
+  - Read: `docs/architecture/ARCHITECTURE.md`, `CONVENTIONS.md`
+  - Review response handling patterns in existing scrapers
+  - Pass relevant context to agents
 
 - [ ] **4.1** Implement `resilience/response_validator.py`
   - Spec: [4.1 Soft Block Detector](../specs/112_SCRAPER_RESILIENCE.md#41-soft-block-detector)
@@ -118,6 +122,10 @@
   - Location: `tests/test_resilience_phase4.py`
   - Cover: pattern detection, Retry-After parsing
 
+- [ ] **4.5** Consistency check: Audit for hardcoded values
+  - Check response validator uses settings for thresholds (MIN_CONTENT_LENGTH, etc.)
+  - No hardcoded detection patterns that should be configurable
+
 ---
 
 ## Verification
@@ -131,14 +139,16 @@
 
 ## Summary
 
-| Phase | Tasks | Priority |
-|-------|-------|----------|
-| Phase 1: Foundation | 7 | P1 (Critical) |
-| Phase 2: Domain Protection | 5 | P2 |
-| Phase 3: Session Recovery | 4 | P2 |
-| Phase 4: Detection | 4 | P3 |
-| Verification | 1 | P1 |
-| **Total** | **21** | |
+| Phase | Tasks | Priority | Status |
+|-------|-------|----------|--------|
+| Phase 1: Foundation | 8 | P1 (Critical) | COMPLETE |
+| Phase 2: Domain Protection | 7 | P2 | Pending |
+| Phase 3: Session Recovery | 6 | P2 | Pending |
+| Phase 4: Detection | 6 | P3 | Pending |
+| Verification | 1 | P1 | Pending |
+| **Total** | **28** | |
+
+**Note**: Each phase includes a consistency check task to audit for hardcoded values.
 
 ---
 

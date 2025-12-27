@@ -98,6 +98,12 @@ sale-sofia/
 │   ├── *.md                  # Module README only
 │   └── external/             # External binaries
 │
+├── resilience/               # Error handling and retry logic
+│   ├── __init__.py           # Exports
+│   ├── exceptions.py         # Exception hierarchy
+│   ├── error_classifier.py   # Error type classification
+│   └── retry.py              # Retry decorators with backoff
+│
 ├── llm/                      # LLM integration (Ollama)
 │   ├── __init__.py           # Exports
 │   ├── llm_main.py           # Facade (OllamaClient + public functions)
@@ -179,6 +185,7 @@ sale-sofia/
 | Scraper | `websites/<site>/` |
 | Browser code | `browsers/` |
 | Proxy code | `proxies/` |
+| Resilience/error handling | `resilience/` |
 | LLM code | `llm/` |
 | Dashboard code | `app/` |
 | Data access | `data/` |

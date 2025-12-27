@@ -32,9 +32,11 @@
 | 2 | Available |
 | 3 | Available |
 
+**Session 29 (2025-12-27)**: Instance 1 - Spec 112 Phase 1 Implementation. Created resilience/ module (exceptions, error_classifier, retry). Integrated retry decorator into main.py. 45 tests passing. Fixed hardcoded timeouts in scrapling_base.py and proxy_validator.py. Updated architecture docs and manifest.json.
+
 **Session 28 (2025-12-27)**: Instance 2 - Ollama Phase 3.6 complete. Fixed has_elevator extraction (was 0%, now 100%). Dictionary now extracts booleans directly instead of relying on LLM. Overall accuracy: 100%. Phases 4-5 skipped (conditions not met - already above thresholds).
 
-**Session 28 (2025-12-27)**: Instance 1 - Scraper Resilience Research. Analyzed current error handling gaps, researched best practices, explored AutoBiz codebase for production-grade patterns. Created research doc, spec 112, and 18 implementation tasks. Found 5 modules to port: circuit breaker, error system, rate limiter, bulkhead, timeout budget.
+**Session 28 (2025-12-27)**: Instance 1 - Scraper Resilience Research. Created research doc, spec 112, and implementation tasks.
 
 **Session 27 (2025-12-27)**: Instance 2 - Consolidated scoring constants. Fixed min_count=5 bug. Added scoring constants to config/settings.py.
 
@@ -54,7 +56,6 @@
 - [ ] Test 3.2: Concurrent task handling
 - [ ] Test full proxy refresh + quality detection flow
 - [ ] Test imot.bg scraper with real listings
-- [ ] Debug/refine extraction logic
 
 ---
 

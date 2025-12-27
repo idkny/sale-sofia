@@ -81,6 +81,13 @@
       "block_new_subdirs": true
     },
 
+    "resilience/": {
+      "purpose": "Error handling and fault tolerance (retry, circuit breaker, rate limiter)",
+      "allowed_extensions": [".py"],
+      "allowed_subdirs": [],
+      "block_new_subdirs": true
+    },
+
     "websites/": {
       "purpose": "Scraper implementations",
       "allowed_extensions": [".py"],

@@ -7,7 +7,7 @@ Reference: Spec 112 Section 1.2
 """
 
 from enum import Enum
-from typing import Optional, Any, Tuple
+from typing import Optional, Tuple
 
 
 class ErrorType(Enum):
