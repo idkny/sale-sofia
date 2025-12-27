@@ -82,7 +82,7 @@
     },
 
     "resilience/": {
-      "purpose": "Error handling and fault tolerance (retry, circuit breaker, rate limiter)",
+      "purpose": "Error handling and fault tolerance (retry, circuit breaker, rate limiter, checkpoint)",
       "allowed_extensions": [".py"],
       "allowed_subdirs": [],
       "block_new_subdirs": true,
@@ -90,7 +90,8 @@
         "__init__.py": "Package init with public API exports",
         "retry.py": "Retry logic with exponential backoff",
         "circuit_breaker.py": "Domain-level circuit breaker for scraper fault tolerance",
-        "rate_limiter.py": "Token bucket rate limiter per domain"
+        "rate_limiter.py": "Token bucket rate limiter per domain",
+        "checkpoint.py": "Session recovery checkpoint for crash resilience"
       }
     },
 

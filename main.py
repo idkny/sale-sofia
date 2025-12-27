@@ -13,7 +13,10 @@ Starts the full automated scraping pipeline:
 """
 
 import asyncio
+import signal
+import sys
 import time
+from datetime import datetime
 from typing import Any, Optional
 from urllib.parse import urlparse
 
@@ -26,6 +29,7 @@ from resilience.circuit_breaker import get_circuit_breaker
 from resilience.exceptions import CircuitOpenException
 from resilience.rate_limiter import get_rate_limiter
 from resilience.retry import retry_with_backoff
+from resilience.checkpoint import CheckpointManager
 from data import data_store_main
 from data.change_detector import compute_hash, has_changed, track_price_change
 from paths import LOGS_DIR, PROXIES_DIR
@@ -49,6 +53,27 @@ from config.settings import (
     PROXY_WAIT_TIMEOUT,
     DEFAULT_SCRAPE_DELAY,
 )
+
+
+# Global state for checkpoint signal handler
+_checkpoint_manager: Optional[CheckpointManager] = None
+_scraped_urls: set[str] = set()
+_pending_urls: list[str] = []
+
+
+def _signal_handler(signum, frame):
+    """Handle SIGTERM/SIGINT gracefully."""
+    logger.warning(f"Received signal {signum}, saving checkpoint...")
+    if _checkpoint_manager:
+        _checkpoint_manager.save(_scraped_urls, _pending_urls, force=True)
+    logger.info("Checkpoint saved, exiting...")
+    sys.exit(0)
+
+
+def _setup_signal_handlers():
+    """Set up graceful shutdown handlers."""
+    signal.signal(signal.SIGTERM, _signal_handler)
+    signal.signal(signal.SIGINT, _signal_handler)
 
 
 def _extract_domain(url: str) -> str:
@@ -325,7 +350,8 @@ async def _scrape_listings(
     urls: list[str],
     delay: float,
     proxy: str | None,
-    proxy_pool: Optional[ScoredProxyPool]
+    proxy_pool: Optional[ScoredProxyPool],
+    checkpoint: Optional[CheckpointManager] = None
 ) -> dict:
     """
     Phase 2: Scrape individual listings from collected URLs.
@@ -335,7 +361,10 @@ async def _scrape_listings(
     Returns:
         Dictionary with stats: {scraped: int, failed: int, total_attempts: int, unchanged: int}
     """
+    global _scraped_urls, _pending_urls
+
     stats = {"scraped": 0, "failed": 0, "total_attempts": 0, "unchanged": 0}
+    _pending_urls = list(urls)
 
     for i, url in enumerate(urls, 1):
         logger.info(f"[{i}/{len(urls)}] {url}")
@@ -376,6 +405,13 @@ async def _scrape_listings(
             stats["failed"] += 1
             logger.error(f"  -> All {MAX_PROXY_RETRIES} attempts failed for {url}: {e}")
 
+        # Update checkpoint state
+        _scraped_urls.add(url)
+        if url in _pending_urls:
+            _pending_urls.remove(url)
+        if checkpoint:
+            checkpoint.save(_scraped_urls, _pending_urls)
+
         time.sleep(delay)
 
     return stats
@@ -387,7 +423,8 @@ async def scrape_from_start_url(
     limit: int,
     delay: float = DEFAULT_SCRAPE_DELAY,
     proxy: str | None = None,
-    proxy_pool: Optional[ScoredProxyPool] = None
+    proxy_pool: Optional[ScoredProxyPool] = None,
+    checkpoint: Optional[CheckpointManager] = None
 ) -> dict:
     """
     Scrape all listings from a starting URL with pagination support.
@@ -399,6 +436,7 @@ async def scrape_from_start_url(
         delay: Seconds to wait between requests (default: 6.0).
         proxy: The proxy server URL (e.g., "http://localhost:8089"). Should always be set.
         proxy_pool: Optional ScoredProxyPool for tracking proxy performance.
+        checkpoint: Optional CheckpointManager for crash recovery.
 
     Returns:
         Dictionary with stats: {scraped: int, failed: int, total_attempts: int}
@@ -414,7 +452,7 @@ async def scrape_from_start_url(
     logger.info(f"Collected {len(urls)} listing URLs to scrape")
 
     # Phase 2: Scrape individual listings
-    stats = await _scrape_listings(scraper, urls, delay, proxy, proxy_pool)
+    stats = await _scrape_listings(scraper, urls, delay, proxy, proxy_pool, checkpoint)
     logger.info(f"Scraping complete. Saved {stats['scraped']}/{len(urls)} listings.")
 
     return stats
@@ -637,6 +675,8 @@ def _crawl_all_sites(
     orch
 ) -> dict:
     """Crawl all configured sites. Returns aggregated stats."""
+    global _checkpoint_manager, _scraped_urls, _pending_urls
+
     from config.loader import get_site_config
     from websites import get_scraper
 
@@ -663,6 +703,18 @@ def _crawl_all_sites(
         print(f"\n[SITE] {site} ({len(urls)} start URLs)")
         print(f"[CONFIG] limit={site_config.limit}, delay={site_config.delay}s, timeout={site_config.timeout}s")
 
+        # Create checkpoint for this site
+        checkpoint_name = f"{site}_{datetime.now().strftime('%Y-%m-%d')}"
+        checkpoint = CheckpointManager(checkpoint_name)
+        _checkpoint_manager = checkpoint
+
+        # Load existing checkpoint
+        state = checkpoint.load()
+        already_scraped = set(state["scraped"]) if state else set()
+        if already_scraped:
+            logger.info(f"Resuming from checkpoint: {len(already_scraped)} URLs already scraped")
+            _scraped_urls = already_scraped
+
         for i, url in enumerate(urls, 1):
             print(f"\n[{i}/{len(urls)}] {url}")
             try:
@@ -673,7 +725,8 @@ def _crawl_all_sites(
                         limit=site_config.limit,
                         delay=site_config.delay,
                         proxy=proxy_url,
-                        proxy_pool=proxy_pool
+                        proxy_pool=proxy_pool,
+                        checkpoint=checkpoint
                     )
                 )
                 # Aggregate stats
@@ -685,6 +738,12 @@ def _crawl_all_sites(
                 logger.error(f"Error crawling {url}: {e}")
                 print(f"[ERROR] Failed to crawl {url}: {e}")
                 continue
+
+        # Clear checkpoint after successful completion of this site
+        checkpoint.clear()
+        _checkpoint_manager = None
+        _scraped_urls = set()
+        _pending_urls = []
 
         # Check proxy count after each site
         if not _ensure_min_proxies(proxy_pool, orch):
@@ -721,6 +780,8 @@ def run_auto_mode() -> None:
     Starts Redis, Celery, waits for proxies, and crawls all configured start URLs.
     Uses ScoredProxyPool to track proxy performance during scraping.
     """
+    global _checkpoint_manager, _scraped_urls, _pending_urls
+
     from orchestrator import Orchestrator
 
     _print_banner()
@@ -730,6 +791,14 @@ def run_auto_mode() -> None:
         return
 
     with Orchestrator() as orch:
+        # Set up signal handlers for graceful shutdown
+        _setup_signal_handlers()
+
+        # Reset global checkpoint state
+        _checkpoint_manager = None
+        _scraped_urls = set()
+        _pending_urls = []
+
         if not _setup_infrastructure(orch):
             return
 

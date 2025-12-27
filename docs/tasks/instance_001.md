@@ -79,6 +79,34 @@ archive/research/  archive/specs/          (code supersedes)
 
 ## Session History
 
+### 2025-12-27 (Session 31 - Spec 112 Phase 3: Session Recovery)
+
+| Task | Status |
+|------|--------|
+| CTO Review: Read architecture docs | ✅ Complete |
+| Implement resilience/checkpoint.py | ✅ Complete |
+| Add checkpoint save/restore to main.py | ✅ Complete |
+| Add SIGTERM/SIGINT handlers to main.py | ✅ Complete |
+| Write unit tests for Phase 3 | ✅ Complete |
+| Run Phase Completion Checklist | ✅ Complete |
+
+**Summary**: Implemented Spec 112 Phase 3 (Session Recovery). Created CheckpointManager for crash recovery with batched saves, graceful shutdown via SIGTERM/SIGINT signal handlers, per-site checkpoint files. Updated architecture docs and manifest. All 105 resilience tests passing (45 Phase 1 + 42 Phase 2 + 18 Phase 3).
+
+**Files Created**:
+- `resilience/checkpoint.py` - CheckpointManager with save/load/clear
+- `tests/test_resilience_phase3.py` (18 tests)
+
+**Files Modified**:
+- `main.py` - Signal handlers, checkpoint integration in _scrape_listings/_crawl_all_sites
+- `resilience/__init__.py` - Exports CheckpointManager
+- `docs/architecture/FILE_STRUCTURE.md` - Added checkpoint.py
+- `docs/architecture/DESIGN_PATTERNS.md` - Added pattern 14 (Checkpoint)
+- `admin/config/project_structure_manifest.json` - Added checkpoint.py
+- `docs/tasks/112_RESILIENCE_IMPLEMENTATION.md` - Marked Phase 3 complete
+- `docs/tasks/TASKS.md` - Marked Phase 3 complete
+
+---
+
 ### 2025-12-27 (Session 30 - Spec 112 Phase 2 + Cleanup + Consistency)
 
 | Task | Status |
@@ -147,25 +175,7 @@ archive/research/  archive/specs/          (code supersedes)
 - Architecture docs (ARCHITECTURE.md, FILE_STRUCTURE.md, DESIGN_PATTERNS.md)
 - `admin/config/project_structure_manifest.json`
 
----
-
-### 2025-12-27 (Session 28 - Scraper Resilience Research)
-
-| Task | Status |
-|------|--------|
-| Analyze current scraper error handling | ✅ Complete |
-| Research best practices (web search) | ✅ Complete |
-| Explore AutoBiz codebase for patterns | ✅ Complete |
-| Create research + spec documents | ✅ Complete |
-
-**Summary**: Comprehensive research on scraper resilience. Found production-grade patterns in AutoBiz (circuit breaker, error system, rate limiter). Created spec 112 with 28 implementation tasks across 4 phases.
-
-**Key AutoBiz References**:
-- `core/_domain_circuit_breaker.py` - Circuit breaker pattern
-- `core/_scraper_errors.py` - Error classification system
-- `tools/scraping/_rate_limiter.py` - Rate limiting
-
-*(Sessions 26 and earlier archived to `archive/sessions/`)*
+*(Sessions 28 and earlier archived to `archive/sessions/`)*
 
 ---
 

@@ -345,6 +345,48 @@ DOMAIN_RATE_LIMITS = {
 
 ---
 
+## 14. Checkpoint Pattern (resilience/)
+
+Save and restore scraping progress for crash recovery with graceful shutdown.
+
+**File**: `resilience/checkpoint.py`
+
+```python
+from resilience.checkpoint import CheckpointManager
+
+# Create checkpoint for session
+checkpoint = CheckpointManager("imot_bg_2025-01-15")
+
+# Load existing checkpoint (resume)
+state = checkpoint.load()
+if state:
+    scraped_urls = set(state["scraped"])
+    pending_urls = list(state["pending"])
+
+# Save progress (batched - every CHECKPOINT_BATCH_SIZE URLs)
+checkpoint.save(scraped_urls, pending_urls)
+
+# Force save (e.g., on SIGTERM/SIGINT)
+checkpoint.save(scraped_urls, pending_urls, force=True)
+
+# Clear on successful completion
+checkpoint.clear()
+```
+
+**Key Features**:
+- Batched saves (every N URLs) to reduce I/O
+- Force save on graceful shutdown (SIGTERM/SIGINT)
+- Per-site checkpoints with date-based naming
+- JSON format for easy debugging
+
+**Configuration** (`config/settings.py`):
+```python
+CHECKPOINT_BATCH_SIZE = 10  # Save every N URLs
+CHECKPOINT_DIR = "data/checkpoints"
+```
+
+---
+
 ## Key Components Using Patterns
 
 | Pattern | Location | Key Classes/Functions |
@@ -361,3 +403,4 @@ DOMAIN_RATE_LIMITS = {
 | Error Classification | `resilience/error_classifier.py` | `classify_error()`, `get_recovery_info()` |
 | Circuit Breaker | `resilience/circuit_breaker.py` | `get_circuit_breaker()`, `CircuitOpenException` |
 | Rate Limiter | `resilience/rate_limiter.py` | `get_rate_limiter()`, `acquire()` |
+| Checkpoint | `resilience/checkpoint.py` | `CheckpointManager`, `save()`, `load()`, `clear()` |

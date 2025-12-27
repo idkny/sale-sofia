@@ -51,11 +51,9 @@ from .rate_limiter import (
 )
 
 # Phase 3: Session Recovery (checkpoint)
-# TODO: Uncomment when modules are implemented
-
-# from .checkpoint import (
-#     CheckpointManager,
-# )
+from .checkpoint import (
+    CheckpointManager,
+)
 
 # Phase 4: Detection (response validator)
 # TODO: Uncomment when modules are implemented
@@ -91,7 +89,7 @@ __all__ = [
     "DomainRateLimiter",
     "get_rate_limiter",
     # Checkpoint
-    # "CheckpointManager",
+    "CheckpointManager",
     # Response validator
     # "detect_soft_block",
 ]

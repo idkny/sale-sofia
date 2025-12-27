@@ -121,41 +121,43 @@
 
 ---
 
-## Phase 3: Session Recovery (P2)
+## Phase 3: Session Recovery (P2) - COMPLETE
 
-- [ ] **3.0** CTO Review: Read architecture docs before implementation
+- [x] **3.0** CTO Review: Read architecture docs before implementation
   - Read: ALL files in `docs/architecture/` + `config/settings.py`
   - Review: `resilience/__init__.py` for export patterns
   - Pass to agents: Single responsibility, 30-line functions, proper naming, import from config.settings
   - Reference: Phase 1-2 code as examples for consistency
 
-- [ ] **3.1** Implement `resilience/checkpoint.py`
+- [x] **3.1** Implement `resilience/checkpoint.py`
   - Spec: [3.1 Checkpoint Manager](../specs/112_SCRAPER_RESILIENCE.md#31-checkpoint-manager)
   - Class: CheckpointManager with save(), load(), clear()
-  - Features: JSON format, batched saves
+  - Features: JSON format, batched saves (every CHECKPOINT_BATCH_SIZE URLs)
 
-- [ ] **3.2** Add checkpoint to `main.py` flow
+- [x] **3.2** Add checkpoint to `main.py` flow
   - Spec: [3.2 Graceful Shutdown](../specs/112_SCRAPER_RESILIENCE.md#32-graceful-shutdown)
   - Load checkpoint on startup, save after each URL, clear on success
+  - Per-site checkpoints with date-based naming
 
-- [ ] **3.3** Add SIGTERM/SIGINT handlers to `main.py`
+- [x] **3.3** Add SIGTERM/SIGINT handlers to `main.py`
   - Spec: [3.2 Graceful Shutdown](../specs/112_SCRAPER_RESILIENCE.md#32-graceful-shutdown)
   - Force save checkpoint on signal, then exit
+  - Global state for signal handler access
 
-- [ ] **3.4** Write unit tests for Phase 3
+- [x] **3.4** Write unit tests for Phase 3
   - Location: `tests/test_resilience_phase3.py`
-  - Cover: save/load, batched saves, clear
+  - 18 tests covering: save/load, batched saves, clear, edge cases
 
-- [ ] **3.5** Consistency check: Audit for hardcoded values
-  - Check checkpoint uses CHECKPOINT_BATCH_SIZE, CHECKPOINT_DIR from settings
+- [x] **3.5** Consistency check: Audit for hardcoded values
+  - checkpoint.py uses CHECKPOINT_BATCH_SIZE, CHECKPOINT_DIR from settings
   - No hardcoded paths or batch sizes
-  - Add any new settings to config/settings.py
+  - Settings already existed in config/settings.py
 
-- [ ] **3.6** Integration validation: Check harmony with project
-  - Verify checkpoint doesn't conflict with existing data persistence
-  - Check if Celery tasks need checkpoint integration
-  - Ensure graceful shutdown works with orchestrator.py
-  - Update related tasks in TASKS.md if checkpoint enables new features
+- [x] **3.6** Integration validation: Check harmony with project
+  - Checkpoint uses separate data/checkpoints/ directory (no conflicts)
+  - Celery tasks have own state management (no integration needed)
+  - Signal handlers work with orchestrator exit flow
+  - Updated: FILE_STRUCTURE.md, DESIGN_PATTERNS.md, manifest.json
 
 ---
 
@@ -210,7 +212,7 @@
 |-------|-------|----------|--------|
 | Phase 1: Foundation | 10 | P1 (Critical) | COMPLETE |
 | Phase 2: Domain Protection | 8 | P2 | COMPLETE |
-| Phase 3: Session Recovery | 7 | P2 | Pending |
+| Phase 3: Session Recovery | 7 | P2 | COMPLETE |
 | Phase 4: Detection | 7 | P3 | Pending |
 | Verification | 1 | P1 | Pending |
 | **Total** | **33** | |
