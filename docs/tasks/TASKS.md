@@ -32,15 +32,13 @@
 | 2 | Available |
 | 3 | Available |
 
-**Session 27 (2025-12-27)**: Instance 2 - Consolidated scoring constants. Fixed min_count=5 bug (should use MIN_PROXIES_FOR_SCRAPING=10). Added `SCORE_SUCCESS_MULTIPLIER`, `SCORE_FAILURE_MULTIPLIER`, `MAX_PROXY_FAILURES`, `MIN_PROXY_SCORE` to config/settings.py. Updated proxy_scorer.py and proxy_validator.py to import from settings (were duplicate definitions). Fixed orchestrator.py defaults.
+**Session 28 (2025-12-27)**: Instance 1 - Scraper Resilience Research. Analyzed current error handling gaps, researched best practices, explored AutoBiz codebase for production-grade patterns. Created research doc, spec 112, and 18 implementation tasks. Found 5 modules to port: circuit breaker, error system, rate limiter, bulkhead, timeout budget.
 
-**Session 26 (2025-12-27)**: Instance 1 - TASKS.md cleanup + Centralized proxy settings. Removed duplicate JIT Proxy Validation (already in Solution F), removed homes.bg task, removed P3 research tasks. Added `MUBENG_PROXY`, `MIN_PROXIES_TO_START=1`, `MIN_PROXIES_FOR_SCRAPING=10`, `MAX_PROXY_RETRIES=3` to config/settings.py. Fixed inconsistent min_proxies values (was 1/5/10 in different places).
+**Session 27 (2025-12-27)**: Instance 2 - Consolidated scoring constants. Fixed min_count=5 bug. Added scoring constants to config/settings.py.
 
-**Session 25 (2025-12-27)**: Instance 2 - Dashboard Integration (Spec 111 Phase 3) + Unified Proxy Timeout. Added price history chart tab and "recently changed" filter to Listings page. Created `config/settings.py` with `PROXY_TIMEOUT_SECONDS=45`.
+**Session 26 (2025-12-27)**: Instance 1 - TASKS.md cleanup + Centralized proxy settings.
 
-**Session 24 (2025-12-27)**: Instance 2 - Implemented Page Change Detection (Spec 111) Phases 1-2. Created `data/change_detector.py`. 24 unit tests pass.
-
-**Session 23 (2025-12-26)**: Instance 3 - Completed Solution F Phase 7 (Edge Cases & Hardening). All 15 Solution F tests pass.
+**Session 25 (2025-12-27)**: Instance 2 - Dashboard Integration (Spec 111 Phase 3) + Unified Proxy Timeout.
 
 **Claim**: Add `[Instance N]` next to task before starting
 **Complete**: Add `[x]` and remove `[Instance N]` when done
@@ -103,6 +101,40 @@
 #### Future: Scrapling + LLM Synergy
 - [ ] Research element-aware prompts vs raw text prompts
 - [ ] Implement hybrid extraction: Scrapling CSS -> LLM fallback
+
+---
+
+### Scraper Resilience & Error Handling (P1)
+
+**Spec**: [112_SCRAPER_RESILIENCE.md](../specs/112_SCRAPER_RESILIENCE.md)
+**Research**: [SCRAPER_RESILIENCE_RESEARCH.md](../research/SCRAPER_RESILIENCE_RESEARCH.md)
+
+#### Phase 1: Foundation
+- [ ] Create `resilience/` module structure
+- [ ] Implement `resilience/exceptions.py` (exception hierarchy)
+- [ ] Implement `resilience/error_classifier.py`
+- [ ] Implement `resilience/retry.py` (sync + async with backoff + jitter)
+- [ ] Add resilience settings to `config/settings.py`
+- [ ] Integrate retry decorator into `main.py`
+- [ ] Write unit tests for Phase 1
+
+#### Phase 2: Domain Protection
+- [ ] Implement `resilience/circuit_breaker.py`
+- [ ] Implement `resilience/rate_limiter.py` (token bucket)
+- [ ] Integrate circuit breaker into scraper
+- [ ] Integrate rate limiter into scraper
+- [ ] Write unit tests for Phase 2
+
+#### Phase 3: Session Recovery
+- [ ] Implement `resilience/checkpoint.py`
+- [ ] Add checkpoint save/restore to main.py
+- [ ] Add SIGTERM/SIGINT graceful shutdown handlers
+- [ ] Write unit tests for Phase 3
+
+#### Phase 4: Detection (P3)
+- [ ] Implement `resilience/response_validator.py` (CAPTCHA/soft block detection)
+- [ ] Add 429/Retry-After header handling
+- [ ] Write unit tests for Phase 4
 
 ---
 

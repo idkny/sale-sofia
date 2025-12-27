@@ -79,6 +79,230 @@ archive/research/  archive/specs/          (code supersedes)
 
 ## Session History
 
+### 2025-12-27 (Session 28 - Scraper Resilience Research)
+
+| Task | Status |
+|------|--------|
+| Analyze current scraper error handling | ✅ Complete |
+| Research best practices (web search) | ✅ Complete |
+| Explore AutoBiz codebase for patterns | ✅ Complete |
+| Create research document | ✅ Complete |
+| Create spec document (112) | ✅ Complete |
+| Add tasks to TASKS.md | ✅ Complete |
+
+**Summary**: Comprehensive research on scraper resilience. Analyzed current codebase (has basic retry but missing backoff, circuit breaker, rate limiting). Found production-grade patterns in AutoBiz codebase that can be directly ported. Created spec 112 with 18 implementation tasks across 4 phases.
+
+---
+
+#### Current State Analysis
+
+**What EXISTS in sale-sofia:**
+| Feature | Location | Status |
+|---------|----------|--------|
+| Basic retry (3 attempts) | `main.py:119-149` | No backoff, immediate retry |
+| Proxy scoring | `proxies/proxy_validator.py` | Works, tracks success/failure |
+| Preflight checks (3-level) | `main.py:398-486` | Good recovery pattern |
+| CSS selector fallback | `websites/scrapling_base.py` | Basic exception catch |
+
+**What's MISSING (Critical Gaps):**
+- NO exponential backoff - retries happen immediately
+- NO jitter - creates thundering herd
+- NO circuit breaker - keeps hammering blocked sites
+- NO domain rate limiting - no throttle per target
+- NO error classification - all errors treated same
+- NO graceful degradation - component failure = crash
+- NO session recovery - no checkpoint/resume
+- NO 429/Retry-After handling
+
+---
+
+#### AutoBiz Patterns Found (READY TO PORT)
+
+Explored `/home/wow/Documents/ZohoCentral/autobiz` and found 5 production-grade modules:
+
+**1. DomainCircuitBreaker** (`core/_domain_circuit_breaker.py`, 360 lines)
+```
+CLOSED → 10 failures → OPEN → 5 min cooldown → HALF_OPEN → test → CLOSED
+```
+- Fail-open design (errors allow requests, never blocks on bugs)
+- Block type tracking: cloudflare, captcha, rate_limit, ip_ban
+- Metrics: blocked/allowed counts, open circuits list
+- Config: `failure_threshold=10`, `recovery_timeout=300`, `half_open_max_calls=2`
+
+**2. Error System** (`core/_scraper_errors.py`, 556 lines)
+
+ErrorType enum (20+ categories):
+- Network: `NETWORK_TIMEOUT`, `NETWORK_CONNECTION`, `NETWORK_DNS`
+- HTTP: `HTTP_CLIENT_ERROR`, `HTTP_SERVER_ERROR`, `HTTP_RATE_LIMIT`, `HTTP_BLOCKED`
+- Parsing: `PARSE_JSON`, `PARSE_HTML`, `PARSE_SELECTOR`
+- Service: `SERVICE_OLLAMA`, `SERVICE_REDIS`, `SERVICE_PROXY`, `SERVICE_BROWSER`
+- Database: `DATABASE_LOCKED`, `DATABASE_CORRUPT`
+
+RecoveryAction enum:
+- `RETRY_IMMEDIATE`, `RETRY_WITH_BACKOFF`, `RETRY_WITH_PROXY`
+- `ESCALATE_STRATEGY`, `SKIP`, `CIRCUIT_BREAK`, `MANUAL_REVIEW`
+
+ERROR_RECOVERY_MAP (maps error → action + max_retries):
+```python
+ErrorType.NETWORK_TIMEOUT: (RETRY_WITH_BACKOFF, recoverable=True, max_retries=3)
+ErrorType.HTTP_RATE_LIMIT: (RETRY_WITH_BACKOFF, recoverable=True, max_retries=5)
+ErrorType.HTTP_BLOCKED: (ESCALATE_STRATEGY, recoverable=True, max_retries=3)
+ErrorType.PARSE_JSON: (MANUAL_REVIEW, recoverable=False, max_retries=0)
+```
+
+ScraperError dataclass - full context for debugging:
+- error_id, timestamp, url, domain, error_type
+- http_status, message, stack_trace
+- retry_count, max_retries, next_retry_delay (backoff calculated)
+- recovery_action, is_recoverable, proxy_ip, strategy
+
+ScraperErrorLogger - JSONL logging for analysis
+
+**3. Rate Limiter** (`tools/scraping/_rate_limiter.py`, 99 lines)
+- Per-domain delay tracking
+- Randomized delays (min to max)
+- **Automatic backoff on blocks**: `delay *= 1 + (consecutive_blocks * 0.5)`
+
+**4. Bulkhead** (`core/_domain_bulkhead.py`, 426 lines)
+- Concurrency limiter using semaphores
+- Prevents slow domains from monopolizing workers
+- Configurable limits per domain
+- Fail-open design
+- Context manager: `with bulkhead.acquire("imot.bg"):`
+
+**5. Timeout Budget** (`core/_timeout_budget.py`, 221 lines)
+- Hierarchical timeout management
+- Child operations can't exceed parent's remaining time
+- `budget.child_budget(max_seconds=120)` returns bounded child
+- Constants: TASK=270s, BROWSER=120s, HTTP=30s
+
+---
+
+#### Documents Created
+
+| Document | Path |
+|----------|------|
+| Research | `docs/research/SCRAPER_RESILIENCE_RESEARCH.md` |
+| Spec | `docs/specs/112_SCRAPER_RESILIENCE.md` |
+| Tasks | `docs/tasks/TASKS.md` (18 tasks added) |
+
+---
+
+#### Implementation Plan (from Spec 112)
+
+**Proposed File Structure:**
+```
+resilience/                # NEW MODULE
+├── __init__.py
+├── circuit_breaker.py    # Port from AutoBiz _domain_circuit_breaker.py
+├── errors.py             # Port from AutoBiz _scraper_errors.py
+├── rate_limiter.py       # Port from AutoBiz _rate_limiter.py
+├── bulkhead.py           # Port from AutoBiz _domain_bulkhead.py
+├── timeout_budget.py     # Port from AutoBiz _timeout_budget.py
+├── retry.py              # NEW: retry decorator with backoff + jitter
+├── checkpoint.py         # NEW: session recovery
+└── response_validator.py # NEW: soft block detection
+```
+
+**Phase 1: Foundation (P1 - Critical)**
+- [ ] Create `resilience/` module structure
+- [ ] Implement `resilience/exceptions.py` (exception hierarchy)
+- [ ] Implement `resilience/error_classifier.py`
+- [ ] Implement `resilience/retry.py` (sync + async with backoff + jitter)
+- [ ] Add resilience settings to `config/settings.py`
+- [ ] Integrate retry decorator into `main.py`
+- [ ] Write unit tests for Phase 1
+
+**Phase 2: Domain Protection (P2)**
+- [ ] Implement `resilience/circuit_breaker.py`
+- [ ] Implement `resilience/rate_limiter.py` (token bucket)
+- [ ] Integrate circuit breaker into scraper
+- [ ] Integrate rate limiter into scraper
+- [ ] Write unit tests for Phase 2
+
+**Phase 3: Session Recovery (P2)**
+- [ ] Implement `resilience/checkpoint.py`
+- [ ] Add checkpoint save/restore to main.py
+- [ ] Add SIGTERM/SIGINT graceful shutdown handlers
+- [ ] Write unit tests for Phase 3
+
+**Phase 4: Detection (P3)**
+- [ ] Implement `resilience/response_validator.py` (CAPTCHA/soft block detection)
+- [ ] Add 429/Retry-After header handling
+- [ ] Write unit tests for Phase 4
+
+---
+
+#### Config Settings to Add (`config/settings.py`)
+
+```python
+# Retry settings
+RETRY_MAX_ATTEMPTS = 5
+RETRY_BASE_DELAY = 2.0       # seconds
+RETRY_MAX_DELAY = 60.0       # seconds cap
+RETRY_JITTER_FACTOR = 0.5    # 50% random jitter
+
+# Circuit breaker settings
+CIRCUIT_BREAKER_FAIL_MAX = 5
+CIRCUIT_BREAKER_RESET_TIMEOUT = 60  # seconds
+
+# Rate limiting (requests per minute per domain)
+DOMAIN_RATE_LIMITS = {
+    "imot.bg": 10,
+    "bazar.bg": 10,
+    "default": 10,
+}
+
+# Checkpoint settings
+CHECKPOINT_BATCH_SIZE = 10  # Save every N URLs
+CHECKPOINT_DIR = "data/checkpoints"
+```
+
+---
+
+#### Key Code References
+
+**AutoBiz files to port:**
+- `/home/wow/Documents/ZohoCentral/autobiz/core/_domain_circuit_breaker.py`
+- `/home/wow/Documents/ZohoCentral/autobiz/core/_scraper_errors.py`
+- `/home/wow/Documents/ZohoCentral/autobiz/tools/scraping/_rate_limiter.py`
+- `/home/wow/Documents/ZohoCentral/autobiz/core/_domain_bulkhead.py`
+- `/home/wow/Documents/ZohoCentral/autobiz/core/_timeout_budget.py`
+
+**Archived patterns (already in sale-sofia):**
+- `archive/extraction/error_handling/error_handling_Scraper.md` - retry_async decorator, CooldownManager
+
+**Integration points in sale-sofia:**
+- `main.py:119-149` - Replace simple retry with decorated functions
+- `main.py:189-278` - `_scrape_listings()` needs circuit breaker + rate limiter
+- `websites/base_scraper.py` - Add domain extraction for rate limiting
+- `orchestrator.py` - Add checkpoint save/restore
+
+---
+
+#### Best Practices Sources
+
+- [ScrapFly - Automatic Failover Strategies](https://scrapfly.io/blog/posts/automatic-failover-strategies-for-reliable-data-extraction)
+- [ScrapingAnt - Exception Handling](https://scrapingant.com/blog/python-exception-handling)
+- [ScrapeUnblocker - 10 Best Practices 2025](https://www.scrapeunblocker.com/post/10-web-scraping-best-practices-for-developers-in-2025)
+- [FireCrawl - Stop Getting Blocked](https://www.firecrawl.dev/blog/web-scraping-mistakes-and-fixes)
+
+---
+
+#### Recommendation for Implementation
+
+**Option A: Direct Port** (Faster, ~2-3 hours)
+- Copy AutoBiz files with minor import modifications
+- Well-tested, production-ready code
+
+**Option B: Clean Rewrite** (Cleaner, ~5-7 hours)
+- Use AutoBiz as reference
+- Follow sale-sofia conventions
+
+**Recommended**: Option A for complex patterns (circuit breaker, error system), Option B for simpler ones (retry decorator).
+
+---
+
 ### 2025-12-27 (Session 26 - TASKS.md Cleanup + Centralized Proxy Settings)
 
 | Task | Status |
@@ -87,14 +311,11 @@ archive/research/  archive/specs/          (code supersedes)
 | Centralize proxy settings in config/settings.py | ✅ Complete |
 | Fix inconsistent MIN_PROXIES values | ✅ Complete |
 
-**Summary**: Cleaned up TASKS.md by removing duplicate JIT Proxy Validation (already in Solution F), homes.bg task, and P3 research tasks. Centralized proxy settings (`MUBENG_PROXY`, `MIN_PROXIES_TO_START`, `MIN_PROXIES_FOR_SCRAPING`, `MAX_PROXY_RETRIES`) in config/settings.py. Fixed bug where min_proxies had inconsistent values (1, 5, 10) across different files.
+**Summary**: Cleaned up TASKS.md by removing duplicate JIT Proxy Validation (already in Solution F), homes.bg task, and P3 research tasks. Centralized proxy settings (`MUBENG_PROXY`, `MIN_PROXIES_TO_START`, `MIN_PROXIES_FOR_SCRAPING`, `MAX_PROXY_RETRIES`) in config/settings.py.
 
 **Key Changes:**
-- `config/settings.py` - Added `MUBENG_PROXY`, `MIN_PROXIES_TO_START=1`, `MIN_PROXIES_FOR_SCRAPING=10`, `MAX_PROXY_RETRIES=3`
-- `main.py` - Imports from config.settings, uses MIN_PROXIES_FOR_SCRAPING
-- `websites/scrapling_base.py` - Imports MUBENG_PROXY from config.settings
-- `proxies/proxies_main.py` - Imports MIN_PROXIES_TO_START from config.settings
-- `docs/tasks/TASKS.md` - Removed duplicates, added implementation notes to Crawler Validation
+- `config/settings.py` - Added proxy constants
+- `main.py`, `websites/scrapling_base.py`, `proxies/proxies_main.py` - Import from config.settings
 
 ---
 
@@ -106,175 +327,15 @@ archive/research/  archive/specs/          (code supersedes)
 | Fix TimeLimitExceeded (chunk tasks killed after 8min) | ✅ Complete |
 | Run live test to verify | ✅ Complete (both chords succeeded) |
 
-**Summary**: Implemented automatic cleanup of stale processes on startup using psutil, added Redis/Celery health checks. Fixed TimeLimitExceeded bug by reducing quality check timeout (60s→45s) and increasing task time_limit (8min→15min).
+**Summary**: Implemented automatic cleanup of stale processes on startup, fixed TimeLimitExceeded by adjusting timeouts (8min→15min).
 
 **Key Changes:**
-- `orchestrator.py` - Added `cleanup_stale_processes()`, `_kill_process_by_pattern()`, `_health_check_redis()`, `_health_check_celery()`
-- `orchestrator.py:673` - `time_per_chunk` changed from 400 to 900 seconds
-- `proxies/tasks.py:253` - Quality check timeout: 60s → 45s
-- `proxies/tasks.py:279` - Task limits: 7min/8min → 13min/15min
-
-**Test Results:**
-- Chord 1: 38/38 chunks completed in 12m 46s (64 proxies)
-- Chord 2: 33/33 chunks completed in 13m 15s (115 proxies)
-- No TimeLimitExceeded errors
-
-**Issue Found:** Pre-flight check fails even with 64+ proxies. Proxies pass mubeng liveness check but fail actual HTTP requests. Likely proxy quality issue (dead or blocked proxies pass simple check but fail real requests).
+- `orchestrator.py` - Added `cleanup_stale_processes()`, health checks
+- `proxies/tasks.py` - Task limits: 13min/15min
 
 ---
 
-### 2025-12-26 (Session 12 - Signal-Based Wait + Timeout Fix)
-
-| Task | Status |
-|------|--------|
-| Fix wait_for_proxies blind polling bug | ✅ Complete (commit c9d99b8) |
-| Increase dynamic timeout (90s→400s) | ✅ Complete (commit fc40722) |
-| Add task time limits (7min soft, 8min hard) | ✅ Complete (commit fc40722) |
-| Fix 3 unit tests (None vs False) | ✅ Complete (commit c9d99b8) |
-| Research professional timeout patterns | ✅ Complete |
-| Run live test to verify | ⏸️ Partial (41/42 chunks, interrupted) |
-
-**Summary**: Fixed the `wait_for_proxies` blind polling bug by connecting it to the existing signal-based `wait_for_refresh_completion()`. Also increased dynamic timeout from 90s to 400s per chunk based on production data, and added soft/hard time limits to prevent zombie tasks.
-
-**Key Changes:**
-- `orchestrator.py:441-444` - `wait_for_proxies` now calls `wait_for_refresh_completion(task_id)`
-- `orchestrator.py:596` - `time_per_chunk` changed from 90 to 400 seconds
-- `proxies/tasks.py:279` - Added `soft_time_limit=420, time_limit=480`
-
-**Research Finding**: Multi-tier fallback (chord → Redis → file) is industry-standard "defense in depth" pattern, not hacky.
-
----
-
-### 2025-12-26 (Session 11 - Proxy Merge Fix + New Bug Found)
-
-| Task | Status |
-|------|--------|
-| Fix false positive fallback message | ✅ Complete (commit 5b71300) |
-| Fix proxy file overwrite bug | ✅ Complete (commit 9d5d3ad) |
-| Run live test to verify fixes | ❌ FAILED - new bug found |
-| Document new bug for next session | ✅ Complete |
-
----
-
-#### Fixes Committed This Session
-
-**1. False Positive Fallback Message (commit 5b71300)**
-
-Changed `_wait_via_chord` return type from `bool` to `Optional[bool]`:
-- `True` = chord completed, enough proxies
-- `False` = chord completed, not enough proxies (NO fallback)
-- `None` = chord timeout/failure (triggers fallback)
-
-Files: `orchestrator.py` lines 594-601, 636-645, 679-690
-
-**2. Proxy File Overwrite Bug (commit 9d5d3ad)**
-
-Problem: Multiple concurrent refresh jobs were overwriting `live_proxies.json`:
-- Job 1: 11 proxies → file has 11
-- Job 2: 1 proxy → file has 1 (OVERWROTE!)
-- Job 3: 4 proxies → file has 4 (OVERWROTE!)
-
-Fix: `_save_proxy_files` now MERGES new proxies with existing:
-- De-duplicates by `host:port` key
-- New proxies override existing (fresher data)
-- Sorts by timeout (fastest first)
-
-Files: `proxies/tasks.py` lines 334-372
-
----
-
-#### NEW BUG FOUND: `wait_for_proxies` Timeout Too Short
-
-**Symptom**: Live test timed out after 600s with message:
-```
-[WAIT] 0/0 usable proxies... (585s, celery: alive)
-Timeout waiting for proxies after 600s
-[ERROR] Could not get proxies. Aborting.
-```
-
-**But Redis showed 37/41 chunks completed!** The refresh was still running.
-
-**Root Cause Analysis**:
-
-1. `main.py:246` calls:
-   ```python
-   orch.wait_for_proxies(min_count=5, timeout=600)  # 10 min timeout
-   ```
-
-2. But `orchestrator.py:413` default is:
-   ```python
-   def wait_for_proxies(self, min_count=5, timeout=2400)  # 40 min default
-   ```
-
-3. With 41 chunks and 8 workers:
-   - Rounds = ceil(41/8) = 6 rounds
-   - Time per round ~90s (some chunks took 248s!)
-   - Total processing: 10-20 minutes
-   - Plus ~150s for PSC scraping
-   - **Total can easily exceed 10 minutes**
-
-4. The `wait_for_proxies` loop just polls file every 15s:
-   ```
-   [WAIT] 0/0 usable proxies... (0s)
-   [WAIT] 0/0 usable proxies... (15s)
-   ...repeats until timeout...
-   ```
-
-5. It times out BEFORE the chord completes and saves proxies!
-
-**Why Simply Increasing Timeout is NOT the Right Fix**:
-
-The user mentioned we've solved this before with a different approach. The problem is that `wait_for_proxies` is **disconnected** from the actual refresh progress. It just polls the file blindly with no awareness that:
-- A refresh task is running
-- How many chunks are done
-- When it will complete
-
-**The Right Fix** (for next session):
-
-`wait_for_proxies` should be aware of the refresh it triggered:
-1. After calling `trigger_proxy_refresh()`, it gets back `task_id`
-2. It should use `wait_for_refresh_completion(task_id)` instead of blind polling
-3. This would use the chord-based event wait we already implemented
-4. The dynamic timeout would be calculated based on actual chunk count
-
-**Key Code Locations**:
-
-1. `main.py:246` - where timeout=600 is set (symptom)
-2. `orchestrator.py:413-470` - `wait_for_proxies()` method (needs fix)
-3. `orchestrator.py:478-525` - `wait_for_refresh_completion()` (already has chord wait)
-4. `orchestrator.py:385-411` - `trigger_proxy_refresh()` returns task_id
-
-**The Pattern We Need**:
-```python
-def wait_for_proxies(self, min_count=5, timeout=2400):
-    if usable_count >= min_count:
-        return True
-
-    # Trigger refresh and get task_id
-    mtime_before, task_id = self.trigger_proxy_refresh()
-
-    # Use the chord-aware wait instead of blind polling!
-    if task_id:
-        return self.wait_for_refresh_completion(task_id, timeout, min_count)
-
-    # Fallback to file polling only if no task_id
-    return self._wait_via_file_monitoring(...)
-```
-
-**Test Data from Failed Run**:
-- Job ID: `77c5d41b-0803-4f1e-bf5d-01e7d9834f0b`
-- Total chunks: 41
-- Completed when timeout hit: 37/41 (90%)
-- Status: PROCESSING (would have completed in ~2 more minutes)
-
-**Files to Check Next Session**:
-1. `orchestrator.py:413-470` - `wait_for_proxies()` implementation
-2. `orchestrator.py:478-525` - `wait_for_refresh_completion()` implementation
-3. Look for how these two methods should be connected
-
----
-
-*(Session 10 archived to `archive/sessions/instance_001_session_10_2025-12-26.md`)*
+*(Sessions 11, 12 archived to `archive/sessions/`)*
 
 ---
 
