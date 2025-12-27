@@ -14,7 +14,7 @@ Features:
 Usage:
     from proxies.quality_checker import QualityChecker, enrich_proxy_with_quality
 
-    checker = QualityChecker(timeout=15)
+    checker = QualityChecker()
 
     # Individual checks
     passed, exit_ip = checker.check_ip_service("http://1.2.3.4:8080")
@@ -26,7 +26,7 @@ Usage:
 
     # Enrich proxy dict
     proxy = {"host": "1.2.3.4", "port": 8080, "protocol": "http"}
-    enriched = enrich_proxy_with_quality(proxy, timeout=15)
+    enriched = enrich_proxy_with_quality(proxy)
     # Returns proxy with added: ip_check_passed, ip_check_exit_ip, target_passed, quality_checked_at
 """
 
@@ -39,6 +39,7 @@ import httpx
 
 from proxies import proxy_to_url
 from proxies.anonymity_checker import get_real_ip
+from config.settings import PROXY_TIMEOUT_SECONDS
 
 logger = logging.getLogger(__name__)
 
@@ -63,7 +64,7 @@ IMOT_BG_INDICATORS = [
     "недвижими имоти",  # Real estate
 ]
 
-DEFAULT_TIMEOUT = 60
+DEFAULT_TIMEOUT = PROXY_TIMEOUT_SECONDS
 
 
 class QualityChecker:
@@ -82,7 +83,7 @@ class QualityChecker:
         Initialize the quality checker.
 
         Args:
-            timeout: Timeout in seconds for HTTP requests (default: 15)
+            timeout: Timeout in seconds for HTTP requests (default: from config.settings)
         """
         self.timeout = timeout
         self._user_agent = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"

@@ -13,6 +13,7 @@ import redis
 from celery import group
 
 from celery_app import celery_app
+from config.settings import PROXY_TIMEOUT_SECONDS
 from paths import MUBENG_EXECUTABLE_PATH, PROXIES_DIR, PROXY_CHECKER_DIR, PSC_EXECUTABLE_PATH
 from proxies import proxy_to_url
 from proxies.anonymity_checker import enrich_proxy_with_anonymity, get_real_ip
@@ -250,7 +251,7 @@ def _check_quality_for_non_transparent(proxies: List[Dict[str, Any]]) -> List[Di
 
     logger.info(f"Checking quality for {len(candidates)} non-transparent proxies...")
     for proxy in candidates:
-        enrich_proxy_with_quality(proxy, timeout=45)
+        enrich_proxy_with_quality(proxy, timeout=PROXY_TIMEOUT_SECONDS)
 
     ip_passed = sum(1 for p in candidates if p.get("ip_check_passed"))
     target_passed = sum(1 for p in candidates if p.get("target_passed"))

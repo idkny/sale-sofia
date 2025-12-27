@@ -6,6 +6,7 @@ from pathlib import Path
 from typing import Optional
 
 from paths import MUBENG_EXECUTABLE_PATH
+from config.settings import PROXY_TIMEOUT_MUBENG
 
 logger = logging.getLogger(__name__)
 
@@ -22,7 +23,7 @@ def find_free_port() -> int:
 def start_mubeng_rotator_server(
     live_proxy_file: Path,
     desired_port: int,
-    mubeng_timeout: str = "15s",
+    mubeng_timeout: str = PROXY_TIMEOUT_MUBENG,
     country_codes: Optional[list[str]] = None,
 ) -> Optional[subprocess.Popen]:
     """Starts the mubeng proxy rotator server as a background process.
@@ -34,7 +35,7 @@ def start_mubeng_rotator_server(
     Args:
         live_proxy_file: Path to file containing proxy URLs (one per line)
         desired_port: Port to run the rotator on (e.g., 8089)
-        mubeng_timeout: Timeout for proxy requests (default: 15s)
+        mubeng_timeout: Timeout for proxy requests (default: from config.settings)
         country_codes: Optional list of country codes to filter by (e.g., ["US", "DE"])
 
     Returns the Popen object if successful, None otherwise.

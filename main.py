@@ -31,6 +31,7 @@ from proxies.proxies_main import (
 from proxies.proxy_scorer import ScoredProxyPool
 from proxies.proxy_validator import preflight_check
 from utils.log_config import setup_logging
+from config.settings import PROXY_TIMEOUT_SECONDS, PROXY_TIMEOUT_MS
 
 # Default mubeng proxy endpoint - ALWAYS use proxy for scraping
 MUBENG_PROXY = "http://localhost:8089"
@@ -39,7 +40,7 @@ MUBENG_PROXY = "http://localhost:8089"
 MAX_PROXY_RETRIES = 3
 
 # Minimum proxies before triggering refresh
-MIN_PROXIES = 5
+MIN_PROXIES = 10
 
 
 def _check_and_save_listing(listing) -> dict:
@@ -135,7 +136,7 @@ async def _collect_listing_urls(
                 response = Fetcher.get(
                     url=current_url,
                     proxy=proxy or MUBENG_PROXY,
-                    timeout=15,  # Fetcher.get uses seconds, not milliseconds
+                    timeout=PROXY_TIMEOUT_SECONDS,
                     headers=headers
                 )
                 html = response.html_content
@@ -231,7 +232,7 @@ async def _scrape_listings(
                     humanize=True,
                     block_webrtc=True,
                     network_idle=True,
-                    timeout=30000
+                    timeout=PROXY_TIMEOUT_MS
                 )
                 html = response.html_content
 
@@ -404,7 +405,7 @@ def _run_preflight_level1(proxy_url: str, max_attempts: int = 6) -> bool:
     """
     print("[INFO] Running pre-flight proxy check...")
     for attempt in range(1, max_attempts + 1):
-        if preflight_check(proxy_url, timeout=15):
+        if preflight_check(proxy_url, timeout=PROXY_TIMEOUT_SECONDS):
             print(f"[SUCCESS] Pre-flight check passed (attempt {attempt})")
             return True
         else:
@@ -432,7 +433,7 @@ def _run_preflight_level2(mubeng_process: Any) -> tuple[bool, Any, str, Any, lis
 
     print(f"[SUCCESS] Proxy rotator restarted at {proxy_url}")
     for attempt in range(1, 4):
-        if preflight_check(proxy_url, timeout=15):
+        if preflight_check(proxy_url, timeout=PROXY_TIMEOUT_SECONDS):
             print(f"[SUCCESS] Pre-flight check passed after soft restart (attempt {attempt})")
             return True, new_process, proxy_url, new_temp_file, ordered_proxy_keys
         else:
@@ -477,7 +478,7 @@ def _run_preflight_level3(orch, proxy_pool: Optional[ScoredProxyPool]) -> tuple[
 
     # Final pre-flight check
     for attempt in range(1, 4):
-        if preflight_check(proxy_url, timeout=15):
+        if preflight_check(proxy_url, timeout=PROXY_TIMEOUT_SECONDS):
             print(f"[SUCCESS] Pre-flight check passed after refresh (attempt {attempt})")
             return True, new_process, proxy_url, new_temp_file, ordered_proxy_keys
         else:

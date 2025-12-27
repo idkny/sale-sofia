@@ -88,21 +88,26 @@ archive/research/  archive/specs/          (code supersedes)
 
 ## Session History
 
-### 2025-12-27 (Session 25 - Dashboard Integration Phase 3)
+### 2025-12-27 (Session 25 - Dashboard Integration + Unified Timeout)
 
 | Task | Status |
 |------|--------|
 | Add price history chart component | Complete |
 | Add "recently changed" filter | Complete |
-| Test dashboard with sample data | Complete |
+| Create unified PROXY_TIMEOUT_SECONDS | Complete |
+| Update all proxy timeout usages | Complete |
 
-**Summary**: Implemented Dashboard Integration (Spec 111 Phase 3). Added `_render_price_history_tab()` to Listings page showing price history chart, price change analysis, and change statistics. Added "Show recently changed only" filter with configurable days threshold (1-30 days).
+**Summary**: Implemented Dashboard Integration (Spec 111 Phase 3) and unified proxy timeout settings. Added price history chart tab and "recently changed" filter to Listings page. Created `config/settings.py` with `PROXY_TIMEOUT_SECONDS=45` to fix inconsistent 15s/30s/45s timeouts across codebase.
+
+**Files Created**:
+- `config/settings.py` - unified proxy timeout constants (PROXY_TIMEOUT_SECONDS, PROXY_TIMEOUT_MS, PROXY_TIMEOUT_MUBENG)
 
 **Files Modified**:
-- `app/pages/2_Listings.py:155-219` - new `_render_price_history_tab()` function
-- `app/pages/2_Listings.py:352-362` - added sidebar filter section
-- `app/pages/2_Listings.py:391-398` - filter logic for recently changed
-- `app/pages/2_Listings.py:451-471` - added 6th tab for Price History
+- `app/pages/2_Listings.py` - price history tab, recently changed filter
+- `main.py` - import and use PROXY_TIMEOUT_SECONDS/MS
+- `proxies/mubeng_manager.py` - use PROXY_TIMEOUT_MUBENG
+- `proxies/quality_checker.py` - use PROXY_TIMEOUT_SECONDS
+- `proxies/tasks.py` - use PROXY_TIMEOUT_SECONDS
 
 ---
 
@@ -125,32 +130,6 @@ archive/research/  archive/specs/          (code supersedes)
 **Files Modified**:
 - `data/data_store_main.py` - migration (5 columns), save_listing(), increment_unchanged_counter()
 - `main.py:25,45-92,206,241-253,602-604` - import, helper, stats, integration, summary
-
----
-
-### 2025-12-26 (Session 22 - Ollama Phase 5 Complete)
-
-| Task | Status |
-|------|--------|
-| Add extraction cache | Complete |
-| Add confidence threshold to config | Complete |
-| Add metrics logging | Complete |
-| Performance test (100 listings) | Complete |
-| Research page change detection | Complete |
-| Create Spec 111 | Complete |
-| Update SCRAPER_GUIDE.md | Complete |
-
-**Summary**: Completed Ollama Phase 5 (Production Hardening). Added Redis-based extraction cache (7-day TTL, 3700+ extractions/sec on cache hit), configurable confidence threshold, and metrics logging API. Researched page change detection from autobiz project, created Spec 111 for future implementation. Updated SCRAPER_GUIDE.md with LLM integration documentation.
-
-**Files Modified**:
-- `config/ollama.yaml:11` - added `confidence_threshold: 0.7`
-- `llm/llm_main.py:36-45, 393-441` - metrics tracking, get_confidence_threshold()
-- `llm/__init__.py` - exported new functions
-- `websites/imot_bg/imot_scraper.py:22,97` - use configurable threshold
-- `tests/llm/test_performance.py` - new performance test
-- `docs/research/page_change_detection.md` - new research
-- `docs/specs/111_PAGE_CHANGE_DETECTION.md` - new spec
-- `websites/SCRAPER_GUIDE.md` - added LLM integration section
 
 ---
 

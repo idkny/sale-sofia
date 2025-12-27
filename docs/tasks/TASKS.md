@@ -15,6 +15,8 @@
 | 2 | Available |
 | 3 | Available |
 
+**Session 25 (2025-12-27)**: Instance 2 - Dashboard Integration (Spec 111 Phase 3) + Unified Proxy Timeout. Added price history chart tab and "recently changed" filter to Listings page. Created `config/settings.py` with `PROXY_TIMEOUT_SECONDS=45` (unified across main.py, mubeng_manager.py, quality_checker.py, tasks.py). Fixed inconsistent 15s/30s/45s timeouts.
+
 **Session 24 (2025-12-27)**: Instance 2 - Implemented Page Change Detection (Spec 111) Phases 1-2. Created `data/change_detector.py` with compute_hash, has_changed, track_price_change. Added 5 DB columns (content_hash, last_change_at, change_count, price_history, consecutive_unchanged). Integrated into main.py via `_check_and_save_listing()`. 24 unit tests pass. Unchanged listings now skipped, price changes logged with history.
 
 **Session 23 (2025-12-26)**: Instance 3 - Completed Solution F Phase 7 (Edge Cases & Hardening). Added MIN_PROXIES check with auto-refresh, fcntl file locking, 200ms delay after file write, reload_proxies() hook for order sync. All 15 Solution F tests pass. Solution F complete.
