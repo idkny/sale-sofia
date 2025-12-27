@@ -289,7 +289,7 @@ class BazarBgScraper(ScraplingMixin, BaseSiteScraper):
                 try:
                     price = float(price_str)
                     # Check if this is EUR or BGN based on the pattern
-                    if "€" in pattern:
+                    if "€" in pattern or "EUR" in pattern:
                         return price
                     elif "лв" in pattern:
                         # Convert BGN to EUR

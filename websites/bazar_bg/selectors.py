@@ -70,13 +70,15 @@ NO_RESULTS_PATTERNS = [
 # =============================================================================
 
 # JavaScript variables for price extraction
-AD_ID_JS = r"var adId = '(\d+)';"
-AD_PRICE_JS = r"var adPrice = '(\d+)';"
-AD_CURRENCY_JS = r"var adPriceCurrency = '([€лв])';"
+# Note: Handle both single and double quotes, and decimal numbers
+AD_ID_JS = r"var adId = ['\"](\d+)['\"];"
+AD_PRICE_JS = r"var adPrice = ['\"](\d+(?:\.\d+)?)['\"];"
+AD_CURRENCY_JS = r"var adCurrency = ['\"]([€лв]+)['\"];"
 
 # Price patterns - bazar.bg shows both EUR and BGN
 PRICE_PATTERNS = [
     r"([\d\s]+)\s*€",  # EUR format: 389 998 €
+    r"([\d\s]+)\s*EUR",  # EUR format: 150000 EUR
     r"([\d\s]+)\s*лв",  # BGN format: 762 769,79 лв
 ]
 
@@ -84,10 +86,10 @@ PRICE_PATTERNS = [
 # SIZE PATTERNS (square meters)
 # =============================================================================
 
-# Square meter patterns - Bulgarian "кв. м."
+# Square meter patterns - Bulgarian "кв. м." or "кв.м"
 SQM_PATTERNS = [
-    r"Квадратура:\s*(\d+)\s*кв\.\s*м\.",  # Specification format: Квадратура: 100 кв. м.
-    r"(\d+)\s*кв\.\s*м\.",  # General format: 100 кв. м.
+    r"(?:Площ|Квадратура)[:\s]*(\d+(?:[.,]\d+)?)\s*(?:кв\.?\s*м\.?|m2|m²)",  # Площ: 100 кв.м or Квадратура: 100 кв. м.
+    r"(\d+(?:[.,]\d+)?)\s*(?:кв\.?\s*м\.?|m2|m²)",  # General format: 100 кв.м, 100 m²
 ]
 
 # =============================================================================
@@ -95,13 +97,18 @@ SQM_PATTERNS = [
 # =============================================================================
 
 # Floor patterns - extract floor number and total floors
+# Note: [Ее] matches both Cyrillic Е and Latin E for resilience
 FLOOR_PATTERNS = [
-    r"(\d+)\s*(?:от|/)\s*(\d+)\s*етаж",  # Format: 3 от 6 етаж or 3/6 етаж
-    r"Eтаж:\s*(\d+)\s*(?:от|/)\s*(\d+)",  # Format: Eтаж: 3 от 6
+    # "Етаж: 4/8" or "Етаж 4/8" (colon optional, slash separator)
+    r"[Ее]таж:?\s*(\d+)\s*/\s*(\d+)",
+    # "Етаж 4 от 8" or "Етаж: 4 от 8"
+    r"[Ее]таж:?\s*(\d+)\s*от\s*(\d+)",
+    # "4 от 8 етаж" or "4/8 етаж"
+    r"(\d+)\s*(?:от|/)\s*(\d+)\s*етаж",
 ]
 
 # Floor number only (no total)
-FLOOR_NUMBER_ONLY_PATTERN = r"Eтаж:\s*(\d+)(?:\s|$)"
+FLOOR_NUMBER_ONLY_PATTERN = r"[Ее]таж:?\s*(\d+)(?:\s|$)"
 
 # =============================================================================
 # ROOM COUNT MAPPINGS

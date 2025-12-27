@@ -145,13 +145,17 @@ def bazar_search_html() -> str:
     return """
     <html>
     <body>
-        <div class="listings">
-            <a href="/obiava-111/tristaen-apartament-centar">Тристаен</a>
-            <a href="/obiava-222/dvustaen-apartament-studentski-grad">Двустаен</a>
-            <a href="/obiava-333/ednostaen-apartament-lozenets">Едностаен</a>
+        <div class="listItemContainer listItemContainerV2">
+            <a class="listItemLink" href="/obiava-111/tristaen-apartament-centar">Тристаен</a>
+        </div>
+        <div class="listItemContainer listItemContainerV2">
+            <a class="listItemLink" href="/obiava-222/dvustaen-apartament-studentski-grad">Двустаен</a>
+        </div>
+        <div class="listItemContainer listItemContainerV2">
+            <a class="listItemLink" href="/obiava-333/ednostaen-apartament-lozenets">Едностаен</a>
         </div>
         <div class="pagination">
-            <a href="?page=2">Следваща</a>
+            <a href="?page=2">Следваща »</a>
         </div>
         <script>
             var maxPage = 5;

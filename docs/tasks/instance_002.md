@@ -88,34 +88,25 @@ archive/research/  archive/specs/          (code supersedes)
 
 ## Session History
 
-### 2025-12-27 (Session 30 - Crawler Validation Phase 1 + Spec Alignment)
+### 2025-12-27 (Session 30 - Crawler Validation Phase 1 Complete)
 
 | Task | Status |
 |------|--------|
 | Create test harness (`tests/scrapers/`) | Complete |
-| Fetch real HTML fixtures | Complete |
-| Run initial tests | Complete (33/46 passing) |
-| Analyze Spec 106 alignment | Complete |
-| Update TASKS.md with status | Complete |
-| Update Spec 106 with annotations | Complete |
-| Validate imot.bg scraper | In Progress |
-| Validate bazar.bg scraper | Pending |
-| Create validation matrix | Pending |
+| Fix floor extraction patterns (imot.bg + bazar.bg) | Complete |
+| Fix price JS patterns (bazar.bg) | Complete |
+| Fix sqm patterns (bazar.bg) | Complete |
+| Fix test fixtures (bazar.bg) | Complete |
+| Validate imot.bg scraper | Complete (23/23) |
+| Validate bazar.bg scraper | Complete (23/23) |
 
-**Summary**: Created scraper test harness with 46 tests (33 passing). Fetched real HTML fixtures from live sites. Analyzed Spec 106 against current codebase - found Phase 2 superseded by LLM, Phase 4 rate limiter done via Spec 112. Updated TASKS.md and Spec 106 with status annotations. Decided rate limiter belongs in `resilience/` (single source of truth).
-
-**Files Created**:
-- `tests/scrapers/conftest.py` - shared fixtures
-- `tests/scrapers/test_imot_bg.py` - 23 tests
-- `tests/scrapers/test_bazar_bg.py` - 23 tests
-- `tests/scrapers/fetch_fixtures.py` - fixture fetcher script
-- `tests/scrapers/fixtures/` - real HTML from live sites
+**Summary**: Fixed all 13 failing scraper tests. All 46 tests now passing. Fixed floor extraction patterns to handle `Етаж: 3/6` and `Етаж 3` formats. Fixed bazar.bg price JS patterns (single/double quotes, decimals), sqm patterns (Площ + flexible spacing), and test fixtures (proper CSS classes).
 
 **Files Modified**:
-- `docs/tasks/TASKS.md` - added Phase 0/2 status, marked test harness complete, updated Phase 4
-- `docs/specs/106_CRAWLER_VALIDATION_PLAN.md` - added status annotations to all phases
-
-**Blockers**: 13 failing tests mostly related to floor extraction patterns (`Етаж: 3/6` format not matched).
+- `websites/imot_bg/selectors.py` - floor patterns for slash format and number-only
+- `websites/bazar_bg/selectors.py` - floor patterns (Cyrillic Е), price JS, sqm patterns
+- `websites/bazar_bg/bazar_scraper.py` - handle EUR text in price fallback
+- `tests/scrapers/conftest.py` - fixed bazar_search_html fixture with proper CSS classes
 
 ---
 

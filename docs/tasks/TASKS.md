@@ -4,6 +4,25 @@
 1. Claim tasks with `[Instance N]` before starting
 2. Mark complete with `[x]` when done
 3. Unclaim if not finishing this session
+4. **Before marking phase complete**, run the Phase Completion Checklist (see below)
+
+---
+
+## Phase Completion Checklist
+
+**Run these checks before marking ANY phase as complete:**
+
+### 1. Consistency Check
+- [ ] No hardcoded values (timeouts, limits, thresholds) - use `config/settings.py`
+- [ ] Check for duplicate constants across files
+- [ ] If new setting needed → add to `config/settings.py` with clear name
+- [ ] Reference: `MIN_PROXIES_FOR_SCRAPING`, `PROXY_TIMEOUT`, `DOMAIN_RATE_LIMITS`
+
+### 2. Alignment Check
+- [ ] Is this task still relevant? (LLM, resilience, etc. may have changed things)
+- [ ] Does the spec reflect current code? (code is source of truth)
+- [ ] Are there overlaps with other specs/features?
+- [ ] Update spec status annotations if needed
 
 ---
 
@@ -29,10 +48,10 @@
 | Instance | Current Task |
 |----------|--------------|
 | 1 | Available |
-| 2 | Crawler Validation Phase 1 |
+| 2 | Available |
 | 3 | Available |
 
-**Session 30 (2025-12-27)**: Instance 2 - Crawler Validation Phase 1. Created test harness (46 tests, 33 passing). Fetched real HTML fixtures. Analyzed Spec 106 alignment - Phase 2 superseded by LLM, Phase 4 rate limiter done via Spec 112. Updated TASKS.md and Spec 106 with status annotations.
+**Session 30 (2025-12-27)**: Instance 2 - Crawler Validation Phase 1 complete. All 46 scraper tests passing. Fixed floor extraction, price JS patterns, sqm patterns, and test fixtures for both scrapers.
 
 **Session 30 (2025-12-27)**: Instance 1 - Spec 112 Phase 2 Implementation + Cleanup. Created circuit_breaker.py and rate_limiter.py. Integrated into main.py. 87 tests passing.
 
@@ -63,15 +82,17 @@
 > **Phase 2**: SUPERSEDED by LLM extraction (Specs 107/108/110 achieved 100% accuracy)
 
 #### Phase 1: Scraper Validation
-- [x] Create test harness (`tests/scrapers/`) - 46 tests, 33 passing
-- [ ] [Instance 2] Validate imot.bg scraper (pagination, extraction, save)
-- [ ] [Instance 2] Validate bazar.bg scraper (pagination, extraction, save)
-- [ ] [Instance 2] Create validation matrix (document what works)
+- [x] Create test harness (`tests/scrapers/`) - 46 tests, 46 passing
+- [x] Validate imot.bg scraper (pagination, extraction, save) - 23/23 tests passing
+- [x] Validate bazar.bg scraper (pagination, extraction, save) - 23/23 tests passing
+- [ ] Create validation matrix (document what works)
+- [ ] **Run Phase Completion Checklist** (consistency + alignment)
 
 #### Phase 3: Change Detection & History (Remaining)
 > Basic change detection exists (`data/change_detector.py`). Tables below still needed.
 - [ ] Create `scrape_history` table
 - [ ] Create `listing_changes` table (track ALL field changes)
+- [ ] **Run Phase Completion Checklist** (consistency + alignment)
 
 #### Phase 3.5: Cross-Site Duplicate Detection & Merging
 - [ ] Create `listing_sources` table (track which sites list property)
@@ -79,16 +100,19 @@
 - [ ] Build `PropertyMerger` class (smart data merging)
 - [ ] Track price discrepancies across sites
 - [ ] Add cross-site comparison view to dashboard
+- [ ] **Run Phase Completion Checklist** (consistency + alignment)
 
 #### Phase 4: Orchestration
 > **Rate limiter**: Use `resilience/rate_limiter.py` (DomainRateLimiter, Spec 112 Phase 2)
 - [x] Rate limiter - use `resilience/rate_limiter.py` (token bucket per domain)
 - [ ] Build async orchestrator (parallel sites)
 - [ ] Integrate with Celery
+- [ ] **Run Phase Completion Checklist** (consistency + alignment)
 
 #### Phase 5: Full Pipeline
 - [ ] E2E testing (full pipeline)
 - [ ] Add monitoring/alerting
+- [ ] **Run Phase Completion Checklist** (consistency + alignment)
 
 ---
 
@@ -126,16 +150,18 @@
 - [x] Integrate rate limiter into main.py
 - [x] Write unit tests for Phase 2 (42 tests, 100% pass)
 
-#### Phase 3: Session Recovery
-- [ ] Implement `resilience/checkpoint.py`
-- [ ] Add checkpoint save/restore to main.py
-- [ ] Add SIGTERM/SIGINT graceful shutdown handlers
-- [ ] Write unit tests for Phase 3
+#### Phase 3: Session Recovery (COMPLETE)
+- [x] Implement `resilience/checkpoint.py`
+- [x] Add checkpoint save/restore to main.py
+- [x] Add SIGTERM/SIGINT graceful shutdown handlers
+- [x] Write unit tests for Phase 3 (18 tests, 100% pass)
+- [x] **Run Phase Completion Checklist** (consistency + alignment)
 
 #### Phase 4: Detection (P3)
 - [ ] Implement `resilience/response_validator.py` (CAPTCHA/soft block detection)
 - [ ] Add 429/Retry-After header handling
 - [ ] Write unit tests for Phase 4
+- [ ] **Run Phase Completion Checklist** (consistency + alignment)
 
 ---
 
@@ -163,4 +189,4 @@
 
 ---
 
-**Last Updated**: 2025-12-27 (Spec 112 Phase 2 complete + consistency audit)
+**Last Updated**: 2025-12-27 (Crawler Validation Phase 1 - scrapers 46/46 tests passing)
