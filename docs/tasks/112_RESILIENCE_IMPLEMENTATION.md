@@ -18,6 +18,36 @@
 
 ---
 
+## Mandatory Phase Tasks
+
+### Opening Task (BEFORE implementation)
+
+**CTO Review** - Read ALL architecture docs before delegating to agents:
+- `docs/architecture/ARCHITECTURE.md` - Project structure overview
+- `docs/architecture/CONVENTIONS.md` - Coding standards
+- `docs/architecture/DESIGN_PATTERNS.md` - Patterns used in project
+- `docs/architecture/FILE_STRUCTURE.md` - Where files go
+- `docs/architecture/DATA_FLOW.md` - How data moves
+- `docs/architecture/ADDING_COMPONENTS.md` - How to add new components
+- `config/settings.py` - Centralized settings pattern
+
+**Pass to agents**: Single responsibility, 30-line functions, proper naming, import from config.settings, reference prior phase code for consistency.
+
+### Closing Tasks (BEFORE marking done)
+
+1. **Consistency Check** - Audit for hardcoded values
+   - All timeouts, thresholds, limits must be in `config/settings.py`
+   - All files must import from settings (with fallback defaults)
+   - No magic numbers in code
+
+2. **Integration Validation** - Check harmony with project
+   - Verify task is up-to-date with latest project features (LLM, resilience, scrapling, etc.)
+   - Check if this phase duplicates or conflicts with other modules
+   - Ensure new code integrates properly with existing tools
+   - Update related tasks in TASKS.md if needed
+
+---
+
 ## Phase 1: Foundation (P1 - Critical) - COMPLETE
 
 - [x] **1.1** Create `resilience/` module structure
@@ -32,50 +62,68 @@
   - Fixed: `proxy_validator.py` → use PROXY_VALIDATION_TIMEOUT
   - Added: `PROXY_VALIDATION_TIMEOUT = 10` to settings
 
+- [x] **1.9** Integration validation: Check harmony with project
+  - Verified retry decorator integrates with existing main.py flow
+  - No conflicts with proxy scoring or scrapling modules
+  - Updated architecture docs
+
 ---
 
-## Phase 2: Domain Protection (P2)
+## Phase 2: Domain Protection (P2) - COMPLETE
 
-- [ ] **2.0** CTO Review: Read architecture docs before implementation
+- [x] **2.0** CTO Review: Read architecture docs before implementation
   - Read: `docs/architecture/ARCHITECTURE.md`, `CONVENTIONS.md`, `DESIGN_PATTERNS.md`
   - Ensure agents follow: single responsibility, 30-line functions, proper naming
   - Pass relevant context to agents
 
-- [ ] **2.1** Implement `resilience/circuit_breaker.py`
+- [x] **2.1** Implement `resilience/circuit_breaker.py`
   - Spec: [2.1 Circuit Breaker](../specs/112_SCRAPER_RESILIENCE.md#21-circuit-breaker)
   - AutoBiz: `core/_domain_circuit_breaker.py` (full port)
   - Classes: CircuitState, DomainCircuitStatus, DomainCircuitBreaker
   - CRITICAL: Keep fail-open design
 
-- [ ] **2.2** Implement `resilience/rate_limiter.py`
+- [x] **2.2** Implement `resilience/rate_limiter.py`
   - Spec: [2.2 Rate Limiter](../specs/112_SCRAPER_RESILIENCE.md#22-rate-limiter)
   - AutoBiz: `tools/scraping/_rate_limiter.py` (adapt)
   - Class: DomainRateLimiter (token bucket)
 
-- [ ] **2.3** Integrate circuit breaker into `main.py`
+- [x] **2.3** Integrate circuit breaker into `main.py`
   - Check before request, record success/failure after
   - Extract domain from URL for tracking
 
-- [ ] **2.4** Integrate rate limiter into `main.py`
-  - Replace `time.sleep(delay)` at lines 184, 276
-  - Use: `limiter.acquire(domain)` before each request
+- [x] **2.4** Integrate rate limiter into `main.py`
+  - Added rate limiter.acquire() before each request
+  - Kept existing time.sleep(delay) for additional politeness
 
-- [ ] **2.5** Write unit tests for Phase 2
+- [x] **2.5** Write unit tests for Phase 2
   - Location: `tests/test_resilience_phase2.py`
-  - Cover: state transitions, fail-open, token bucket
+  - 42 tests covering: state transitions, fail-open, token bucket, thread safety
 
-- [ ] **2.6** Consistency check: Audit for hardcoded values
-  - Check circuit breaker/rate limiter use settings from config/settings.py
-  - No magic numbers for timeouts, thresholds, or limits
+- [x] **2.6** Consistency check: Settings imported from config/settings.py
+  - Circuit breaker uses CIRCUIT_BREAKER_* settings
+  - Rate limiter uses DOMAIN_RATE_LIMITS setting
+  - Fixed: error_classifier.py ERROR_RECOVERY_MAP → uses ERROR_RETRY_* settings
+  - Fixed: exceptions.py retry_after → uses RATE_LIMIT_DEFAULT_RETRY_AFTER
+  - Fixed: main.py preflight → uses PREFLIGHT_* and PROXY_WAIT_TIMEOUT settings
+  - Fixed: main.py delay → uses DEFAULT_SCRAPE_DELAY setting
+  - Added 12 new settings to config/settings.py for consistency
+
+- [x] **2.7** Integration validation: Check harmony with project
+  - Rate limiter now used by Crawler Validation Phase 4 (updated TASKS.md)
+  - Circuit breaker integrates with existing proxy scoring system
+  - Updated DESIGN_PATTERNS.md with patterns 12-13
+  - Updated FILE_STRUCTURE.md with new files
+  - No conflicts with LLM extraction or other modules
 
 ---
 
 ## Phase 3: Session Recovery (P2)
 
 - [ ] **3.0** CTO Review: Read architecture docs before implementation
-  - Read: `docs/architecture/ARCHITECTURE.md`, `CONVENTIONS.md`
-  - Review checkpoint patterns in existing code
-  - Pass relevant context to agents
+  - Read: `docs/architecture/ARCHITECTURE.md`, `CONVENTIONS.md`, `DESIGN_PATTERNS.md`
+  - Review: `resilience/__init__.py` for export patterns, `config/settings.py` for settings
+  - Pass to agents: Single responsibility, 30-line functions, proper naming, import from config.settings
+  - Reference: Phase 1-2 code as examples for consistency
 
 - [ ] **3.1** Implement `resilience/checkpoint.py`
   - Spec: [3.1 Checkpoint Manager](../specs/112_SCRAPER_RESILIENCE.md#31-checkpoint-manager)
@@ -97,15 +145,23 @@
 - [ ] **3.5** Consistency check: Audit for hardcoded values
   - Check checkpoint uses CHECKPOINT_BATCH_SIZE, CHECKPOINT_DIR from settings
   - No hardcoded paths or batch sizes
+  - Add any new settings to config/settings.py
+
+- [ ] **3.6** Integration validation: Check harmony with project
+  - Verify checkpoint doesn't conflict with existing data persistence
+  - Check if Celery tasks need checkpoint integration
+  - Ensure graceful shutdown works with orchestrator.py
+  - Update related tasks in TASKS.md if checkpoint enables new features
 
 ---
 
 ## Phase 4: Detection (P3)
 
 - [ ] **4.0** CTO Review: Read architecture docs before implementation
-  - Read: `docs/architecture/ARCHITECTURE.md`, `CONVENTIONS.md`
-  - Review response handling patterns in existing scrapers
-  - Pass relevant context to agents
+  - Read: `docs/architecture/ARCHITECTURE.md`, `CONVENTIONS.md`, `DESIGN_PATTERNS.md`
+  - Review: `resilience/__init__.py` for export patterns, `config/settings.py` for settings
+  - Pass to agents: Single responsibility, 30-line functions, proper naming, import from config.settings
+  - Reference: Phase 1-2-3 code as examples for consistency
 
 - [ ] **4.1** Implement `resilience/response_validator.py`
   - Spec: [4.1 Soft Block Detector](../specs/112_SCRAPER_RESILIENCE.md#41-soft-block-detector)
@@ -125,6 +181,13 @@
 - [ ] **4.5** Consistency check: Audit for hardcoded values
   - Check response validator uses settings for thresholds (MIN_CONTENT_LENGTH, etc.)
   - No hardcoded detection patterns that should be configurable
+  - Add any new settings to config/settings.py
+
+- [ ] **4.6** Integration validation: Check harmony with project
+  - Verify soft block detection integrates with circuit breaker
+  - Check if LLM extraction needs soft block awareness
+  - Ensure 429/Retry-After handling works with rate limiter
+  - Update related tasks in TASKS.md if detection enables new features
 
 ---
 
@@ -141,14 +204,16 @@
 
 | Phase | Tasks | Priority | Status |
 |-------|-------|----------|--------|
-| Phase 1: Foundation | 8 | P1 (Critical) | COMPLETE |
-| Phase 2: Domain Protection | 7 | P2 | Pending |
-| Phase 3: Session Recovery | 6 | P2 | Pending |
-| Phase 4: Detection | 6 | P3 | Pending |
+| Phase 1: Foundation | 9 | P1 (Critical) | COMPLETE |
+| Phase 2: Domain Protection | 8 | P2 | COMPLETE |
+| Phase 3: Session Recovery | 7 | P2 | Pending |
+| Phase 4: Detection | 7 | P3 | Pending |
 | Verification | 1 | P1 | Pending |
-| **Total** | **28** | |
+| **Total** | **32** | |
 
-**Note**: Each phase includes a consistency check task to audit for hardcoded values.
+**Note**: Each phase includes TWO mandatory closing tasks:
+1. **Consistency check** - Audit for hardcoded values, add to config/settings.py
+2. **Integration validation** - Check harmony with other project features
 
 ---
 

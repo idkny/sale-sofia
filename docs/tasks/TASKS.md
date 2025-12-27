@@ -29,20 +29,16 @@
 | Instance | Current Task |
 |----------|--------------|
 | 1 | Available |
-| 2 | Available |
+| 2 | Crawler Validation Phase 1 |
 | 3 | Available |
 
-**Session 29 (2025-12-27)**: Instance 1 - Spec 112 Phase 1 Implementation. Created resilience/ module (exceptions, error_classifier, retry). Integrated retry decorator into main.py. 45 tests passing. Fixed hardcoded timeouts in scrapling_base.py and proxy_validator.py. Updated architecture docs and manifest.json.
+**Session 30 (2025-12-27)**: Instance 2 - Crawler Validation Phase 1. Created test harness (46 tests, 33 passing). Fetched real HTML fixtures. Analyzed Spec 106 alignment - Phase 2 superseded by LLM, Phase 4 rate limiter done via Spec 112. Updated TASKS.md and Spec 106 with status annotations.
 
-**Session 28 (2025-12-27)**: Instance 2 - Ollama Phase 3.6 complete. Fixed has_elevator extraction (was 0%, now 100%). Dictionary now extracts booleans directly instead of relying on LLM. Overall accuracy: 100%. Phases 4-5 skipped (conditions not met - already above thresholds).
+**Session 30 (2025-12-27)**: Instance 1 - Spec 112 Phase 2 Implementation + Cleanup. Created circuit_breaker.py and rate_limiter.py. Integrated into main.py. 87 tests passing.
 
-**Session 28 (2025-12-27)**: Instance 1 - Scraper Resilience Research. Created research doc, spec 112, and implementation tasks.
+**Session 29 (2025-12-27)**: Instance 1 - Spec 112 Phase 1 Implementation. Created resilience/ module. 45 tests passing.
 
-**Session 27 (2025-12-27)**: Instance 2 - Consolidated scoring constants. Fixed min_count=5 bug. Added scoring constants to config/settings.py.
-
-**Session 26 (2025-12-27)**: Instance 1 - TASKS.md cleanup + Centralized proxy settings.
-
-**Session 25 (2025-12-27)**: Instance 2 - Dashboard Integration (Spec 111 Phase 3) + Unified Proxy Timeout.
+**Session 28 (2025-12-27)**: Instance 2 - Ollama Phase 3.6 complete. 100% accuracy via dictionary-first extraction.
 
 **Claim**: Add `[Instance N]` next to task before starting
 **Complete**: Add `[x]` and remove `[Instance N]` when done
@@ -63,13 +59,17 @@
 
 **Spec**: [106_CRAWLER_VALIDATION_PLAN.md](../specs/106_CRAWLER_VALIDATION_PLAN.md)
 
+> **Phase 0**: COMPLETE (Scrapling migration)
+> **Phase 2**: SUPERSEDED by LLM extraction (Specs 107/108/110 achieved 100% accuracy)
+
 #### Phase 1: Scraper Validation
-- [ ] Create test harness (`tests/scrapers/`)
-- [ ] Validate imot.bg scraper (pagination, extraction, save)
-- [ ] Validate bazar.bg scraper (pagination, extraction, save)
-- [ ] Create validation matrix (document what works)
+- [x] Create test harness (`tests/scrapers/`) - 46 tests, 33 passing
+- [ ] [Instance 2] Validate imot.bg scraper (pagination, extraction, save)
+- [ ] [Instance 2] Validate bazar.bg scraper (pagination, extraction, save)
+- [ ] [Instance 2] Create validation matrix (document what works)
 
 #### Phase 3: Change Detection & History (Remaining)
+> Basic change detection exists (`data/change_detector.py`). Tables below still needed.
 - [ ] Create `scrape_history` table
 - [ ] Create `listing_changes` table (track ALL field changes)
 
@@ -80,9 +80,9 @@
 - [ ] Track price discrepancies across sites
 - [ ] Add cross-site comparison view to dashboard
 
-#### Phase 4: Rate Limiting & Orchestration
-- [ ] Define rate limit config per site
-- [ ] Build Redis-backed `SiteRateLimiter`
+#### Phase 4: Orchestration
+> **Rate limiter**: Use `resilience/rate_limiter.py` (DomainRateLimiter, Spec 112 Phase 2)
+- [x] Rate limiter - use `resilience/rate_limiter.py` (token bucket per domain)
 - [ ] Build async orchestrator (parallel sites)
 - [ ] Integrate with Celery
 
@@ -119,12 +119,12 @@
 - [x] Integrate retry decorator into `main.py`
 - [x] Write unit tests for Phase 1 (45 tests, 100% pass)
 
-#### Phase 2: Domain Protection
-- [ ] Implement `resilience/circuit_breaker.py`
-- [ ] Implement `resilience/rate_limiter.py` (token bucket)
-- [ ] Integrate circuit breaker into scraper
-- [ ] Integrate rate limiter into scraper
-- [ ] Write unit tests for Phase 2
+#### Phase 2: Domain Protection (COMPLETE)
+- [x] Implement `resilience/circuit_breaker.py`
+- [x] Implement `resilience/rate_limiter.py` (token bucket)
+- [x] Integrate circuit breaker into main.py
+- [x] Integrate rate limiter into main.py
+- [x] Write unit tests for Phase 2 (42 tests, 100% pass)
 
 #### Phase 3: Session Recovery
 - [ ] Implement `resilience/checkpoint.py`
@@ -163,4 +163,4 @@
 
 ---
 
-**Last Updated**: 2025-12-27 (Ollama Phase 3.6 complete - 100% accuracy)
+**Last Updated**: 2025-12-27 (Spec 112 Phase 2 complete + consistency audit)

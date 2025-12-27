@@ -98,11 +98,13 @@ sale-sofia/
 │   ├── *.md                  # Module README only
 │   └── external/             # External binaries
 │
-├── resilience/               # Error handling and retry logic
+├── resilience/               # Error handling, circuit breaker, rate limiting
 │   ├── __init__.py           # Exports
 │   ├── exceptions.py         # Exception hierarchy
 │   ├── error_classifier.py   # Error type classification
-│   └── retry.py              # Retry decorators with backoff
+│   ├── retry.py              # Retry decorators with backoff
+│   ├── circuit_breaker.py    # Domain circuit breaker (Phase 2)
+│   └── rate_limiter.py       # Token bucket rate limiter (Phase 2)
 │
 ├── llm/                      # LLM integration (Ollama)
 │   ├── __init__.py           # Exports

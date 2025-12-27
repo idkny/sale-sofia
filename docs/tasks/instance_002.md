@@ -4,7 +4,7 @@ type: session_file
 project: sale-sofia
 instance: 2
 created_at: 2025-12-24
-updated_at: 2025-12-26
+updated_at: 2025-12-27
 ---
 
 # Instance 2 Session
@@ -88,6 +88,37 @@ archive/research/  archive/specs/          (code supersedes)
 
 ## Session History
 
+### 2025-12-27 (Session 30 - Crawler Validation Phase 1 + Spec Alignment)
+
+| Task | Status |
+|------|--------|
+| Create test harness (`tests/scrapers/`) | Complete |
+| Fetch real HTML fixtures | Complete |
+| Run initial tests | Complete (33/46 passing) |
+| Analyze Spec 106 alignment | Complete |
+| Update TASKS.md with status | Complete |
+| Update Spec 106 with annotations | Complete |
+| Validate imot.bg scraper | In Progress |
+| Validate bazar.bg scraper | Pending |
+| Create validation matrix | Pending |
+
+**Summary**: Created scraper test harness with 46 tests (33 passing). Fetched real HTML fixtures from live sites. Analyzed Spec 106 against current codebase - found Phase 2 superseded by LLM, Phase 4 rate limiter done via Spec 112. Updated TASKS.md and Spec 106 with status annotations. Decided rate limiter belongs in `resilience/` (single source of truth).
+
+**Files Created**:
+- `tests/scrapers/conftest.py` - shared fixtures
+- `tests/scrapers/test_imot_bg.py` - 23 tests
+- `tests/scrapers/test_bazar_bg.py` - 23 tests
+- `tests/scrapers/fetch_fixtures.py` - fixture fetcher script
+- `tests/scrapers/fixtures/` - real HTML from live sites
+
+**Files Modified**:
+- `docs/tasks/TASKS.md` - added Phase 0/2 status, marked test harness complete, updated Phase 4
+- `docs/specs/106_CRAWLER_VALIDATION_PLAN.md` - added status annotations to all phases
+
+**Blockers**: 13 failing tests mostly related to floor extraction patterns (`Етаж: 3/6` format not matched).
+
+---
+
 ### 2025-12-27 (Session 28 - Dictionary-First Extraction)
 
 | Task | Status |
@@ -128,28 +159,6 @@ archive/research/  archive/specs/          (code supersedes)
 **Files Modified**:
 - `docs/tasks/TASKS.md` - streamlined with summary table + pending tasks only
 - `docs/tasks/REFACTORING_TASKS.md` - streamlined with summary + optional follow-up tests
-
----
-
-### 2025-12-27 (Session 27 - Consolidate Scoring Constants)
-
-| Task | Status |
-|------|--------|
-| Fix min_count=5 bug in main.py | Complete |
-| Fix min_count=5 defaults in orchestrator.py | Complete |
-| Add scoring constants to config/settings.py | Complete |
-| Update proxy_scorer.py to import from settings | Complete |
-| Update proxy_validator.py to import from settings | Complete |
-
-**Summary**: Fixed min_count inconsistency bug (was hardcoded as 5, should use MIN_PROXIES_FOR_SCRAPING=10). Consolidated duplicate scoring constants (SCORE_SUCCESS_MULTIPLIER, SCORE_FAILURE_MULTIPLIER, MAX_PROXY_FAILURES, MIN_PROXY_SCORE) into config/settings.py. Both proxy_scorer.py and proxy_validator.py now import from settings. Fixed edge case in test_auto_prune_on_low_score test.
-
-**Files Modified**:
-- `config/settings.py` - added scoring constants section
-- `main.py:359,453` - use MIN_PROXIES_FOR_SCRAPING instead of hardcoded 5
-- `orchestrator.py:35,491,527` - import and use MIN_PROXIES_FOR_SCRAPING as defaults
-- `proxies/proxy_scorer.py:32-43` - import from settings, keep aliases for backward compat
-- `proxies/proxy_validator.py:29-51` - import from settings, keep aliases for backward compat
-- `tests/test_proxy_scorer.py:235-237` - fix edge case test (MIN_SCORE * 1.9 instead of * 2)
 
 ---
 

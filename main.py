@@ -15,12 +15,16 @@ Starts the full automated scraping pipeline:
 import asyncio
 import time
 from typing import Any, Optional
+from urllib.parse import urlparse
 
 from dotenv import load_dotenv
 from loguru import logger
 
 from scrapling.fetchers import Fetcher, StealthyFetcher
 
+from resilience.circuit_breaker import get_circuit_breaker
+from resilience.exceptions import CircuitOpenException
+from resilience.rate_limiter import get_rate_limiter
 from resilience.retry import retry_with_backoff
 from data import data_store_main
 from data.change_detector import compute_hash, has_changed, track_price_change
@@ -38,7 +42,19 @@ from config.settings import (
     MIN_PROXIES_FOR_SCRAPING,
     PROXY_TIMEOUT_SECONDS,
     PROXY_TIMEOUT_MS,
+    PREFLIGHT_MAX_ATTEMPTS_L1,
+    PREFLIGHT_MAX_ATTEMPTS_L2,
+    PREFLIGHT_MAX_ATTEMPTS_L3,
+    PREFLIGHT_RETRY_DELAY,
+    PROXY_WAIT_TIMEOUT,
+    DEFAULT_SCRAPE_DELAY,
 )
+
+
+def _extract_domain(url: str) -> str:
+    """Extract domain from URL for circuit breaker tracking."""
+    parsed = urlparse(url)
+    return parsed.netloc or parsed.path.split('/')[0]
 
 
 def _check_and_save_listing(listing) -> dict:
@@ -97,7 +113,7 @@ def _fetch_search_page(
     proxy_pool: Optional[ScoredProxyPool]
 ) -> tuple[str, str | None]:
     """
-    Fetch search page with retry logic and proxy scoring.
+    Fetch search page with retry logic, circuit breaker, and rate limiting.
 
     Uses retry_with_backoff decorator for exponential backoff.
     Selects a new proxy on each retry attempt.
@@ -111,8 +127,20 @@ def _fetch_search_page(
         (html_content, proxy_key) - proxy_key is the successful proxy or None
 
     Raises:
+        CircuitOpenException if circuit breaker is open for domain
         Exception if all retries fail (after MAX_PROXY_RETRIES attempts)
     """
+    circuit_breaker = get_circuit_breaker()
+    rate_limiter = get_rate_limiter()
+    domain = _extract_domain(url)
+
+    # Check circuit breaker FIRST
+    if not circuit_breaker.can_request(domain):
+        raise CircuitOpenException(f"Circuit open for {domain}")
+
+    # Acquire rate limiter token (blocks if needed)
+    rate_limiter.acquire(domain)
+
     # Track proxy across retries for scoring
     proxy_state = {"key": None}
 
@@ -120,6 +148,8 @@ def _fetch_search_page(
         # Score the failed proxy before retry
         if proxy_pool and proxy_state["key"]:
             proxy_pool.record_result(proxy_state["key"], success=False)
+        # Record failure with circuit breaker
+        circuit_breaker.record_failure(domain)
 
     @retry_with_backoff(max_attempts=MAX_PROXY_RETRIES, on_retry=on_retry)
     def fetch():
@@ -142,6 +172,10 @@ def _fetch_search_page(
         return response.html_content
 
     html = fetch()  # May raise after all retries exhausted
+
+    # Record success with circuit breaker
+    circuit_breaker.record_success(domain)
+
     return html, proxy_state["key"]
 
 
@@ -217,7 +251,7 @@ def _fetch_listing_page(
     proxy_pool: Optional[ScoredProxyPool]
 ) -> tuple[str, str | None]:
     """
-    Fetch listing page with retry logic and proxy scoring.
+    Fetch listing page with retry logic, circuit breaker, and rate limiting.
 
     Uses StealthyFetcher with retry_with_backoff decorator.
     Selects a new proxy on each retry attempt.
@@ -231,8 +265,20 @@ def _fetch_listing_page(
         (html_content, proxy_key) - proxy_key is the successful proxy or None
 
     Raises:
+        CircuitOpenException if circuit breaker is open for domain
         Exception if all retries fail (after MAX_PROXY_RETRIES attempts)
     """
+    circuit_breaker = get_circuit_breaker()
+    rate_limiter = get_rate_limiter()
+    domain = _extract_domain(url)
+
+    # Check circuit breaker FIRST
+    if not circuit_breaker.can_request(domain):
+        raise CircuitOpenException(f"Circuit open for {domain}")
+
+    # Acquire rate limiter token (blocks if needed)
+    rate_limiter.acquire(domain)
+
     # Track proxy across retries for scoring
     proxy_state = {"key": None}
 
@@ -240,6 +286,8 @@ def _fetch_listing_page(
         # Score the failed proxy before retry
         if proxy_pool and proxy_state["key"]:
             proxy_pool.record_result(proxy_state["key"], success=False)
+        # Record failure with circuit breaker
+        circuit_breaker.record_failure(domain)
 
     @retry_with_backoff(max_attempts=MAX_PROXY_RETRIES, on_retry=on_retry)
     def fetch():
@@ -265,6 +313,10 @@ def _fetch_listing_page(
         return response.html_content
 
     html = fetch()  # May raise after all retries exhausted
+
+    # Record success with circuit breaker
+    circuit_breaker.record_success(domain)
+
     return html, proxy_state["key"]
 
 
@@ -333,7 +385,7 @@ async def scrape_from_start_url(
     scraper,
     start_url: str,
     limit: int,
-    delay: float = 6.0,
+    delay: float = DEFAULT_SCRAPE_DELAY,
     proxy: str | None = None,
     proxy_pool: Optional[ScoredProxyPool] = None
 ) -> dict:
@@ -407,7 +459,7 @@ def _setup_infrastructure(orch) -> bool:
     # 3. Wait for proxies
     print()
     print("[INFO] Checking proxy availability...")
-    if not orch.wait_for_proxies(min_count=MIN_PROXIES_FOR_SCRAPING, timeout=600):
+    if not orch.wait_for_proxies(min_count=MIN_PROXIES_FOR_SCRAPING, timeout=PROXY_WAIT_TIMEOUT):
         print("[ERROR] Could not get proxies. Aborting.")
         return False
 
@@ -446,7 +498,7 @@ def _start_proxy_rotator() -> tuple[str, Any, Any, list[str]]:
     return proxy_url, mubeng_process, temp_proxy_file, ordered_proxy_keys
 
 
-def _run_preflight_level1(proxy_url: str, max_attempts: int = 6) -> bool:
+def _run_preflight_level1(proxy_url: str, max_attempts: int = PREFLIGHT_MAX_ATTEMPTS_L1) -> bool:
     """
     Level 1 pre-flight: Try with mubeng auto-rotation.
     Mubeng rotates on error, so more attempts = more proxies tested.
@@ -459,7 +511,7 @@ def _run_preflight_level1(proxy_url: str, max_attempts: int = 6) -> bool:
         else:
             print(f"[WARNING] Pre-flight check failed (attempt {attempt}/{max_attempts})")
             if attempt < max_attempts:
-                time.sleep(1)  # Short delay, mubeng auto-rotates
+                time.sleep(PREFLIGHT_RETRY_DELAY)  # Short delay, mubeng auto-rotates
     return False
 
 
@@ -480,14 +532,14 @@ def _run_preflight_level2(mubeng_process: Any) -> tuple[bool, Any, str, Any, lis
         return False, new_process, proxy_url, new_temp_file, ordered_proxy_keys
 
     print(f"[SUCCESS] Proxy rotator restarted at {proxy_url}")
-    for attempt in range(1, 4):
+    for attempt in range(1, PREFLIGHT_MAX_ATTEMPTS_L2 + 1):
         if preflight_check(proxy_url, timeout=PROXY_TIMEOUT_SECONDS):
             print(f"[SUCCESS] Pre-flight check passed after soft restart (attempt {attempt})")
             return True, new_process, proxy_url, new_temp_file, ordered_proxy_keys
         else:
-            print(f"[WARNING] Pre-flight still failing (attempt {attempt}/3)")
-            if attempt < 3:
-                time.sleep(1)
+            print(f"[WARNING] Pre-flight still failing (attempt {attempt}/{PREFLIGHT_MAX_ATTEMPTS_L2})")
+            if attempt < PREFLIGHT_MAX_ATTEMPTS_L2:
+                time.sleep(PREFLIGHT_RETRY_DELAY)
 
     return False, new_process, proxy_url, new_temp_file, ordered_proxy_keys
 
@@ -525,14 +577,14 @@ def _run_preflight_level3(orch, proxy_pool: Optional[ScoredProxyPool]) -> tuple[
     print(f"[SUCCESS] Proxy rotator restarted at {proxy_url}")
 
     # Final pre-flight check
-    for attempt in range(1, 4):
+    for attempt in range(1, PREFLIGHT_MAX_ATTEMPTS_L3 + 1):
         if preflight_check(proxy_url, timeout=PROXY_TIMEOUT_SECONDS):
             print(f"[SUCCESS] Pre-flight check passed after refresh (attempt {attempt})")
             return True, new_process, proxy_url, new_temp_file, ordered_proxy_keys
         else:
-            print(f"[WARNING] Pre-flight still failing (attempt {attempt}/3)")
-            if attempt < 3:
-                time.sleep(1)
+            print(f"[WARNING] Pre-flight still failing (attempt {attempt}/{PREFLIGHT_MAX_ATTEMPTS_L3})")
+            if attempt < PREFLIGHT_MAX_ATTEMPTS_L3:
+                time.sleep(PREFLIGHT_RETRY_DELAY)
 
     return False, new_process, proxy_url, new_temp_file, ordered_proxy_keys
 

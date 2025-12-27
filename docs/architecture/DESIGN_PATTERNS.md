@@ -280,6 +280,71 @@ action, is_recoverable, max_retries = get_recovery_info(error_type)
 
 ---
 
+## 12. Circuit Breaker Pattern (resilience/)
+
+Prevents cascade failures by tracking domain-level failures and automatically opening/closing circuits.
+
+**File**: `resilience/circuit_breaker.py`
+
+```python
+from resilience.circuit_breaker import get_circuit_breaker
+
+breaker = get_circuit_breaker()
+
+if not breaker.can_request("imot.bg"):
+    raise CircuitOpenException("Domain temporarily blocked")
+
+try:
+    result = fetch_page(url)
+    breaker.record_success("imot.bg")
+except Exception:
+    breaker.record_failure("imot.bg", block_type="rate_limit")
+```
+
+**State Transitions**:
+- `CLOSED` → `OPEN`: After 5 consecutive failures
+- `OPEN` → `HALF_OPEN`: After 60 seconds timeout
+- `HALF_OPEN` → `CLOSED`: On success
+- `HALF_OPEN` → `OPEN`: On failure
+
+**Key Features**:
+- Fail-open design (allows requests if errors occur)
+- Per-domain tracking
+- Thread-safe
+
+---
+
+## 13. Rate Limiter Pattern (resilience/)
+
+Token bucket algorithm to enforce rate limits per domain.
+
+**File**: `resilience/rate_limiter.py`
+
+```python
+from resilience.rate_limiter import get_rate_limiter
+
+limiter = get_rate_limiter()
+limiter.acquire("imot.bg")  # Blocks until token available
+result = fetch_page(url)
+```
+
+**Algorithm**:
+- Each domain starts with N tokens (N = requests per minute)
+- Each request consumes 1 token
+- Tokens refill continuously at N tokens/minute
+- `acquire()` blocks if no tokens available
+
+**Configuration** (`config/settings.py`):
+```python
+DOMAIN_RATE_LIMITS = {
+    "imot.bg": 10,
+    "bazar.bg": 10,
+    "default": 10,
+}
+```
+
+---
+
 ## Key Components Using Patterns
 
 | Pattern | Location | Key Classes/Functions |
@@ -294,3 +359,5 @@ action, is_recoverable, max_retries = get_recovery_info(error_type)
 | Mixin | `websites/scrapling_base.py` | `ScraplingMixin` |
 | Retry | `resilience/retry.py` | `retry_with_backoff()`, `retry_with_backoff_async()` |
 | Error Classification | `resilience/error_classifier.py` | `classify_error()`, `get_recovery_info()` |
+| Circuit Breaker | `resilience/circuit_breaker.py` | `get_circuit_breaker()`, `CircuitOpenException` |
+| Rate Limiter | `resilience/rate_limiter.py` | `get_rate_limiter()`, `acquire()` |

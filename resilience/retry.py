@@ -8,7 +8,7 @@ from typing import Callable, Optional, Tuple, Type
 
 from loguru import logger
 
-from .error_classifier import ErrorType, RecoveryAction, classify_error, get_recovery_info
+from .error_classifier import RecoveryAction, classify_error, get_recovery_info
 
 # Import settings with fallback defaults
 try:

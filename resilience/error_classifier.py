@@ -9,6 +9,21 @@ Reference: Spec 112 Section 1.2
 from enum import Enum
 from typing import Optional, Tuple
 
+try:
+    from config.settings import (
+        ERROR_RETRY_BLOCKED,
+        ERROR_RETRY_NETWORK,
+        ERROR_RETRY_PROXY,
+        ERROR_RETRY_RATE_LIMIT,
+        ERROR_RETRY_SERVER,
+    )
+except ImportError:
+    ERROR_RETRY_NETWORK = 3
+    ERROR_RETRY_RATE_LIMIT = 5
+    ERROR_RETRY_BLOCKED = 2
+    ERROR_RETRY_SERVER = 3
+    ERROR_RETRY_PROXY = 5
+
 
 class ErrorType(Enum):
     """Classification of scraper errors.
@@ -55,13 +70,13 @@ class RecoveryAction(Enum):
 # Mapping: ErrorType -> (RecoveryAction, is_recoverable, max_retries)
 ERROR_RECOVERY_MAP: dict[ErrorType, Tuple[RecoveryAction, bool, int]] = {
     # Network - recoverable with backoff
-    ErrorType.NETWORK_TIMEOUT: (RecoveryAction.RETRY_WITH_BACKOFF, True, 3),
-    ErrorType.NETWORK_CONNECTION: (RecoveryAction.RETRY_WITH_BACKOFF, True, 3),
+    ErrorType.NETWORK_TIMEOUT: (RecoveryAction.RETRY_WITH_BACKOFF, True, ERROR_RETRY_NETWORK),
+    ErrorType.NETWORK_CONNECTION: (RecoveryAction.RETRY_WITH_BACKOFF, True, ERROR_RETRY_NETWORK),
 
     # HTTP - depends on code
-    ErrorType.HTTP_RATE_LIMIT: (RecoveryAction.RETRY_WITH_BACKOFF, True, 5),
-    ErrorType.HTTP_BLOCKED: (RecoveryAction.CIRCUIT_BREAK, True, 2),
-    ErrorType.HTTP_SERVER_ERROR: (RecoveryAction.RETRY_WITH_BACKOFF, True, 3),
+    ErrorType.HTTP_RATE_LIMIT: (RecoveryAction.RETRY_WITH_BACKOFF, True, ERROR_RETRY_RATE_LIMIT),
+    ErrorType.HTTP_BLOCKED: (RecoveryAction.CIRCUIT_BREAK, True, ERROR_RETRY_BLOCKED),
+    ErrorType.HTTP_SERVER_ERROR: (RecoveryAction.RETRY_WITH_BACKOFF, True, ERROR_RETRY_SERVER),
     ErrorType.HTTP_CLIENT_ERROR: (RecoveryAction.SKIP, False, 0),
 
     # Content - not recoverable by retry
@@ -69,7 +84,7 @@ ERROR_RECOVERY_MAP: dict[ErrorType, Tuple[RecoveryAction, bool, int]] = {
     ErrorType.NOT_FOUND: (RecoveryAction.SKIP, False, 0),
 
     # Proxy - rotate and retry
-    ErrorType.PROXY_ERROR: (RecoveryAction.RETRY_WITH_PROXY, True, 5),
+    ErrorType.PROXY_ERROR: (RecoveryAction.RETRY_WITH_PROXY, True, ERROR_RETRY_PROXY),
 
     # Unknown - conservative
     ErrorType.UNKNOWN: (RecoveryAction.MANUAL_REVIEW, False, 0),

@@ -14,17 +14,15 @@ Spec: docs/specs/112_SCRAPER_RESILIENCE.md
 """
 
 # Phase 1: Foundation (exceptions, error classifier, retry)
-# TODO: Uncomment when modules are implemented
-
-# from .exceptions import (
-#     ScraperException,
-#     NetworkException,
-#     RateLimitException,
-#     BlockedException,
-#     ParseException,
-#     ProxyException,
-#     CircuitOpenException,
-# )
+from .exceptions import (
+    ScraperException,
+    NetworkException,
+    RateLimitException,
+    BlockedException,
+    ParseException,
+    ProxyException,
+    CircuitOpenException,
+)
 
 from .error_classifier import (
     ErrorType,
@@ -40,18 +38,17 @@ from .error_classifier import (
 # )
 
 # Phase 2: Domain Protection (circuit breaker, rate limiter)
-# TODO: Uncomment when modules are implemented
+from .circuit_breaker import (
+    CircuitState,
+    DomainCircuitStatus,
+    DomainCircuitBreaker,
+    get_circuit_breaker,
+)
 
-# from .circuit_breaker import (
-#     CircuitState,
-#     DomainCircuitBreaker,
-#     get_circuit_breaker,
-# )
-
-# from .rate_limiter import (
-#     DomainRateLimiter,
-#     get_rate_limiter,
-# )
+from .rate_limiter import (
+    DomainRateLimiter,
+    get_rate_limiter,
+)
 
 # Phase 3: Session Recovery (checkpoint)
 # TODO: Uncomment when modules are implemented
@@ -69,13 +66,13 @@ from .error_classifier import (
 
 __all__ = [
     # Exceptions
-    # "ScraperException",
-    # "NetworkException",
-    # "RateLimitException",
-    # "BlockedException",
-    # "ParseException",
-    # "ProxyException",
-    # "CircuitOpenException",
+    "ScraperException",
+    "NetworkException",
+    "RateLimitException",
+    "BlockedException",
+    "ParseException",
+    "ProxyException",
+    "CircuitOpenException",
     # Error classifier
     "ErrorType",
     "RecoveryAction",
@@ -86,12 +83,13 @@ __all__ = [
     # "retry_with_backoff",
     # "retry_with_backoff_async",
     # Circuit breaker
-    # "CircuitState",
-    # "DomainCircuitBreaker",
-    # "get_circuit_breaker",
+    "CircuitState",
+    "DomainCircuitStatus",
+    "DomainCircuitBreaker",
+    "get_circuit_breaker",
     # Rate limiter
-    # "DomainRateLimiter",
-    # "get_rate_limiter",
+    "DomainRateLimiter",
+    "get_rate_limiter",
     # Checkpoint
     # "CheckpointManager",
     # Response validator

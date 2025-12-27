@@ -79,6 +79,44 @@ archive/research/  archive/specs/          (code supersedes)
 
 ## Session History
 
+### 2025-12-27 (Session 30 - Spec 112 Phase 2 + Cleanup + Consistency)
+
+| Task | Status |
+|------|--------|
+| Implement circuit_breaker.py | ✅ Complete |
+| Implement rate_limiter.py | ✅ Complete |
+| Integrate circuit breaker into main.py | ✅ Complete |
+| Integrate rate limiter into main.py | ✅ Complete |
+| Update resilience/__init__.py exports | ✅ Complete |
+| Write unit tests (42 tests) | ✅ Complete |
+| Cleanup: Fix unused imports | ✅ Complete |
+| Cleanup: Update docs (FILE_STRUCTURE, DESIGN_PATTERNS) | ✅ Complete |
+| Cleanup: Update manifest.json | ✅ Complete |
+| Consistency audit: Add 12 settings to config/settings.py | ✅ Complete |
+| Consistency audit: Update error_classifier.py | ✅ Complete |
+| Consistency audit: Update main.py preflight | ✅ Complete |
+
+**Summary**: Implemented Spec 112 Phase 2 (Domain Protection). Created circuit breaker with fail-open design and token bucket rate limiter. Performed full cleanup: fixed unused imports, updated architecture docs, manifest. Consistency audit: added 12 new centralized settings (ERROR_RETRY_*, PREFLIGHT_*, etc.), updated all files to use them. All 87 tests passing.
+
+**Files Created**:
+- `resilience/circuit_breaker.py` - DomainCircuitBreaker with state transitions
+- `resilience/rate_limiter.py` - DomainRateLimiter with token bucket
+- `tests/test_resilience_phase2.py` (42 tests)
+
+**Files Modified**:
+- `main.py` - Circuit breaker, rate limiter, preflight settings
+- `resilience/__init__.py` - Exports Phase 2 modules
+- `resilience/error_classifier.py` - Uses ERROR_RETRY_* settings
+- `resilience/exceptions.py` - Uses RATE_LIMIT_DEFAULT_RETRY_AFTER
+- `resilience/retry.py` - Fixed unused import
+- `config/settings.py` - Added 12 new settings
+- `docs/architecture/FILE_STRUCTURE.md` - Added Phase 2 files
+- `docs/architecture/DESIGN_PATTERNS.md` - Added patterns 12-13
+- `admin/config/project_structure_manifest.json` - Added new files
+- `docs/tasks/112_RESILIENCE_IMPLEMENTATION.md` - Updated consistency checks
+
+---
+
 ### 2025-12-27 (Session 29 - Spec 112 Phase 1 Implementation)
 
 | Task | Status |
@@ -127,25 +165,7 @@ archive/research/  archive/specs/          (code supersedes)
 - `core/_scraper_errors.py` - Error classification system
 - `tools/scraping/_rate_limiter.py` - Rate limiting
 
----
-
-### 2025-12-27 (Session 26 - TASKS.md Cleanup + Centralized Proxy Settings)
-
-| Task | Status |
-|------|--------|
-| Clean up TASKS.md (remove duplicates, stale tasks) | ✅ Complete |
-| Centralize proxy settings in config/settings.py | ✅ Complete |
-| Fix inconsistent MIN_PROXIES values | ✅ Complete |
-
-**Summary**: Cleaned up TASKS.md by removing duplicate JIT Proxy Validation (already in Solution F), homes.bg task, and P3 research tasks. Centralized proxy settings (`MUBENG_PROXY`, `MIN_PROXIES_TO_START`, `MIN_PROXIES_FOR_SCRAPING`, `MAX_PROXY_RETRIES`) in config/settings.py.
-
-**Key Changes:**
-- `config/settings.py` - Added proxy constants
-- `main.py`, `websites/scrapling_base.py`, `proxies/proxies_main.py` - Import from config.settings
-
----
-
-*(Sessions 13 and earlier archived to `archive/sessions/`)*
+*(Sessions 26 and earlier archived to `archive/sessions/`)*
 
 ---
 

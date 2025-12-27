@@ -2,7 +2,7 @@
 
 **Status**: In Progress
 **Created**: 2025-12-25
-**Updated**: 2025-12-25
+**Updated**: 2025-12-27
 **Instance**: 2
 
 ---
@@ -13,13 +13,22 @@ This spec defines the step-by-step plan to validate existing scrapers, add missi
 
 **Key insight**: Canonical schema and base infrastructure already exist. Focus on validation, enhancement, and orchestration.
 
-**Update**: Integrating Scrapling library for adaptive scraping, stealth fetching, and LLM-assisted extraction.
+**Update 2025-12-27**: Status review after Specs 107-112 implementation:
+- **Phase 0**: ✅ COMPLETE (Scrapling migration done)
+- **Phase 1**: 🔄 IN PROGRESS (test harness created, 46 tests)
+- **Phase 2**: ⚠️ SUPERSEDED by LLM extraction (Specs 107/108/110 = 100% accuracy)
+- **Phase 3**: 🔄 PARTIAL (basic change detection exists, tables pending)
+- **Phase 3.5**: ❌ NOT STARTED
+- **Phase 4**: 🔄 PARTIAL - Rate limiter done via Spec 112 (`resilience/rate_limiter.py`), orchestrator pending
+- **Phase 5**: ❌ NOT STARTED
 
 ---
 
-## Phase 0: Scrapling Integration (Foundation Upgrade)
+## Phase 0: Scrapling Integration (Foundation Upgrade) ✅ COMPLETE
 
 **Goal**: Replace BeautifulSoup with Scrapling for adaptive, resilient scraping.
+
+> **Status**: COMPLETE. Both imot.bg and bazar.bg scrapers migrated to Scrapling.
 
 ### Why Scrapling?
 
@@ -272,9 +281,11 @@ async def extract_from_description(description: str) -> dict:
 
 ---
 
-## Phase 1: Scraper Validation (Foundation)
+## Phase 1: Scraper Validation (Foundation) 🔄 IN PROGRESS
 
 **Goal**: Verify each scraper can complete the full crawl cycle.
+
+> **Status**: Test harness created (`tests/scrapers/`). 46 tests, 33 passing. Fixtures fetched from live sites.
 
 ### 1.1 Create Test Harness
 
@@ -320,9 +331,13 @@ After Phase 1, produce this matrix:
 
 ---
 
-## Phase 2: Description Extraction (Unstructured → Structured)
+## Phase 2: Description Extraction (Unstructured → Structured) ⚠️ SUPERSEDED
 
 **Goal**: Extract valuable data hidden in description text.
+
+> **Status**: SUPERSEDED. This phase proposed regex-based extraction. Instead, Specs 107/108/110 implemented LLM-based extraction with dictionary-first approach, achieving **100% accuracy**. The regex approach was never needed.
+>
+> See: `llm/dictionary.py`, `llm/llm_main.py`, `config/bulgarian_dictionary.yaml`
 
 ### 2.1 Fields to Extract from Description
 
@@ -394,9 +409,13 @@ async def llm_extract(description: str) -> dict:
 
 ---
 
-## Phase 3: Change Detection & History Tracking
+## Phase 3: Change Detection & History Tracking 🔄 PARTIAL
 
 **Goal**: Track ALL changes to properties (not just price), maintain full history.
+
+> **Status**: PARTIAL. Basic change detection implemented in `data/change_detector.py` with content hash and price history. Dashboard integration complete.
+>
+> **Still needed**: `scrape_history` and `listing_changes` tables for comprehensive tracking.
 
 ### 3.1 New Database Tables
 
@@ -724,9 +743,17 @@ def get_listing_sources(listing_id: int) -> list[dict]:
 
 ---
 
-## Phase 4: Rate Limiting & Async Orchestration
+## Phase 4: Rate Limiting & Async Orchestration 🔄 PARTIAL
 
 **Goal**: Scrape multiple sites in parallel while respecting per-site limits.
+
+> **Status**: PARTIAL.
+>
+> **Rate Limiter**: ✅ COMPLETE via Spec 112 Phase 2. Use `resilience/rate_limiter.py` (DomainRateLimiter with token bucket per domain). Config in `DOMAIN_RATE_LIMITS` in settings.py.
+>
+> **Orchestrator**: ❌ NOT STARTED. Still need async orchestrator for parallel site crawling.
+>
+> **Celery integration**: ❌ NOT STARTED.
 
 ### 4.1 Rate Limit Configuration
 
@@ -757,7 +784,12 @@ sites:
 
 ### 4.2 Rate Limiter Implementation
 
+> ⚠️ **SUPERSEDED**: Do NOT implement this. Use `resilience/rate_limiter.py` (DomainRateLimiter) instead.
+> The resilience rate limiter provides token bucket per domain with configurable rates.
+> If Redis support is needed for distributed Celery workers, enhance the resilience rate limiter.
+
 ```python
+# DEPRECATED - Use resilience/rate_limiter.py instead
 # proxies/rate_limiter.py
 
 class SiteRateLimiter:
@@ -864,9 +896,11 @@ def scrape_property(self, site: str, url: str):
 
 ---
 
-## Phase 5: Full Pipeline Integration
+## Phase 5: Full Pipeline Integration ❌ NOT STARTED
 
 **Goal**: Connect all components into working pipeline.
+
+> **Status**: NOT STARTED. Depends on Phase 4 orchestrator completion.
 
 ### 5.1 Pipeline Flow
 

@@ -3,7 +3,6 @@
 Tests the exception hierarchy, error classifier, and retry decorators.
 """
 
-import asyncio
 import pytest
 from unittest.mock import patch, MagicMock
 
@@ -21,7 +20,6 @@ from resilience.error_classifier import (
     RecoveryAction,
     classify_error,
     get_recovery_info,
-    ERROR_RECOVERY_MAP,
 )
 from resilience.retry import (
     _calculate_delay,

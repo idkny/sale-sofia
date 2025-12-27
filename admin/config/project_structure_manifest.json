@@ -85,7 +85,13 @@
       "purpose": "Error handling and fault tolerance (retry, circuit breaker, rate limiter)",
       "allowed_extensions": [".py"],
       "allowed_subdirs": [],
-      "block_new_subdirs": true
+      "block_new_subdirs": true,
+      "files": {
+        "__init__.py": "Package init with public API exports",
+        "retry.py": "Retry logic with exponential backoff",
+        "circuit_breaker.py": "Domain-level circuit breaker for scraper fault tolerance",
+        "rate_limiter.py": "Token bucket rate limiter per domain"
+      }
     },
 
     "websites/": {
@@ -100,7 +106,10 @@
       "purpose": "All test files",
       "allowed_extensions": [".py", ".sh", ".md", ".json"],
       "allowed_subdirs": ["debug", "stress"],
-      "block_new_subdirs": false
+      "block_new_subdirs": false,
+      "files": {
+        "test_resilience_phase2.py": "Unit tests for Phase 2 resilience modules (circuit breaker, rate limiter)"
+      }
     },
 
     "scripts/": {
