@@ -127,8 +127,26 @@ PRICE_DISCREPANCY_THRESHOLD_PCT = 5.0
 PRICE_DISCREPANCY_HIGH_PCT = 10.0
 
 # =============================================================================
+# DATABASE CONCURRENCY SETTINGS
+# =============================================================================
+# Used in: data/data_store_main.py, data/db_retry.py
+# Prevents "database is locked" errors under parallel Celery worker load
+
+# SQLite connection timeout (seconds to wait for lock)
+SQLITE_TIMEOUT = 30.0
+
+# Retry settings for database write operations
+SQLITE_BUSY_RETRIES = 3       # Number of retry attempts on "database is locked"
+SQLITE_BUSY_DELAY = 0.5       # Base delay between retries (seconds)
+SQLITE_BUSY_MAX_DELAY = 5.0   # Maximum delay cap (seconds)
+
+# Enable Write-Ahead Logging for better concurrent access
+SQLITE_WAL_MODE = True
+
+# =============================================================================
 # SCRAPING DEFAULTS
 # =============================================================================
-# Used in: main.py scrape_from_start_url
-
-DEFAULT_SCRAPE_DELAY = 6.0  # Default delay between requests (seconds)
+# Scraping behavior settings moved to:
+# - config/scraping_defaults.yaml (global defaults)
+# - config/sites/<site>.yaml (per-site overrides)
+# Use load_scraping_config() from config.scraping_config

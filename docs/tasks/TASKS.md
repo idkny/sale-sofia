@@ -48,7 +48,7 @@
 
 | Instance | Current Task |
 |----------|--------------|
-| 1 | Available |
+| 1 | Phase 4.0 Database Concurrency (4.0.1-4.0.6) |
 | 2 | Available |
 | 3 | Available |
 
@@ -151,20 +151,16 @@
   - Verify: All writes succeed, no data loss
 - [ ] 4.0.6 **Run Phase Completion Checklist** (settings centralized, no hardcoded values)
 
-##### Phase 4.1: Scraping Settings Configuration
-> **Spec**: [113_SCRAPING_CONFIGURATION.md](../specs/113_SCRAPING_CONFIGURATION.md)
-> **Why**: Settings define the contract for how Celery tasks behave.
-> Create 2-level config: general defaults + per-site overrides.
-> Based on Scrapy, Colly, Crawlee best practices.
->
-> **Cleanup Done**: Removed dead `SCRAPER_CONFIG` from `config/__init__.py`
+##### Phase 4.1: Scraping Settings Configuration (COMPLETE)
+> **Spec archived**: `archive/specs/113_SCRAPING_CONFIGURATION.md`
+> Created 2-level config: `scraping_defaults.yaml` + `config/sites/*.yaml`
+> Integrated into main.py. Old `DEFAULT_SCRAPE_DELAY` removed.
 
-- [x] 4.1.1 Create `config/scraping_defaults.yaml` (general settings)
-- [x] 4.1.2 Create `config/sites/` with `imot_bg.yaml` and `bazar_bg.yaml`
-- [x] 4.1.3 Create `config/scraping_config.py` loader (8 dataclasses, deep merge)
+- [x] 4.1.1 Create `config/scraping_defaults.yaml`
+- [x] 4.1.2 Create `config/sites/` with per-site overrides
+- [x] 4.1.3 Create `config/scraping_config.py` loader
 - [x] 4.1.4 Write unit tests (7 tests, 99% coverage)
-- [x] 4.1.5 **Phase Completion Checklist** - Passed
-  - Legacy `DEFAULT_SCRAPE_DELAY` + `SiteConfig` remain until main.py updated (Phase 4.2)
+- [x] 4.1.5 Phase Completion Checklist + Integration
 
 ##### Phase 4.2: Async Implementation (Fix Fake Async)
 > **Why second**: Clean foundation before Celery integration.

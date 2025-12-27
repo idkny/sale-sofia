@@ -88,6 +88,39 @@ archive/research/  archive/specs/          (code supersedes)
 
 ## Session History
 
+### 2025-12-27 (Session 34 - Phase 4.1 Scraping Configuration + Integration)
+
+| Task | Status |
+|------|--------|
+| Research scraper settings (Scrapy/Colly/Crawlee) | Complete |
+| Create spec 113 | Complete |
+| Create `config/scraping_defaults.yaml` | Complete |
+| Create `config/sites/*.yaml` per-site overrides | Complete |
+| Create `config/scraping_config.py` loader | Complete |
+| Write 7 unit tests (99% coverage) | Complete |
+| Integrate into main.py | Complete |
+| Remove old `DEFAULT_SCRAPE_DELAY` | Complete |
+| Update `SCRAPER_GUIDE.md` | Complete |
+| Archive spec 113 | Complete |
+
+**Summary**: Implemented Phase 4.1 Scraping Configuration. Created 2-level config system (global defaults + per-site overrides) based on Scrapy/Colly/Crawlee best practices. Integrated into main.py, removed old settings. 37 tests passing.
+
+**Files Created**:
+- `config/scraping_defaults.yaml` - global defaults (timing, concurrency, retry, etc.)
+- `config/sites/imot_bg.yaml` - faster settings (less anti-bot)
+- `config/sites/bazar_bg.yaml` - conservative settings (anti-bot protection)
+- `config/scraping_config.py` - loader with 8 dataclasses, deep merge
+- `tests/test_scraping_config.py` - 7 tests
+
+**Files Modified**:
+- `main.py` - uses `load_scraping_config()` for delay/timeout
+- `config/loader.py` - simplified SiteConfig (limit only)
+- `config/settings.py` - removed `DEFAULT_SCRAPE_DELAY`
+- `config/__init__.py` - removed dead `SCRAPER_CONFIG`
+- `websites/SCRAPER_GUIDE.md` - added Step 8: Scraping Configuration
+
+---
+
 ### 2025-12-27 (Session 33 - Phase 3.5 Cross-Site Duplicate Detection)
 
 | Task | Status |
@@ -98,68 +131,22 @@ archive/research/  archive/specs/          (code supersedes)
 | Build `PropertyMerger` class | Complete |
 | Track price discrepancies across sites | Complete |
 | Add cross-site comparison dashboard page | Complete |
-| Run Phase Completion Checklist | Complete |
 
-**Summary**: Implemented Phase 3.5 Cross-Site Duplicate Detection. Created fingerprinting system to identify same property across imot.bg and bazar.bg. Added price discrepancy tracking and dashboard comparison view. 527 tests passing.
-
-**Files Created**:
-- `docs/specs/106B_CROSS_SITE_DEDUPLICATION.md` - spec for cross-site deduplication
-- `data/property_fingerprinter.py` - PropertyFingerprinter class with neighborhood normalization
-- `data/property_merger.py` - PropertyMerger class for smart data merging
-- `app/pages/4_Cross_Site.py` - Streamlit dashboard page for cross-site comparison
-
-**Files Modified**:
-- `data/data_store_main.py` - added listing_sources table + 8 CRUD functions
-- `config/settings.py` - added FINGERPRINT_FIELDS, PRICE_DISCREPANCY thresholds
+**Summary**: Implemented Phase 3.5 Cross-Site Duplicate Detection. Created fingerprinting system to identify same property across imot.bg and bazar.bg. Added price discrepancy tracking and dashboard comparison view.
 
 ---
 
-### 2025-12-27 (Session 31 - Phase 3 Change Detection + Phase 1 Finish)
+### 2025-12-27 (Session 31 - Phase 3 Change Detection)
 
 | Task | Status |
 |------|--------|
-| Finish Crawler Validation Phase 1 | Complete |
-| Create validation matrix | Complete |
-| Run Phase 1 checklist | Complete |
 | Create `scrape_history` table | Complete |
 | Create `listing_changes` table | Complete |
 | Add 7 CRUD functions | Complete |
 | Add `detect_all_changes()` | Complete |
-| Write 30 tests | Complete (100% pass) |
-| Run Phase 3 checklist | Complete |
+| Write 30 tests | Complete |
 
-**Summary**: Finished Crawler Validation Phase 1 (validation matrix, checklist). Implemented Phase 3 Change Detection: added `scrape_history` and `listing_changes` tables, 7 CRUD functions, `detect_all_changes()` with SKIP_FIELDS, 30 tests.
-
-**Files Modified**:
-- `data/data_store_main.py` - added tables, init function, 7 CRUD functions
-- `data/change_detector.py` - added SKIP_FIELDS, detect_all_changes()
-- `docs/specs/106_CRAWLER_VALIDATION_PLAN.md` - updated Phase 1 + Phase 3 status
-- `docs/specs/106A_CRAWLER_VALIDATION_MATRIX.md` - created validation matrix
-
-**Files Created**:
-- `tests/test_change_detection.py` - 30 tests for change detection
-
----
-
-### 2025-12-27 (Session 30 - Crawler Validation Phase 1 Complete)
-
-| Task | Status |
-|------|--------|
-| Create test harness (`tests/scrapers/`) | Complete |
-| Fix floor extraction patterns (imot.bg + bazar.bg) | Complete |
-| Fix price JS patterns (bazar.bg) | Complete |
-| Fix sqm patterns (bazar.bg) | Complete |
-| Fix test fixtures (bazar.bg) | Complete |
-| Validate imot.bg scraper | Complete (23/23) |
-| Validate bazar.bg scraper | Complete (23/23) |
-
-**Summary**: Fixed all 13 failing scraper tests. All 46 tests now passing. Fixed floor extraction patterns to handle `Етаж: 3/6` and `Етаж 3` formats. Fixed bazar.bg price JS patterns (single/double quotes, decimals), sqm patterns (Площ + flexible spacing), and test fixtures (proper CSS classes).
-
-**Files Modified**:
-- `websites/imot_bg/selectors.py` - floor patterns for slash format and number-only
-- `websites/bazar_bg/selectors.py` - floor patterns (Cyrillic Е), price JS, sqm patterns
-- `websites/bazar_bg/bazar_scraper.py` - handle EUR text in price fallback
-- `tests/scrapers/conftest.py` - fixed bazar_search_html fixture with proper CSS classes
+**Summary**: Implemented Phase 3 Change Detection: added `scrape_history` and `listing_changes` tables, 7 CRUD functions, `detect_all_changes()` with SKIP_FIELDS, 30 tests.
 
 ---
 

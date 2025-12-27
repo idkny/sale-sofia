@@ -52,7 +52,6 @@ from config.settings import (
     PREFLIGHT_MAX_ATTEMPTS_L3,
     PREFLIGHT_RETRY_DELAY,
     PROXY_WAIT_TIMEOUT,
-    DEFAULT_SCRAPE_DELAY,
 )
 
 
@@ -438,7 +437,7 @@ async def scrape_from_start_url(
     scraper,
     start_url: str,
     limit: int,
-    delay: float = DEFAULT_SCRAPE_DELAY,
+    delay: float,
     proxy: str | None = None,
     proxy_pool: Optional[ScoredProxyPool] = None,
     checkpoint: Optional[CheckpointManager] = None
@@ -450,7 +449,7 @@ async def scrape_from_start_url(
         scraper: The site-specific scraper instance.
         start_url: Search results page URL to start from.
         limit: Maximum number of listings to scrape.
-        delay: Seconds to wait between requests (default: 6.0).
+        delay: Seconds to wait between requests (from site config).
         proxy: The proxy server URL (e.g., "http://localhost:8089"). Should always be set.
         proxy_pool: Optional ScoredProxyPool for tracking proxy performance.
         checkpoint: Optional CheckpointManager for crash recovery.
@@ -695,6 +694,7 @@ def _crawl_all_sites(
     global _checkpoint_manager, _scraped_urls, _pending_urls
 
     from config.loader import get_site_config
+    from config.scraping_config import load_scraping_config
     from websites import get_scraper
 
     print()
@@ -715,10 +715,12 @@ def _crawl_all_sites(
             print(f"[WARNING] Scraper for {site} not implemented, skipping")
             continue
 
-        # Load per-site configuration
+        # Load per-site configuration (new system)
+        scraping_config = load_scraping_config(site)
+        # Get limit from start_urls.yaml (legacy, per-crawl setting)
         site_config = get_site_config(site)
         print(f"\n[SITE] {site} ({len(urls)} start URLs)")
-        print(f"[CONFIG] limit={site_config.limit}, delay={site_config.delay}s, timeout={site_config.timeout}s")
+        print(f"[CONFIG] limit={site_config.limit}, delay={scraping_config.timing.delay_seconds}s, timeout={scraping_config.timeouts.page_load_seconds}s")
 
         # Create checkpoint for this site
         checkpoint_name = f"{site}_{datetime.now().strftime('%Y-%m-%d')}"
@@ -740,7 +742,7 @@ def _crawl_all_sites(
                         scraper,
                         url,
                         limit=site_config.limit,
-                        delay=site_config.delay,
+                        delay=scraping_config.timing.delay_seconds,
                         proxy=proxy_url,
                         proxy_pool=proxy_pool,
                         checkpoint=checkpoint

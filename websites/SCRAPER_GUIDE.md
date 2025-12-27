@@ -837,6 +837,82 @@ DEPLOYMENT PHASE
 
 ---
 
+## Step 8: Scraping Configuration
+
+Scraping behavior (delays, timeouts, concurrency) is configured via YAML files.
+
+### 8.1 Configuration Files
+
+```
+config/
+├── scraping_defaults.yaml     # Global defaults (all sites)
+├── sites/
+│   ├── imot_bg.yaml           # Per-site overrides
+│   └── bazar_bg.yaml
+└── scraping_config.py         # Loader + dataclasses
+```
+
+### 8.2 Loading Configuration
+
+```python
+from config.scraping_config import load_scraping_config
+
+# Load merged config (defaults + site overrides)
+config = load_scraping_config("imot.bg")
+
+# Access settings
+delay = config.timing.delay_seconds        # 1.5 (from site override)
+timeout = config.timeouts.page_load_seconds # 30 (from defaults)
+fetcher = config.fetcher.search_pages       # "http" or "stealth"
+```
+
+### 8.3 Available Settings
+
+| Section | Field | Default | Description |
+|---------|-------|---------|-------------|
+| `timing` | `delay_seconds` | 2.0 | Base delay between requests |
+| `timing` | `randomize_delay` | true | Add 0.5x-1.5x randomization |
+| `timeouts` | `request_seconds` | 60 | HTTP request timeout |
+| `timeouts` | `page_load_seconds` | 30 | Browser page load timeout |
+| `concurrency` | `max_per_domain` | 2 | Max concurrent per domain |
+| `fetcher` | `search_pages` | "http" | http \| browser \| stealth |
+| `fetcher` | `listing_pages` | "http" | http \| browser \| stealth |
+| `anti_detection` | `rotate_user_agent` | true | Rotate UA per request |
+| `anti_detection` | `humanize_actions` | false | Random mouse/scroll |
+| `retry` | `max_attempts` | 3 | Retry attempts |
+| `retry` | `http_codes` | [429,500...] | Codes that trigger retry |
+
+### 8.4 Per-Site Override Example
+
+```yaml
+# config/sites/bazar_bg.yaml
+timing:
+  delay_seconds: 3.0        # Slower (has anti-bot)
+
+concurrency:
+  max_per_domain: 1         # Single request only
+
+fetcher:
+  search_pages: stealth     # Use stealth browser
+
+anti_detection:
+  humanize_actions: true    # More human-like
+```
+
+### 8.5 Crawl Limit
+
+The `limit` setting (max listings per start URL) is separate and stays in `config/start_urls.yaml`:
+
+```yaml
+imot.bg:
+  config:
+    limit: 100              # Per-crawl limit
+  urls:
+    - https://...
+```
+
+---
+
 ## TODO / Missing Components
 
 1. ~~**Scrapling integration**~~ ✅ DONE (2025-12-25)
@@ -852,21 +928,28 @@ DEPLOYMENT PHASE
    - Configurable confidence threshold (`config/ollama.yaml`)
    - Metrics tracking (`get_metrics()`, `reset_metrics()`)
 
-3. **HTTP Client wrapper** (`http_client.py`)
+3. ~~**Scraping configuration**~~ ✅ DONE (2025-12-27)
+   - 2-level config: `scraping_defaults.yaml` + `config/sites/*.yaml`
+   - `load_scraping_config()` with deep merge
+   - 8 dataclasses for type-safe config
+   - Per-site overrides for delay, timeout, fetcher, anti-detection
+
+4. ~~**Rate limiter**~~ ✅ DONE (2025-12-27)
+   - `resilience/rate_limiter.py` - token bucket algorithm
+   - Per-domain rate limits in `config/settings.py`
+
+5. ~~**Deduplication**~~ ✅ DONE (2025-12-27)
+   - `data/property_fingerprinter.py` - fingerprint generation
+   - `data/property_merger.py` - cross-site duplicate detection
+   - Dashboard comparison view
+
+6. **HTTP Client wrapper** (`http_client.py`)
    - Standardized response handling
    - Automatic retry logic
    - Proxy integration
    - Block detection
 
-4. **Orchestrator integration**
+7. **Orchestrator integration**
    - How scrapers connect to Celery tasks
    - Progress reporting
    - Error aggregation
-
-5. **Rate limiter**
-   - Per-site configuration
-   - Adaptive delays
-
-6. **Deduplication**
-   - Fingerprint generation
-   - Cross-site duplicate detection

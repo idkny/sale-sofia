@@ -1,23 +1,25 @@
 """
-Config loader for start URLs and scraping configuration.
+Config loader for start URLs and crawl limits.
+
+Scraping behavior settings (delay, timeout, etc.) are in:
+- config/scraping_defaults.yaml (global defaults)
+- config/sites/<site>.yaml (per-site overrides)
+
+Use load_scraping_config() from config.scraping_config for those.
 """
 
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Dict, List, Union
+from typing import Dict, List
 
 import yaml
 from loguru import logger
 
-from config.settings import DEFAULT_SCRAPE_DELAY
-
 
 @dataclass
 class SiteConfig:
-    """Per-site scraping configuration."""
-    limit: int = 100                    # Max listings per start URL
-    delay: float = DEFAULT_SCRAPE_DELAY # Seconds between requests
-    timeout: int = 30                   # Page load timeout
+    """Per-crawl configuration (from start_urls.yaml)."""
+    limit: int = 100  # Max listings per start URL
 
 
 def get_start_urls() -> Dict[str, List[str]]:
@@ -66,40 +68,34 @@ def get_start_urls() -> Dict[str, List[str]]:
 
 def get_site_config(site: str) -> SiteConfig:
     """
-    Load per-site configuration from config/start_urls.yaml.
+    Load per-crawl limit from config/start_urls.yaml.
+
+    For scraping behavior (delay, timeout), use load_scraping_config() instead.
 
     Args:
         site: Site name (e.g., "imot.bg")
 
     Returns:
-        SiteConfig with site-specific settings, or defaults if not configured.
+        SiteConfig with limit setting.
     """
     config_path = Path(__file__).parent / "start_urls.yaml"
 
     if not config_path.exists():
-        logger.warning(f"Start URLs config not found: {config_path}, using defaults")
         return SiteConfig()
 
     with open(config_path, "r", encoding="utf-8") as f:
         config = yaml.safe_load(f)
 
     if not config or site not in config:
-        logger.warning(f"No config found for {site}, using defaults")
         return SiteConfig()
 
     site_data = config[site]
 
-    # New format: dict with 'config' key
+    # Format: dict with 'config' key containing 'limit'
     if isinstance(site_data, dict) and "config" in site_data:
         cfg = site_data["config"]
-        return SiteConfig(
-            limit=cfg.get("limit", 100),
-            delay=cfg.get("delay", 6.0),
-            timeout=cfg.get("timeout", 30),
-        )
+        return SiteConfig(limit=cfg.get("limit", 100))
 
-    # Old format or no config section: use defaults
-    logger.info(f"Using default config for {site}")
     return SiteConfig()
 
 
