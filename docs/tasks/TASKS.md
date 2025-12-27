@@ -48,9 +48,11 @@
 
 | Instance | Current Task |
 |----------|--------------|
-| 1 | Phase 4.0 Database Concurrency (4.0.1-4.0.6) |
-| 2 | Available |
-| 3 | Available |
+| 1 | Available |
+| 2 | Phase 4.2 Async Implementation (4.2.1-4.2.6) |
+| 3 | Spec 114: Scraper Monitoring (Phases 1-4) |
+
+**Session 35 (2025-12-27)**: Instance 1 - Phase 4.0 Database Concurrency COMPLETE. Created db_retry.py with @retry_on_busy decorator, enabled WAL mode + timeout in get_db_connection(), applied to 7 write functions. 17 concurrency tests passing.
 
 **Session 34 (2025-12-27)**: Instance 2 - Phase 4.1 Scraping Configuration COMPLETE. Created 2-level config system (scraping_defaults.yaml + sites/*.yaml), ScrapingConfig loader with 8 dataclasses, 7 tests passing (99% coverage).
 
@@ -116,40 +118,16 @@
 > **Consolidates**: "Build async orchestrator" + "Integrate with Celery" (same goal).
 > **Dependencies**: Resilience module (complete), Rate limiter (complete).
 
-##### Phase 4.0: Database Concurrency (BLOCKER)
-> **Why first**: SQLite has single-writer limitation. Without fixes, parallel Celery workers
-> calling `save_listing()` simultaneously WILL cause `database is locked` errors and data loss.
-> **Risk**: HIGH - Phase 4.1+ will fail without this.
->
-> **Current issues in `data/data_store_main.py`**:
-> - No WAL mode (single-writer lock)
-> - No timeout on `sqlite3.connect()` (5s default too short)
-> - No retry on `SQLITE_BUSY` errors
-> - No database settings in `config/settings.py`
+##### Phase 4.0: Database Concurrency (COMPLETE)
+> Files: `data/db_retry.py`, `data/data_store_main.py`, `tests/test_db_concurrency.py`
+> Settings: `config/settings.py` - SQLITE_TIMEOUT, SQLITE_WAL_MODE, SQLITE_BUSY_*
 
-- [ ] 4.0.1 Add database settings to `config/settings.py`
-  - `SQLITE_TIMEOUT = 30.0` (seconds to wait for lock)
-  - `SQLITE_BUSY_RETRIES = 3` (retry attempts on busy)
-  - `SQLITE_BUSY_DELAY = 0.5` (delay between retries)
-  - `SQLITE_WAL_MODE = True` (enable Write-Ahead Logging)
-- [ ] 4.0.2 Update `get_db_connection()` in `data/data_store_main.py`
-  - Add `timeout=SQLITE_TIMEOUT` to `sqlite3.connect()`
-  - Add `PRAGMA journal_mode = WAL` when `SQLITE_WAL_MODE` is True
-  - Add `PRAGMA busy_timeout` as fallback
-- [ ] 4.0.3 Create `data/db_retry.py` with retry decorator
-  - Follow `resilience/retry.py` pattern (exponential backoff)
-  - Catch `sqlite3.OperationalError` with "database is locked"
-  - `@retry_on_busy(max_attempts=SQLITE_BUSY_RETRIES)`
-  - Log warnings on retry, error after exhausted
-- [ ] 4.0.4 Apply `@retry_on_busy` to write functions in `data_store_main.py`
-  - `save_listing()`, `update_listing_evaluation()`, `add_viewing()`
-  - `upsert_scrape_history()`, `record_field_change()`
-  - `add_listing_source()`, `update_source_price()`
-- [ ] 4.0.5 Write concurrent write tests (`tests/test_db_concurrency.py`)
-  - Test: 10 parallel threads calling `save_listing()`
-  - Test: Mixed reads/writes under load
-  - Verify: All writes succeed, no data loss
-- [ ] 4.0.6 **Run Phase Completion Checklist** (settings centralized, no hardcoded values)
+- [x] 4.0.1 Add database settings to `config/settings.py`
+- [x] 4.0.2 Update `get_db_connection()` with WAL mode + timeout
+- [x] 4.0.3 Create `data/db_retry.py` with `@retry_on_busy()` decorator
+- [x] 4.0.4 Apply `@retry_on_busy()` to 7 write functions
+- [x] 4.0.5 Write concurrent write tests (17 tests passing)
+- [x] 4.0.6 **Phase Completion Checklist** - Passed (200 tests total)
 
 ##### Phase 4.1: Scraping Settings Configuration (COMPLETE)
 > **Spec archived**: `archive/specs/113_SCRAPING_CONFIGURATION.md`
@@ -233,6 +211,35 @@
 
 ---
 
+### Scraper Monitoring & Observability (P1)
+
+**Spec**: [114_SCRAPER_MONITORING.md](../specs/114_SCRAPER_MONITORING.md)
+
+> **Goal**: Track scraper health, persist session reports, visualize performance.
+> **Independent**: Can run in parallel with Phase 4 work.
+
+#### Phase 1: Core Metrics [Instance 3]
+- [ ] 1.1 Create `scraping/metrics.py` with MetricsCollector class
+- [ ] 1.2 Create `scraping/session_report.py` with SessionReportGenerator
+- [ ] 1.3 Add health thresholds to `config/settings.py`
+- [ ] 1.4 Write unit tests for metrics and reports
+
+#### Phase 2: Integration
+- [ ] 2.1 Add `get_all_states()` to `resilience/circuit_breaker.py`
+- [ ] 2.2 Add `get_stats()` to `proxies/proxy_scorer.py`
+- [ ] 2.3 Integrate MetricsCollector into `main.py` scraping flow
+
+#### Phase 3: Dashboard
+- [ ] 3.1 Create `app/pages/5_Scraper_Health.py` with basic layout
+- [ ] 3.2 Add trend charts (success rate over time)
+- [ ] 3.3 Add health indicators and run history table
+
+#### Phase 4: Testing
+- [ ] 4.1 Integration test: full scrape with metrics collection
+- [ ] 4.2 Dashboard test: verify report loading and display
+
+---
+
 ## Related Documents
 
 - [docs/specs/](../specs/) - Active specifications
@@ -241,4 +248,4 @@
 
 ---
 
-**Last Updated**: 2025-12-27 (Added Phase 4.0 Database Concurrency - BLOCKER for parallel scraping)
+**Last Updated**: 2025-12-27 (Added Spec 114: Scraper Monitoring & Observability)

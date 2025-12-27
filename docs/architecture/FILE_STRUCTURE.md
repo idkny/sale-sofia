@@ -87,7 +87,12 @@ sale-sofia/
 │   ├── *.yaml                # YAML configs
 │   └── *.json                # JSON configs
 │
-├── data/                     # Data storage
+├── data/                     # Data storage and database operations
+│   ├── data_store_main.py    # SQLite CRUD operations (listings, viewings, etc.)
+│   ├── db_retry.py           # @retry_on_busy() decorator for SQLite concurrency
+│   ├── change_detector.py    # Listing change detection
+│   ├── property_fingerprinter.py  # Cross-site duplicate detection
+│   ├── property_merger.py    # Smart data merging from multiple sources
 │   ├── *.db                  # SQLite databases
 │   └── logs/                 # Application logs
 │       └── *.log

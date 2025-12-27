@@ -19,6 +19,8 @@ except ImportError:
     SQLITE_TIMEOUT = 30.0
     SQLITE_WAL_MODE = True
 
+from data.db_retry import retry_on_busy
+
 
 def get_db_connection() -> sqlite3.Connection:
     """Get database connection with concurrency settings."""
@@ -242,6 +244,7 @@ def init_viewings_table():
     logger.info("Viewings table initialized")
 
 
+@retry_on_busy()
 def save_listing(
     listing, content_hash: str = None, price_history: str = None
 ) -> Optional[int]:
@@ -433,6 +436,7 @@ def get_listing_by_id(listing_id: int) -> Optional[sqlite3.Row]:
     return row
 
 
+@retry_on_busy()
 def update_listing_evaluation(
     listing_id: int,
     status: Optional[str] = None,
@@ -505,6 +509,7 @@ def update_listing_features(listing_id: int, features: Dict[str, Any]) -> bool:
 # Viewings Functions
 # ============================================================
 
+@retry_on_busy()
 def add_viewing(
     listing_id: int,
     date_viewed: str,
@@ -755,6 +760,7 @@ def init_change_detection_tables():
     logger.info("Change detection tables initialized")
 
 
+@retry_on_busy()
 def upsert_scrape_history(url: str, content_hash: str) -> bool:
     """
     Insert or update scrape history for a URL.
@@ -802,6 +808,7 @@ def upsert_scrape_history(url: str, content_hash: str) -> bool:
         conn.close()
 
 
+@retry_on_busy()
 def record_field_change(
     listing_id: int,
     field_name: str,
@@ -969,6 +976,7 @@ def init_listing_sources_table():
     logger.info("Listing sources table initialized")
 
 
+@retry_on_busy()
 def add_listing_source(
     property_fingerprint: str,
     listing_id: int,
@@ -1054,6 +1062,7 @@ def get_sources_by_listing(listing_id: int) -> List[sqlite3.Row]:
     return rows
 
 
+@retry_on_busy()
 def update_source_price(fingerprint: str, source_site: str, price: float) -> bool:
     """
     Update price for a specific source.

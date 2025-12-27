@@ -423,6 +423,43 @@ MIN_CONTENT_LENGTH = 1000  # Suspiciously short page threshold
 
 ---
 
+## 16. Database Retry Pattern (data/)
+
+Retry decorator for SQLite "database is locked" errors during concurrent access.
+
+**File**: `data/db_retry.py`
+
+```python
+from data.db_retry import retry_on_busy
+
+@retry_on_busy()
+def save_listing(listing):
+    conn = get_db_connection()
+    # ... write operations ...
+```
+
+**Key Features**:
+- Catches only `sqlite3.OperationalError` with "database is locked"
+- Exponential backoff with jitter (same pattern as `resilience/retry.py`)
+- Configurable via settings: `SQLITE_BUSY_RETRIES`, `SQLITE_BUSY_DELAY`, `SQLITE_BUSY_MAX_DELAY`
+- Applied to 7 write functions in `data_store_main.py`
+
+**Works with**:
+- WAL mode (`PRAGMA journal_mode = WAL`) - enabled in `get_db_connection()`
+- Connection timeout (`timeout=SQLITE_TIMEOUT`) - 30 seconds
+- Busy timeout (`PRAGMA busy_timeout`) - SQLite-level wait
+
+**Configuration** (`config/settings.py`):
+```python
+SQLITE_TIMEOUT = 30.0         # Connection timeout
+SQLITE_WAL_MODE = True        # Enable WAL mode
+SQLITE_BUSY_RETRIES = 3       # Retry attempts
+SQLITE_BUSY_DELAY = 0.5       # Base delay (seconds)
+SQLITE_BUSY_MAX_DELAY = 5.0   # Max delay cap (seconds)
+```
+
+---
+
 ## Key Components Using Patterns
 
 | Pattern | Location | Key Classes/Functions |
@@ -441,3 +478,4 @@ MIN_CONTENT_LENGTH = 1000  # Suspiciously short page threshold
 | Rate Limiter | `resilience/rate_limiter.py` | `get_rate_limiter()`, `acquire()` |
 | Checkpoint | `resilience/checkpoint.py` | `CheckpointManager`, `save()`, `load()`, `clear()` |
 | Response Validator | `resilience/response_validator.py` | `detect_soft_block()`, `CAPTCHA_PATTERNS`, `BLOCK_PATTERNS` |
+| Database Retry | `data/db_retry.py` | `retry_on_busy()` |

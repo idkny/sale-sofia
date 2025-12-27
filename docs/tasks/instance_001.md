@@ -79,6 +79,32 @@ archive/research/  archive/specs/          (code supersedes)
 
 ## Session History
 
+### 2025-12-27 (Session 35 - Phase 4.0 Database Concurrency)
+
+| Task | Status |
+|------|--------|
+| 4.0.1 Add database settings to config/settings.py | ✅ Complete |
+| 4.0.2 Update get_db_connection() for WAL + timeout | ✅ Complete |
+| 4.0.3 Create data/db_retry.py with retry decorator | ✅ Complete |
+| 4.0.4 Apply @retry_on_busy to 7 write functions | ✅ Complete |
+| 4.0.5 Write concurrent write tests (17 tests) | ✅ Complete |
+| 4.0.6 Run Phase Completion Checklist | ✅ Complete |
+
+**Summary**: Implemented Phase 4.0 Database Concurrency. Created `db_retry.py` with `@retry_on_busy()` decorator following `resilience/retry.py` pattern. Enabled WAL mode and 30s timeout in `get_db_connection()`. Applied decorator to 7 write functions. 17 concurrent write tests passing. 200 total tests passing.
+
+**Files Created**:
+- `data/db_retry.py` - `@retry_on_busy()` decorator with exponential backoff
+- `tests/test_db_concurrency.py` - 17 tests for parallel writes, WAL mode, retry
+
+**Files Modified**:
+- `config/settings.py` - Added SQLITE_TIMEOUT, SQLITE_WAL_MODE, SQLITE_BUSY_* settings
+- `data/data_store_main.py` - WAL mode, timeout, import retry decorator, apply to 7 functions
+- `docs/architecture/DESIGN_PATTERNS.md` - Added pattern 16 (Database Retry)
+- `docs/architecture/FILE_STRUCTURE.md` - Added data/ module files
+- `docs/tasks/TASKS.md` - Marked Phase 4.0 complete
+
+---
+
 ### 2025-12-27 (Session 34 - Database Concurrency Analysis)
 
 | Task | Status |
@@ -88,17 +114,7 @@ archive/research/  archive/specs/          (code supersedes)
 | Analyze `data_store_main.py` for SQLite limitations | ✅ Complete |
 | Add Phase 4.0 Database Concurrency tasks to TASKS.md | ✅ Complete |
 
-**Summary**: Research session - no code written. Identified critical database concurrency issue: SQLite in `data_store_main.py` has no WAL mode, no timeout, no retry on BUSY errors. When Phase 4 enables parallel Celery workers, `save_listing()` calls will collide causing "database is locked" errors and data loss. Added Phase 4.0 as BLOCKER before Phase 4.1.
-
-**Files Modified**:
-- `docs/tasks/TASKS.md` - Added Phase 4.0 Database Concurrency (6 tasks)
-
-**Key Findings**:
-- Current scraping is sequential (no issue today)
-- Celery `worker_concurrency=8` means 8 parallel workers
-- SQLite default timeout is 5 seconds (too short under contention)
-- No WAL mode = single-writer lock
-- Solution: WAL + timeout + retry decorator (following `resilience/retry.py` pattern)
+**Summary**: Research session - no code written. Identified critical database concurrency issue: SQLite in `data_store_main.py` has no WAL mode, no timeout, no retry on BUSY errors. Added Phase 4.0 as BLOCKER before Phase 4.1.
 
 ---
 
@@ -123,38 +139,7 @@ archive/research/  archive/specs/          (code supersedes)
 
 ---
 
-### 2025-12-27 (Session 32 - Spec 112 Phase 4: Detection)
-
-| Task | Status |
-|------|--------|
-| CTO Review: Read architecture docs | ✅ Complete |
-| Implement resilience/response_validator.py | ✅ Complete |
-| Add 429/Retry-After handling to retry.py | ✅ Complete |
-| Integrate response validation into main.py | ✅ Complete |
-| Write unit tests for Phase 4 | ✅ Complete |
-| Run Phase Completion Checklist | ✅ Complete |
-
-**Summary**: Implemented Spec 112 Phase 4 (Detection). Created response_validator.py for soft block detection (CAPTCHA, block messages, short content). Added Retry-After header handling to retry.py. Integrated soft block detection into main.py fetch functions. All 153 resilience tests passing (45 Phase 1 + 42 Phase 2 + 18 Phase 3 + 48 Phase 4).
-
-**Files Created**:
-- `resilience/response_validator.py` - detect_soft_block() with pre-compiled regex patterns
-- `tests/test_resilience_phase4.py` (48 tests)
-
-**Files Modified**:
-- `resilience/retry.py` - Added Retry-After handling
-- `resilience/error_classifier.py` - Enhanced custom exception recognition
-- `resilience/__init__.py` - Exports detect_soft_block, CAPTCHA_PATTERNS, BLOCK_PATTERNS
-- `main.py` - Soft block detection in _fetch_search_page and _fetch_listing_page
-- `config/settings.py` - Added MIN_CONTENT_LENGTH
-- `docs/architecture/DESIGN_PATTERNS.md` - Added pattern 15 (Response Validator)
-- `docs/architecture/FILE_STRUCTURE.md` - Added response_validator.py
-- `admin/config/project_structure_manifest.json` - Added response_validator.py
-- `docs/tasks/112_RESILIENCE_IMPLEMENTATION.md` - Marked Phase 4 complete
-- `docs/tasks/TASKS.md` - Marked Phase 4 complete
-
----
-
-*(Sessions 31 and earlier archived to `archive/sessions/`)*
+*(Sessions 32 and earlier archived to `archive/sessions/`)*
 
 ---
 

@@ -144,6 +144,14 @@ SQLITE_BUSY_MAX_DELAY = 5.0   # Maximum delay cap (seconds)
 SQLITE_WAL_MODE = True
 
 # =============================================================================
+# ASYNC FETCHER SETTINGS
+# =============================================================================
+# Used in: scraping/async_fetcher.py
+
+# Maximum concurrent requests when fetching multiple URLs
+ASYNC_FETCHER_MAX_CONCURRENT = 5
+
+# =============================================================================
 # SCRAPING DEFAULTS
 # =============================================================================
 # Scraping behavior settings moved to:
