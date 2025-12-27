@@ -56,11 +56,11 @@ from .checkpoint import (
 )
 
 # Phase 4: Detection (response validator)
-# TODO: Uncomment when modules are implemented
-
-# from .response_validator import (
-#     detect_soft_block,
-# )
+from .response_validator import (
+    detect_soft_block,
+    CAPTCHA_PATTERNS,
+    BLOCK_PATTERNS,
+)
 
 __all__ = [
     # Exceptions
@@ -91,5 +91,7 @@ __all__ = [
     # Checkpoint
     "CheckpointManager",
     # Response validator
-    # "detect_soft_block",
+    "detect_soft_block",
+    "CAPTCHA_PATTERNS",
+    "BLOCK_PATTERNS",
 ]

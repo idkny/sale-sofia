@@ -698,7 +698,237 @@ def get_shortlisted_listings() -> List[sqlite3.Row]:
     return rows
 
 
+# ============================================================
+# Change Detection Tables (Spec 112)
+# ============================================================
+
+
+def init_change_detection_tables():
+    """Create scrape_history and listing_changes tables if not exist."""
+    conn = get_db_connection()
+
+    # Track scrape metadata per URL
+    conn.execute("""
+        CREATE TABLE IF NOT EXISTS scrape_history (
+            id INTEGER PRIMARY KEY,
+            url TEXT UNIQUE NOT NULL,
+            content_hash TEXT NOT NULL,
+            first_seen TEXT NOT NULL,
+            last_seen TEXT NOT NULL,
+            last_changed TEXT,
+            scrape_count INTEGER DEFAULT 1,
+            status TEXT DEFAULT 'active'
+        )
+    """)
+    conn.execute("CREATE INDEX IF NOT EXISTS idx_scrape_history_url ON scrape_history(url)")
+    conn.execute("CREATE INDEX IF NOT EXISTS idx_scrape_history_status ON scrape_history(status)")
+
+    # Track ALL field changes over time
+    conn.execute("""
+        CREATE TABLE IF NOT EXISTS listing_changes (
+            id INTEGER PRIMARY KEY,
+            listing_id INTEGER NOT NULL REFERENCES listings(id),
+            field_name TEXT NOT NULL,
+            old_value TEXT,
+            new_value TEXT,
+            changed_at TEXT NOT NULL,
+            source_site TEXT NOT NULL,
+            UNIQUE(listing_id, field_name, changed_at)
+        )
+    """)
+    conn.execute("CREATE INDEX IF NOT EXISTS idx_changes_listing ON listing_changes(listing_id)")
+    conn.execute("CREATE INDEX IF NOT EXISTS idx_changes_field ON listing_changes(field_name)")
+    conn.execute("CREATE INDEX IF NOT EXISTS idx_changes_date ON listing_changes(changed_at)")
+
+    conn.commit()
+    conn.close()
+    logger.info("Change detection tables initialized")
+
+
+def upsert_scrape_history(url: str, content_hash: str) -> bool:
+    """
+    Insert or update scrape history for a URL.
+
+    Returns:
+        True if content changed, False if unchanged
+    """
+    conn = get_db_connection()
+    now = datetime.utcnow().isoformat()
+
+    try:
+        existing = conn.execute(
+            "SELECT content_hash FROM scrape_history WHERE url = ?", (url,)
+        ).fetchone()
+
+        if existing is None:
+            conn.execute("""
+                INSERT INTO scrape_history (url, content_hash, first_seen, last_seen)
+                VALUES (?, ?, ?, ?)
+            """, (url, content_hash, now, now))
+            conn.commit()
+            return True  # New URL
+
+        changed = existing["content_hash"] != content_hash
+        if changed:
+            conn.execute("""
+                UPDATE scrape_history
+                SET content_hash = ?, last_seen = ?, last_changed = ?,
+                    scrape_count = scrape_count + 1
+                WHERE url = ?
+            """, (content_hash, now, now, url))
+        else:
+            conn.execute("""
+                UPDATE scrape_history
+                SET last_seen = ?, scrape_count = scrape_count + 1
+                WHERE url = ?
+            """, (now, url))
+        conn.commit()
+        return changed
+
+    except sqlite3.Error as e:
+        logger.error(f"Error upserting scrape history: {e}")
+        return False
+    finally:
+        conn.close()
+
+
+def record_field_change(
+    listing_id: int,
+    field_name: str,
+    old_value: Any,
+    new_value: Any,
+    source_site: str,
+) -> Optional[int]:
+    """
+    Record a single field change.
+
+    Args:
+        listing_id: ID of the listing
+        field_name: Name of the changed field
+        old_value: Previous value (will be JSON-serialized if complex)
+        new_value: New value (will be JSON-serialized if complex)
+        source_site: Source website name
+
+    Returns:
+        Change record ID or None if failed
+    """
+    conn = get_db_connection()
+    now = datetime.utcnow().isoformat()
+
+    # JSON-serialize non-string values
+    old_str = json.dumps(old_value) if not isinstance(old_value, (str, type(None))) else old_value
+    new_str = json.dumps(new_value) if not isinstance(new_value, (str, type(None))) else new_value
+
+    try:
+        cursor = conn.execute("""
+            INSERT INTO listing_changes
+                (listing_id, field_name, old_value, new_value, changed_at, source_site)
+            VALUES (?, ?, ?, ?, ?, ?)
+        """, (listing_id, field_name, old_str, new_str, now, source_site))
+        conn.commit()
+        return cursor.lastrowid
+    except sqlite3.IntegrityError:
+        # Duplicate entry (same listing, field, timestamp)
+        return None
+    except sqlite3.Error as e:
+        logger.error(f"Error recording field change: {e}")
+        return None
+    finally:
+        conn.close()
+
+
+def get_scrape_history(url: str) -> Optional[sqlite3.Row]:
+    """Get scrape history for a URL."""
+    conn = get_db_connection()
+    cursor = conn.execute("SELECT * FROM scrape_history WHERE url = ?", (url,))
+    row = cursor.fetchone()
+    conn.close()
+    return row
+
+
+def get_listing_changes(
+    listing_id: int, field: Optional[str] = None
+) -> List[sqlite3.Row]:
+    """
+    Get changes for a listing, optionally filtered by field.
+
+    Args:
+        listing_id: ID of the listing
+        field: Optional field name to filter by
+
+    Returns:
+        List of change records ordered by date descending
+    """
+    conn = get_db_connection()
+
+    if field:
+        cursor = conn.execute("""
+            SELECT * FROM listing_changes
+            WHERE listing_id = ? AND field_name = ?
+            ORDER BY changed_at DESC
+        """, (listing_id, field))
+    else:
+        cursor = conn.execute("""
+            SELECT * FROM listing_changes
+            WHERE listing_id = ?
+            ORDER BY changed_at DESC
+        """, (listing_id,))
+
+    rows = cursor.fetchall()
+    conn.close()
+    return rows
+
+
+def get_price_history_from_changes(listing_id: int) -> List[Dict[str, Any]]:
+    """
+    Get price history from listing_changes table.
+
+    Returns:
+        List of dicts with 'old_value', 'new_value', 'changed_at'
+    """
+    changes = get_listing_changes(listing_id, field="price_eur")
+    return [
+        {
+            "old_value": row["old_value"],
+            "new_value": row["new_value"],
+            "changed_at": row["changed_at"],
+        }
+        for row in changes
+    ]
+
+
+def mark_url_status(url: str, status: str) -> bool:
+    """
+    Mark URL status in scrape_history.
+
+    Args:
+        url: Listing URL
+        status: One of 'active', 'removed', 'sold'
+
+    Returns:
+        True if updated successfully
+    """
+    if status not in ("active", "removed", "sold"):
+        logger.warning(f"Invalid status '{status}', must be active/removed/sold")
+        return False
+
+    conn = get_db_connection()
+    try:
+        conn.execute(
+            "UPDATE scrape_history SET status = ? WHERE url = ?",
+            (status, url)
+        )
+        conn.commit()
+        return True
+    except sqlite3.Error as e:
+        logger.error(f"Error marking URL status: {e}")
+        return False
+    finally:
+        conn.close()
+
+
 # Initialize database on import
 init_db()
 migrate_listings_schema()
 init_viewings_table()
+init_change_detection_tables()

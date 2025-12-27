@@ -5,12 +5,13 @@ Provides:
 - compute_hash(): Generate content hash from ListingData
 - has_changed(): Compare with stored hash
 - track_price_change(): Price history tracking
+- detect_all_changes(): Compare dicts and record all field changes
 """
 
 import hashlib
 import json
 from datetime import datetime
-from typing import Optional
+from typing import Any, Dict, List, Optional
 
 from loguru import logger
 
@@ -110,3 +111,51 @@ def track_price_change(
         return False, json.dumps(history), None
 
     return False, json.dumps(history), None
+
+
+# Fields to skip when comparing listings (volatile or non-value fields)
+SKIP_FIELDS = frozenset({
+    "id", "scraped_at", "updated_at", "created_at",
+    "content_hash", "last_change_at", "change_count",
+    "price_history", "consecutive_unchanged",
+})
+
+
+def detect_all_changes(
+    listing_id: int,
+    old_data: Dict[str, Any],
+    new_data: Dict[str, Any],
+    source_site: str,
+) -> List[Dict[str, Any]]:
+    """
+    Compare two dicts and record all field changes to the database.
+
+    Args:
+        listing_id: ID of the listing
+        old_data: Previous listing data as dict
+        new_data: New listing data as dict
+        source_site: Source website name
+
+    Returns:
+        List of changes detected: [{"field": str, "old": Any, "new": Any}]
+    """
+    from data.data_store_main import record_field_change
+
+    changes = []
+    all_fields = set(old_data.keys()) | set(new_data.keys())
+
+    for field in all_fields:
+        if field in SKIP_FIELDS:
+            continue
+
+        old_val = old_data.get(field)
+        new_val = new_data.get(field)
+
+        if old_val != new_val:
+            changes.append({"field": field, "old": old_val, "new": new_val})
+            record_field_change(listing_id, field, old_val, new_val, source_site)
+
+    if changes:
+        logger.info(f"Detected {len(changes)} field changes for listing {listing_id}")
+
+    return changes

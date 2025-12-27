@@ -48,8 +48,14 @@
 | Instance | Current Task |
 |----------|--------------|
 | 1 | Available |
-| 2 | Available |
+| 2 | Phase 3.5: Cross-Site Duplicate Detection |
 | 3 | Available |
+
+**Session 33 (2025-12-27)**: Instance 1 - Phase 4 Task Consolidation. Analyzed async/parallel patterns, researched Celery best practices, consolidated "async orchestrator" + "Celery integration" into unified Phase 4 with 4 sub-phases (22 tasks).
+
+**Session 32 (2025-12-27)**: Instance 1 - Spec 112 Phase 4 (Detection) COMPLETE. Created response_validator.py, added Retry-After handling. 153 resilience tests passing. Spec archived.
+
+**Session 31 (2025-12-27)**: Instance 2 - Phase 3 Change Detection COMPLETE. Added scrape_history + listing_changes tables, 7 CRUD functions, detect_all_changes(), 30 tests passing.
 
 **Session 30 (2025-12-27)**: Instance 2 - Crawler Validation Phase 1 complete. All 46 scraper tests passing. Fixed floor extraction, price JS patterns, sqm patterns, and test fixtures for both scrapers.
 
@@ -81,38 +87,125 @@
 > **Phase 0**: COMPLETE (Scrapling migration)
 > **Phase 2**: SUPERSEDED by LLM extraction (Specs 107/108/110 achieved 100% accuracy)
 
-#### Phase 1: Scraper Validation
+#### Phase 1: Scraper Validation (COMPLETE)
 - [x] Create test harness (`tests/scrapers/`) - 46 tests, 46 passing
 - [x] Validate imot.bg scraper (pagination, extraction, save) - 23/23 tests passing
 - [x] Validate bazar.bg scraper (pagination, extraction, save) - 23/23 tests passing
-- [ ] Create validation matrix (document what works)
-- [ ] **Run Phase Completion Checklist** (consistency + alignment)
+- [x] Create validation matrix - [106A_CRAWLER_VALIDATION_MATRIX.md](../specs/106A_CRAWLER_VALIDATION_MATRIX.md)
+- [x] **Phase Completion Checklist** - Passed (no hardcoded values, spec aligned)
 
-#### Phase 3: Change Detection & History (Remaining)
-> Basic change detection exists (`data/change_detector.py`). Tables below still needed.
-- [ ] Create `scrape_history` table
-- [ ] Create `listing_changes` table (track ALL field changes)
-- [ ] **Run Phase Completion Checklist** (consistency + alignment)
+#### Phase 3: Change Detection & History (COMPLETE)
+> Tables and functions added to `data/data_store_main.py` and `data/change_detector.py`.
+- [x] Create `scrape_history` table - tracks URL scrape metadata
+- [x] Create `listing_changes` table - tracks ALL field changes over time
+- [x] Add 7 CRUD functions (upsert_scrape_history, record_field_change, etc.)
+- [x] Add `detect_all_changes()` function with SKIP_FIELDS
+- [x] Write 30 tests (`tests/test_change_detection.py`) - 100% pass
+- [x] **Phase Completion Checklist** - Passed (no hardcoded values, spec aligned)
 
-#### Phase 3.5: Cross-Site Duplicate Detection & Merging
-- [ ] Create `listing_sources` table (track which sites list property)
-- [ ] Build `PropertyFingerprinter` class (identify duplicates)
-- [ ] Build `PropertyMerger` class (smart data merging)
-- [ ] Track price discrepancies across sites
-- [ ] Add cross-site comparison view to dashboard
-- [ ] **Run Phase Completion Checklist** (consistency + alignment)
+#### Phase 3.5: Cross-Site Duplicate Detection & Merging [Instance 2]
+> **Spec**: [106B_CROSS_SITE_DEDUPLICATION.md](../specs/106B_CROSS_SITE_DEDUPLICATION.md)
 
-#### Phase 4: Orchestration
-> **Rate limiter**: Use `resilience/rate_limiter.py` (DomainRateLimiter, Spec 112 Phase 2)
-- [x] Rate limiter - use `resilience/rate_limiter.py` (token bucket per domain)
-- [ ] Build async orchestrator (parallel sites)
-- [ ] Integrate with Celery
-- [ ] **Run Phase Completion Checklist** (consistency + alignment)
+- [ ] [Instance 2] Create `listing_sources` table (track which sites list property)
+- [ ] [Instance 2] Build `PropertyFingerprinter` class (identify duplicates)
+- [ ] [Instance 2] Build `PropertyMerger` class (smart data merging)
+- [ ] [Instance 2] Track price discrepancies across sites
+- [ ] [Instance 2] Add cross-site comparison view to dashboard
+- [ ] [Instance 2] **Run Phase Completion Checklist** (consistency + alignment)
 
-#### Phase 5: Full Pipeline
-- [ ] E2E testing (full pipeline)
-- [ ] Add monitoring/alerting
-- [ ] **Run Phase Completion Checklist** (consistency + alignment)
+#### Phase 4: Celery Site Orchestration (CONSOLIDATED)
+> **Goal**: Parallel site scraping via Celery with proper async and per-site configuration.
+> **Consolidates**: "Build async orchestrator" + "Integrate with Celery" (same goal).
+> **Dependencies**: Resilience module (complete), Rate limiter (complete).
+
+##### Phase 4.1: Scraping Settings Configuration
+> **Why first**: Settings define the contract for how Celery tasks behave.
+> Create 2-level config: general defaults + per-site overrides.
+
+- [ ] 4.1.1 Create `config/scraping_defaults.yaml` (general settings)
+  - Rate limiting: `requests_per_minute`, `delay_between_requests`
+  - Concurrency: `max_concurrent_requests` (async within task)
+  - Anti-detection: `humanize`, `random_delay_range`, `block_webrtc`
+  - Timeouts: `request_timeout`, `page_load_timeout`
+  - Fetcher selection: `search_pages`, `listing_pages` (Fetcher vs StealthyFetcher)
+- [ ] 4.1.2 Create `config/sites/` directory with per-site overrides
+  - `config/sites/imot_bg.yaml` - faster settings (less anti-bot)
+  - `config/sites/bazar_bg.yaml` - slower settings (has anti-bot)
+- [ ] 4.1.3 Create `config/scraping_config.py` loader
+  - `load_scraping_config(site: str) -> ScrapingConfig`
+  - Merge logic: defaults <- site overrides
+  - Dataclass for type safety
+- [ ] 4.1.4 Write unit tests for config loading/merging
+- [ ] 4.1.5 **Run Phase Completion Checklist** (no hardcoded values)
+
+##### Phase 4.2: Async Implementation (Fix Fake Async)
+> **Why second**: Clean foundation before Celery integration.
+> Current code has `async def` with blocking `time.sleep()` - needs real async.
+
+- [ ] 4.2.1 Add async rate limiter method to `resilience/rate_limiter.py`
+  - `async def acquire_async(domain)` using `asyncio.sleep()`
+  - Keep sync `acquire()` for backward compatibility
+- [ ] 4.2.2 Update scrapers to use sync methods (remove fake async)
+  - `websites/base_scraper.py`: `async def` → `def` for extract methods
+  - `websites/imot_bg/imot_scraper.py`: Remove `async` (CPU-bound parsing)
+  - `websites/bazar_bg/bazar_scraper.py`: Remove `async` (CPU-bound parsing)
+- [ ] 4.2.3 Create async fetch functions using `httpx.AsyncClient`
+  - New file: `scraping/async_fetcher.py`
+  - `async def fetch_page(url, config)` with async rate limiting
+  - Uses `asyncio.Semaphore` for concurrency control per domain
+- [ ] 4.2.4 Update `main.py` to use real async or sync consistently
+  - Remove `asyncio.run()` wrappers (will move to Celery)
+  - Make scrape functions sync (Celery tasks handle async internally)
+- [ ] 4.2.5 Write unit tests for async fetcher
+- [ ] 4.2.6 **Run Phase Completion Checklist** (consistency + alignment)
+
+##### Phase 4.3: Celery Site Tasks
+> **Why third**: Uses settings from 4.1 and async from 4.2.
+> One Celery task per site, internal async for concurrent URL fetching.
+
+- [ ] 4.3.1 Create `scraping/tasks.py` with site scraping task
+  - `@celery_app.task def scrape_site_task(site, start_urls)`
+  - Loads config via `load_scraping_config(site)`
+  - Uses `asyncio.run()` internally for concurrent fetching
+  - Checkpoint integration for crash recovery
+- [ ] 4.3.2 Update `celery_app.py` to include scraping tasks
+  - Add `scraping.tasks` to `include` list
+  - Configure task timeouts based on site config
+- [ ] 4.3.3 Update `main.py` to submit Celery group
+  - Replace sequential `for site in start_urls` loop
+  - Use `group([scrape_site_task.s(site, urls) for site, urls in ...])`
+  - Wait for group completion with progress display
+- [ ] 4.3.4 Add task retry logic with exponential backoff
+  - `@celery_app.task(bind=True, max_retries=3)`
+  - Use existing `resilience/` patterns
+- [ ] 4.3.5 Write unit tests for Celery tasks (mock async)
+- [ ] 4.3.6 **Run Phase Completion Checklist** (consistency + alignment)
+
+##### Phase 4.4: Integration Testing
+> **Why last**: Validates end-to-end with real Celery workers.
+
+- [ ] 4.4.1 Test parallel scraping with 2+ sites
+  - Verify sites run concurrently (check timestamps)
+  - Verify rate limiting per domain works
+- [ ] 4.4.2 Test site-specific config overrides
+  - Fast site (imot.bg) vs slow site (bazar.bg)
+  - Verify different delays applied
+- [ ] 4.4.3 Test crash recovery with checkpoints
+  - Kill worker mid-scrape, restart, verify resume
+- [ ] 4.4.4 Test circuit breaker + Celery interaction
+  - Trigger failures, verify circuit opens, task retries
+- [ ] 4.4.5 **Run Phase Completion Checklist** (full E2E validation)
+
+---
+
+#### Phase 5: Full Pipeline & Monitoring
+> **Depends on**: Phase 4 complete (Celery orchestration working).
+
+- [ ] 5.1 E2E testing (scrape → store → dashboard)
+- [ ] 5.2 Add Celery Flower for task monitoring
+- [ ] 5.3 Add alerting for scrape failures (email/Slack)
+- [ ] 5.4 Performance benchmarking (parallel vs sequential)
+- [ ] 5.5 **Run Phase Completion Checklist** (consistency + alignment)
 
 ---
 
@@ -128,11 +221,10 @@
 
 ---
 
-### Scraper Resilience & Error Handling (P1)
+### Scraper Resilience & Error Handling (P1) - PHASES 1-4 COMPLETE
 
-**Spec**: [112_SCRAPER_RESILIENCE.md](../specs/112_SCRAPER_RESILIENCE.md)
-**Tasks**: [112_RESILIENCE_IMPLEMENTATION.md](112_RESILIENCE_IMPLEMENTATION.md) (detailed breakdown with AutoBiz refs)
-**Research**: [SCRAPER_RESILIENCE_RESEARCH.md](../research/SCRAPER_RESILIENCE_RESEARCH.md)
+**Tasks**: [112_RESILIENCE_IMPLEMENTATION.md](112_RESILIENCE_IMPLEMENTATION.md) (detailed breakdown)
+> Spec and research archived (code is source of truth). 153 tests passing.
 
 #### Phase 1: Foundation (COMPLETE)
 - [x] Create `resilience/` module structure
@@ -157,11 +249,11 @@
 - [x] Write unit tests for Phase 3 (18 tests, 100% pass)
 - [x] **Run Phase Completion Checklist** (consistency + alignment)
 
-#### Phase 4: Detection (P3)
-- [ ] Implement `resilience/response_validator.py` (CAPTCHA/soft block detection)
-- [ ] Add 429/Retry-After header handling
-- [ ] Write unit tests for Phase 4
-- [ ] **Run Phase Completion Checklist** (consistency + alignment)
+#### Phase 4: Detection (COMPLETE)
+- [x] Implement `resilience/response_validator.py` (CAPTCHA/soft block detection)
+- [x] Add 429/Retry-After header handling
+- [x] Write unit tests for Phase 4 (48 tests, 100% pass)
+- [x] **Run Phase Completion Checklist** (consistency + alignment)
 
 ---
 
@@ -169,14 +261,6 @@
 
 - [ ] Improve floor extraction in bazar.bg scraper
 - [ ] Populate dashboard with scraped data
-
----
-
-### Future: Automatic Threshold Refresh
-
-**Dependency**: Proxy Scoring Bug (Solution F) - COMPLETE
-
-- [ ] Automatic threshold-based proxy refresh (check count every N minutes, refresh if < X)
 
 ---
 
@@ -189,4 +273,4 @@
 
 ---
 
-**Last Updated**: 2025-12-27 (Crawler Validation Phase 1 - scrapers 46/46 tests passing)
+**Last Updated**: 2025-12-27 (Phase 4 CONSOLIDATED - Celery Site Orchestration with 4 sub-phases)

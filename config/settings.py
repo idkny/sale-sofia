@@ -104,6 +104,14 @@ PREFLIGHT_RETRY_DELAY = 1       # Seconds between preflight retries
 PROXY_WAIT_TIMEOUT = 600
 
 # =============================================================================
+# SOFT BLOCK DETECTION SETTINGS
+# =============================================================================
+# Used in: resilience/response_validator.py
+
+# Minimum content length - pages shorter than this are suspicious
+MIN_CONTENT_LENGTH = 1000
+
+# =============================================================================
 # SCRAPING DEFAULTS
 # =============================================================================
 # Used in: main.py scrape_from_start_url

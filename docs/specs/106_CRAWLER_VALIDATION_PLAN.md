@@ -15,9 +15,9 @@ This spec defines the step-by-step plan to validate existing scrapers, add missi
 
 **Update 2025-12-27**: Status review after Specs 107-112 implementation:
 - **Phase 0**: ✅ COMPLETE (Scrapling migration done)
-- **Phase 1**: 🔄 IN PROGRESS (test harness created, 46 tests)
+- **Phase 1**: ✅ COMPLETE (46/46 tests passing, validation matrix documented)
 - **Phase 2**: ⚠️ SUPERSEDED by LLM extraction (Specs 107/108/110 = 100% accuracy)
-- **Phase 3**: 🔄 PARTIAL (basic change detection exists, tables pending)
+- **Phase 3**: ✅ COMPLETE (scrape_history + listing_changes tables, 30 tests)
 - **Phase 3.5**: ❌ NOT STARTED
 - **Phase 4**: 🔄 PARTIAL - Rate limiter done via Spec 112 (`resilience/rate_limiter.py`), orchestrator pending
 - **Phase 5**: ❌ NOT STARTED
@@ -281,11 +281,11 @@ async def extract_from_description(description: str) -> dict:
 
 ---
 
-## Phase 1: Scraper Validation (Foundation) 🔄 IN PROGRESS
+## Phase 1: Scraper Validation (Foundation) ✅ COMPLETE
 
 **Goal**: Verify each scraper can complete the full crawl cycle.
 
-> **Status**: Test harness created (`tests/scrapers/`). 46 tests, 33 passing. Fixtures fetched from live sites.
+> **Status**: COMPLETE. Test harness created (`tests/scrapers/`). 46 tests, all passing. Validation matrix documented in [106A_CRAWLER_VALIDATION_MATRIX.md](106A_CRAWLER_VALIDATION_MATRIX.md).
 
 ### 1.1 Create Test Harness
 
@@ -409,13 +409,18 @@ async def llm_extract(description: str) -> dict:
 
 ---
 
-## Phase 3: Change Detection & History Tracking 🔄 PARTIAL
+## Phase 3: Change Detection & History Tracking ✅ COMPLETE
 
 **Goal**: Track ALL changes to properties (not just price), maintain full history.
 
-> **Status**: PARTIAL. Basic change detection implemented in `data/change_detector.py` with content hash and price history. Dashboard integration complete.
+> **Status**: COMPLETE. Tables and functions implemented in `data/data_store_main.py` and `data/change_detector.py`.
 >
-> **Still needed**: `scrape_history` and `listing_changes` tables for comprehensive tracking.
+> **Implemented**:
+> - `scrape_history` table - tracks URL metadata (first_seen, last_seen, content_hash, status)
+> - `listing_changes` table - tracks ALL field changes (listing_id, field_name, old/new values)
+> - 7 CRUD functions (upsert_scrape_history, record_field_change, get_listing_changes, etc.)
+> - `detect_all_changes()` function with SKIP_FIELDS for volatile field exclusion
+> - 30 tests in `tests/test_change_detection.py` - 100% pass
 
 ### 3.1 New Database Tables
 

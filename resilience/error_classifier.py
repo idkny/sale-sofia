@@ -122,6 +122,18 @@ def classify_error(
     # Exception-based classification
     exc_name = type(exception).__name__
 
+    # Custom exception types (check by name to avoid circular imports)
+    if exc_name == "RateLimitException":
+        return ErrorType.HTTP_RATE_LIMIT
+    if exc_name == "BlockedException":
+        return ErrorType.HTTP_BLOCKED
+    if exc_name == "NetworkException":
+        return ErrorType.NETWORK_CONNECTION
+    if exc_name == "ProxyException":
+        return ErrorType.PROXY_ERROR
+    if exc_name == "ParseException":
+        return ErrorType.PARSE_ERROR
+
     # Timeout errors
     if isinstance(exception, TimeoutError):
         return ErrorType.NETWORK_TIMEOUT

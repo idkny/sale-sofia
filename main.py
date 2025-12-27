@@ -26,8 +26,9 @@ from loguru import logger
 from scrapling.fetchers import Fetcher, StealthyFetcher
 
 from resilience.circuit_breaker import get_circuit_breaker
-from resilience.exceptions import CircuitOpenException
+from resilience.exceptions import BlockedException, CircuitOpenException
 from resilience.rate_limiter import get_rate_limiter
+from resilience.response_validator import detect_soft_block
 from resilience.retry import retry_with_backoff
 from resilience.checkpoint import CheckpointManager
 from data import data_store_main
@@ -198,6 +199,14 @@ def _fetch_search_page(
 
     html = fetch()  # May raise after all retries exhausted
 
+    # Check for soft blocks before recording success
+    is_blocked, block_reason = detect_soft_block(html)
+    if is_blocked:
+        circuit_breaker.record_failure(domain)
+        if proxy_pool and proxy_state["key"]:
+            proxy_pool.record_result(proxy_state["key"], success=False)
+        raise BlockedException(f"Soft block detected: {block_reason}")
+
     # Record success with circuit breaker
     circuit_breaker.record_success(domain)
 
@@ -338,6 +347,14 @@ def _fetch_listing_page(
         return response.html_content
 
     html = fetch()  # May raise after all retries exhausted
+
+    # Check for soft blocks before recording success
+    is_blocked, block_reason = detect_soft_block(html)
+    if is_blocked:
+        circuit_breaker.record_failure(domain)
+        if proxy_pool and proxy_state["key"]:
+            proxy_pool.record_result(proxy_state["key"], success=False)
+        raise BlockedException(f"Soft block detected: {block_reason}")
 
     # Record success with circuit breaker
     circuit_breaker.record_success(domain)

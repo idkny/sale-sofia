@@ -79,6 +79,58 @@ archive/research/  archive/specs/          (code supersedes)
 
 ## Session History
 
+### 2025-12-27 (Session 33 - Phase 4 Task Consolidation)
+
+| Task | Status |
+|------|--------|
+| Analyze async/parallel patterns in codebase | ✅ Complete |
+| Research Celery best practices (via agents) | ✅ Complete |
+| Consolidate duplicate tasks in TASKS.md | ✅ Complete |
+| Create Phase 4 sub-phases (4.1-4.4) | ✅ Complete |
+
+**Summary**: Planning session - no code written. Analyzed current "fake async" pattern (async def with blocking time.sleep). Researched Celery best practices for web scraping. Consolidated "Build async orchestrator" + "Integrate with Celery" into unified Phase 4: Celery Site Orchestration with 4 sub-phases (22 total tasks). Defined 2-level config structure (general defaults + per-site overrides).
+
+**Files Modified**:
+- `docs/tasks/TASKS.md` - Consolidated Phase 4, added 22 detailed tasks in logical order
+
+**Key Decisions**:
+- Settings first (4.1), then async cleanup (4.2), then Celery tasks (4.3), then testing (4.4)
+- Keep `config/settings.py` for infrastructure, add `config/scraping_*.yaml` for scraping behavior
+- One Celery task per site with internal asyncio for concurrent URL fetching
+
+---
+
+### 2025-12-27 (Session 32 - Spec 112 Phase 4: Detection)
+
+| Task | Status |
+|------|--------|
+| CTO Review: Read architecture docs | ✅ Complete |
+| Implement resilience/response_validator.py | ✅ Complete |
+| Add 429/Retry-After handling to retry.py | ✅ Complete |
+| Integrate response validation into main.py | ✅ Complete |
+| Write unit tests for Phase 4 | ✅ Complete |
+| Run Phase Completion Checklist | ✅ Complete |
+
+**Summary**: Implemented Spec 112 Phase 4 (Detection). Created response_validator.py for soft block detection (CAPTCHA, block messages, short content). Added Retry-After header handling to retry.py. Integrated soft block detection into main.py fetch functions. All 153 resilience tests passing (45 Phase 1 + 42 Phase 2 + 18 Phase 3 + 48 Phase 4).
+
+**Files Created**:
+- `resilience/response_validator.py` - detect_soft_block() with pre-compiled regex patterns
+- `tests/test_resilience_phase4.py` (48 tests)
+
+**Files Modified**:
+- `resilience/retry.py` - Added Retry-After handling
+- `resilience/error_classifier.py` - Enhanced custom exception recognition
+- `resilience/__init__.py` - Exports detect_soft_block, CAPTCHA_PATTERNS, BLOCK_PATTERNS
+- `main.py` - Soft block detection in _fetch_search_page and _fetch_listing_page
+- `config/settings.py` - Added MIN_CONTENT_LENGTH
+- `docs/architecture/DESIGN_PATTERNS.md` - Added pattern 15 (Response Validator)
+- `docs/architecture/FILE_STRUCTURE.md` - Added response_validator.py
+- `admin/config/project_structure_manifest.json` - Added response_validator.py
+- `docs/tasks/112_RESILIENCE_IMPLEMENTATION.md` - Marked Phase 4 complete
+- `docs/tasks/TASKS.md` - Marked Phase 4 complete
+
+---
+
 ### 2025-12-27 (Session 31 - Spec 112 Phase 3: Session Recovery)
 
 | Task | Status |
@@ -105,77 +157,7 @@ archive/research/  archive/specs/          (code supersedes)
 - `docs/tasks/112_RESILIENCE_IMPLEMENTATION.md` - Marked Phase 3 complete
 - `docs/tasks/TASKS.md` - Marked Phase 3 complete
 
----
-
-### 2025-12-27 (Session 30 - Spec 112 Phase 2 + Cleanup + Consistency)
-
-| Task | Status |
-|------|--------|
-| Implement circuit_breaker.py | ✅ Complete |
-| Implement rate_limiter.py | ✅ Complete |
-| Integrate circuit breaker into main.py | ✅ Complete |
-| Integrate rate limiter into main.py | ✅ Complete |
-| Update resilience/__init__.py exports | ✅ Complete |
-| Write unit tests (42 tests) | ✅ Complete |
-| Cleanup: Fix unused imports | ✅ Complete |
-| Cleanup: Update docs (FILE_STRUCTURE, DESIGN_PATTERNS) | ✅ Complete |
-| Cleanup: Update manifest.json | ✅ Complete |
-| Consistency audit: Add 12 settings to config/settings.py | ✅ Complete |
-| Consistency audit: Update error_classifier.py | ✅ Complete |
-| Consistency audit: Update main.py preflight | ✅ Complete |
-
-**Summary**: Implemented Spec 112 Phase 2 (Domain Protection). Created circuit breaker with fail-open design and token bucket rate limiter. Performed full cleanup: fixed unused imports, updated architecture docs, manifest. Consistency audit: added 12 new centralized settings (ERROR_RETRY_*, PREFLIGHT_*, etc.), updated all files to use them. All 87 tests passing.
-
-**Files Created**:
-- `resilience/circuit_breaker.py` - DomainCircuitBreaker with state transitions
-- `resilience/rate_limiter.py` - DomainRateLimiter with token bucket
-- `tests/test_resilience_phase2.py` (42 tests)
-
-**Files Modified**:
-- `main.py` - Circuit breaker, rate limiter, preflight settings
-- `resilience/__init__.py` - Exports Phase 2 modules
-- `resilience/error_classifier.py` - Uses ERROR_RETRY_* settings
-- `resilience/exceptions.py` - Uses RATE_LIMIT_DEFAULT_RETRY_AFTER
-- `resilience/retry.py` - Fixed unused import
-- `config/settings.py` - Added 12 new settings
-- `docs/architecture/FILE_STRUCTURE.md` - Added Phase 2 files
-- `docs/architecture/DESIGN_PATTERNS.md` - Added patterns 12-13
-- `admin/config/project_structure_manifest.json` - Added new files
-- `docs/tasks/112_RESILIENCE_IMPLEMENTATION.md` - Updated consistency checks
-
----
-
-### 2025-12-27 (Session 29 - Spec 112 Phase 1 Implementation)
-
-| Task | Status |
-|------|--------|
-| Create resilience/ module structure | ✅ Complete |
-| Implement exceptions.py | ✅ Complete |
-| Implement error_classifier.py | ✅ Complete |
-| Implement retry.py (backoff + jitter) | ✅ Complete |
-| Add resilience settings to config/settings.py | ✅ Complete |
-| Integrate retry decorator into main.py | ✅ Complete |
-| Write unit tests (45 tests) | ✅ Complete |
-| Consistency check + fixes | ✅ Complete |
-| Update architecture docs | ✅ Complete |
-| Update manifest.json | ✅ Complete |
-
-**Summary**: Implemented Spec 112 Phase 1 (Foundation). Created `resilience/` module with exceptions, error_classifier, retry decorators. Integrated into main.py replacing manual retry loops. Fixed hardcoded timeouts in scrapling_base.py and proxy_validator.py. Updated architecture docs and manifest. Added CTO review tasks to remaining phases.
-
-**Files Created**:
-- `resilience/__init__.py`, `exceptions.py`, `error_classifier.py`, `retry.py`
-- `tests/test_resilience_phase1.py` (45 tests)
-- `docs/tasks/112_RESILIENCE_IMPLEMENTATION.md`
-
-**Files Modified**:
-- `main.py` - Uses retry decorators
-- `config/settings.py` - Added RESILIENCE and PROXY_VALIDATION_TIMEOUT settings
-- `websites/scrapling_base.py` - Uses centralized timeout settings
-- `proxies/proxy_validator.py` - Uses PROXY_VALIDATION_TIMEOUT
-- Architecture docs (ARCHITECTURE.md, FILE_STRUCTURE.md, DESIGN_PATTERNS.md)
-- `admin/config/project_structure_manifest.json`
-
-*(Sessions 28 and earlier archived to `archive/sessions/`)*
+*(Sessions 30 and earlier archived to `archive/sessions/`)*
 
 ---
 

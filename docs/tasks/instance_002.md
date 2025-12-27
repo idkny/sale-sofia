@@ -88,6 +88,33 @@ archive/research/  archive/specs/          (code supersedes)
 
 ## Session History
 
+### 2025-12-27 (Session 31 - Phase 3 Change Detection + Phase 1 Finish)
+
+| Task | Status |
+|------|--------|
+| Finish Crawler Validation Phase 1 | Complete |
+| Create validation matrix | Complete |
+| Run Phase 1 checklist | Complete |
+| Create `scrape_history` table | Complete |
+| Create `listing_changes` table | Complete |
+| Add 7 CRUD functions | Complete |
+| Add `detect_all_changes()` | Complete |
+| Write 30 tests | Complete (100% pass) |
+| Run Phase 3 checklist | Complete |
+
+**Summary**: Finished Crawler Validation Phase 1 (validation matrix, checklist). Implemented Phase 3 Change Detection: added `scrape_history` and `listing_changes` tables, 7 CRUD functions, `detect_all_changes()` with SKIP_FIELDS, 30 tests.
+
+**Files Modified**:
+- `data/data_store_main.py` - added tables, init function, 7 CRUD functions
+- `data/change_detector.py` - added SKIP_FIELDS, detect_all_changes()
+- `docs/specs/106_CRAWLER_VALIDATION_PLAN.md` - updated Phase 1 + Phase 3 status
+- `docs/specs/106A_CRAWLER_VALIDATION_MATRIX.md` - created validation matrix
+
+**Files Created**:
+- `tests/test_change_detection.py` - 30 tests for change detection
+
+---
+
 ### 2025-12-27 (Session 30 - Crawler Validation Phase 1 Complete)
 
 | Task | Status |
@@ -107,28 +134,6 @@ archive/research/  archive/specs/          (code supersedes)
 - `websites/bazar_bg/selectors.py` - floor patterns (Cyrillic Е), price JS, sqm patterns
 - `websites/bazar_bg/bazar_scraper.py` - handle EUR text in price fallback
 - `tests/scrapers/conftest.py` - fixed bazar_search_html fixture with proper CSS classes
-
----
-
-### 2025-12-27 (Session 28 - Dictionary-First Extraction)
-
-| Task | Status |
-|------|--------|
-| Investigate has_elevator 0% accuracy | Complete |
-| Fix has_elevator with dictionary bypass | Complete |
-| Implement dictionary-first for all fields | Complete |
-| Cleanup unused code and tests | Complete |
-| Update documentation (specs 107, 110) | Complete |
-
-**Summary**: Fixed has_elevator extraction (was 0%, now 100%) by using dictionary directly. Implemented full dictionary-first approach where dictionary extracts ALL field types (numeric, boolean, enum) and LLM is only a fallback. Overall accuracy now 100%. Cleaned up deprecated code and orphaned tests.
-
-**Files Modified**:
-- `llm/dictionary.py` - enum extraction, removed unused log_unknown()
-- `llm/llm_main.py` - dictionary-first override for all fields
-- `llm/prompts.py` - removed deprecated EXTRACTION_PROMPT
-- `docs/specs/107_OLLAMA_INTEGRATION.md` - status: Implemented
-- `docs/specs/110_DYNAMIC_BULGARIAN_DICTIONARY.md` - status: Implemented
-- Deleted: `tests/llm/test_model_comparison.py`
 
 ---
 

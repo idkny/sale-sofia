@@ -387,6 +387,42 @@ CHECKPOINT_DIR = "data/checkpoints"
 
 ---
 
+## 15. Response Validator Pattern (resilience/)
+
+Detects soft blocks (CAPTCHA, block messages, short content) in HTTP responses.
+
+**File**: `resilience/response_validator.py`
+
+```python
+from resilience.response_validator import detect_soft_block
+
+html = fetch_page(url)
+is_blocked, reason = detect_soft_block(html)
+if is_blocked:
+    logger.warning(f"Soft block detected: {reason}")
+    circuit_breaker.record_failure(domain)
+    raise BlockedException(f"Soft block: {reason}")
+```
+
+**Detection Types**:
+- `empty_response`: No HTML content
+- `short_content`: Less than MIN_CONTENT_LENGTH bytes (1000 by default)
+- `captcha_detected`: CAPTCHA patterns found (recaptcha, hcaptcha, etc.)
+- `block_message_detected`: Block messages found (access denied, rate limit, etc.)
+
+**Patterns** (case-insensitive regex):
+```python
+CAPTCHA_PATTERNS = ["captcha", "recaptcha", "hcaptcha", "challenge-platform", "verify.*human", "security.*check"]
+BLOCK_PATTERNS = ["access.*denied", "blocked", "rate.*limit", "too.*many.*requests", "please.*try.*again.*later"]
+```
+
+**Configuration** (`config/settings.py`):
+```python
+MIN_CONTENT_LENGTH = 1000  # Suspiciously short page threshold
+```
+
+---
+
 ## Key Components Using Patterns
 
 | Pattern | Location | Key Classes/Functions |
@@ -404,3 +440,4 @@ CHECKPOINT_DIR = "data/checkpoints"
 | Circuit Breaker | `resilience/circuit_breaker.py` | `get_circuit_breaker()`, `CircuitOpenException` |
 | Rate Limiter | `resilience/rate_limiter.py` | `get_rate_limiter()`, `acquire()` |
 | Checkpoint | `resilience/checkpoint.py` | `CheckpointManager`, `save()`, `load()`, `clear()` |
+| Response Validator | `resilience/response_validator.py` | `detect_soft_block()`, `CAPTCHA_PATTERNS`, `BLOCK_PATTERNS` |

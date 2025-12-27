@@ -91,7 +91,8 @@
         "retry.py": "Retry logic with exponential backoff",
         "circuit_breaker.py": "Domain-level circuit breaker for scraper fault tolerance",
         "rate_limiter.py": "Token bucket rate limiter per domain",
-        "checkpoint.py": "Session recovery checkpoint for crash resilience"
+        "checkpoint.py": "Session recovery checkpoint for crash resilience",
+        "response_validator.py": "Soft block detection (CAPTCHA, block messages)"
       }
     },
 
@@ -109,7 +110,8 @@
       "allowed_subdirs": ["debug", "stress"],
       "block_new_subdirs": false,
       "files": {
-        "test_resilience_phase2.py": "Unit tests for Phase 2 resilience modules (circuit breaker, rate limiter)"
+        "test_resilience_phase2.py": "Unit tests for Phase 2 resilience modules (circuit breaker, rate limiter)",
+        "test_resilience_phase4.py": "Unit tests for Phase 4 resilience modules (response validator, retry-after)"
       }
     },
 

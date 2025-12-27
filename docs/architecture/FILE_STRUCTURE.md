@@ -105,7 +105,8 @@ sale-sofia/
 │   ├── retry.py              # Retry decorators with backoff
 │   ├── circuit_breaker.py    # Domain circuit breaker (Phase 2)
 │   ├── rate_limiter.py       # Token bucket rate limiter (Phase 2)
-│   └── checkpoint.py         # Session recovery checkpoint (Phase 3)
+│   ├── checkpoint.py         # Session recovery checkpoint (Phase 3)
+│   └── response_validator.py # Soft block detection (Phase 4)
 │
 ├── llm/                      # LLM integration (Ollama)
 │   ├── __init__.py           # Exports

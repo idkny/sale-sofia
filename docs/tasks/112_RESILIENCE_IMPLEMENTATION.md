@@ -161,39 +161,43 @@
 
 ---
 
-## Phase 4: Detection (P3)
+## Phase 4: Detection (P3) - COMPLETE
 
-- [ ] **4.0** CTO Review: Read architecture docs before implementation
+- [x] **4.0** CTO Review: Read architecture docs before implementation
   - Read: ALL files in `docs/architecture/` + `config/settings.py`
   - Review: `resilience/__init__.py` for export patterns
   - Pass to agents: Single responsibility, 30-line functions, proper naming, import from config.settings
   - Reference: Phase 1-2-3 code as examples for consistency
 
-- [ ] **4.1** Implement `resilience/response_validator.py`
+- [x] **4.1** Implement `resilience/response_validator.py`
   - Spec: [4.1 Soft Block Detector](../specs/112_SCRAPER_RESILIENCE.md#41-soft-block-detector)
-  - Patterns: CAPTCHA, block messages, short content
+  - Patterns: CAPTCHA (6), block messages (5), short content
   - Function: detect_soft_block(html) -> (is_blocked, reason)
+  - Pre-compiled regex for performance
 
-- [ ] **4.2** Add 429/Retry-After header handling to `retry.py`
-  - Parse Retry-After header, override calculated delay
+- [x] **4.2** Add 429/Retry-After header handling to `retry.py`
+  - Checks exception for `retry_after` attribute
+  - Overrides calculated delay with Retry-After value
+  - Fixed edge case: retry_after=0 now correctly uses zero delay
 
-- [ ] **4.3** Integrate response validation into `main.py`
-  - Check for soft blocks before extraction, notify circuit breaker
+- [x] **4.3** Integrate response validation into `main.py`
+  - Added to _fetch_search_page() and _fetch_listing_page()
+  - Checks for soft blocks before recording circuit breaker success
+  - Records failure and raises BlockedException if blocked
 
-- [ ] **4.4** Write unit tests for Phase 4
+- [x] **4.4** Write unit tests for Phase 4
   - Location: `tests/test_resilience_phase4.py`
-  - Cover: pattern detection, Retry-After parsing
+  - 48 tests covering: pattern detection, Retry-After parsing, integration
 
-- [ ] **4.5** Consistency check: Audit for hardcoded values
-  - Check response validator uses settings for thresholds (MIN_CONTENT_LENGTH, etc.)
-  - No hardcoded detection patterns that should be configurable
-  - Add any new settings to config/settings.py
+- [x] **4.5** Consistency check: Audit for hardcoded values
+  - MIN_CONTENT_LENGTH added to config/settings.py
+  - response_validator.py imports from settings with fallback
 
-- [ ] **4.6** Integration validation: Check harmony with project
-  - Verify soft block detection integrates with circuit breaker
-  - Check if LLM extraction needs soft block awareness
-  - Ensure 429/Retry-After handling works with rate limiter
-  - Update related tasks in TASKS.md if detection enables new features
+- [x] **4.6** Integration validation: Check harmony with project
+  - Soft block detection integrated with circuit breaker (records failure)
+  - LLM extraction not affected (operates on successful HTML only)
+  - 429/Retry-After works with retry decorator (tested)
+  - Updated: DESIGN_PATTERNS.md, FILE_STRUCTURE.md, manifest.json
 
 ---
 
@@ -213,7 +217,7 @@
 | Phase 1: Foundation | 10 | P1 (Critical) | COMPLETE |
 | Phase 2: Domain Protection | 8 | P2 | COMPLETE |
 | Phase 3: Session Recovery | 7 | P2 | COMPLETE |
-| Phase 4: Detection | 7 | P3 | Pending |
+| Phase 4: Detection | 7 | P3 | COMPLETE |
 | Verification | 1 | P1 | Pending |
 | **Total** | **33** | |
 

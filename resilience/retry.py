@@ -9,6 +9,7 @@ from typing import Callable, Optional, Tuple, Type
 from loguru import logger
 
 from .error_classifier import RecoveryAction, classify_error, get_recovery_info
+from .exceptions import RateLimitException  # noqa: F401 - used for type context in hasattr checks
 
 # Import settings with fallback defaults
 try:
@@ -95,9 +96,14 @@ def retry_with_backoff(
                         raise
 
                     if attempt < max_attempts - 1:
-                        delay = _calculate_delay(
-                            attempt, base_delay, max_delay, jitter_factor
-                        )
+                        # Check for rate limit with retry_after
+                        if hasattr(e, 'retry_after') and e.retry_after is not None:
+                            delay = e.retry_after
+                            logger.info(f"Rate limit: respecting Retry-After of {delay}s")
+                        else:
+                            delay = _calculate_delay(
+                                attempt, base_delay, max_delay, jitter_factor
+                            )
                         logger.warning(
                             f"Retry {attempt + 1}/{max_attempts} for {func.__name__}: "
                             f"{error_type.value} - {e}. Waiting {delay:.2f}s"
@@ -161,9 +167,14 @@ def retry_with_backoff_async(
                         raise
 
                     if attempt < max_attempts - 1:
-                        delay = _calculate_delay(
-                            attempt, base_delay, max_delay, jitter_factor
-                        )
+                        # Check for rate limit with retry_after
+                        if hasattr(e, 'retry_after') and e.retry_after is not None:
+                            delay = e.retry_after
+                            logger.info(f"Rate limit: respecting Retry-After of {delay}s")
+                        else:
+                            delay = _calculate_delay(
+                                attempt, base_delay, max_delay, jitter_factor
+                            )
                         logger.warning(
                             f"Retry {attempt + 1}/{max_attempts} for {func.__name__}: "
                             f"{error_type.value} - {e}. Waiting {delay:.2f}s"
