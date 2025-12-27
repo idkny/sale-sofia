@@ -12,7 +12,6 @@ Starts the full automated scraping pipeline:
 4. Crawls all configured start URLs from config/start_urls.yaml
 """
 
-import asyncio
 import signal
 import sys
 import time
@@ -212,7 +211,7 @@ def _fetch_search_page(
     return html, proxy_state["key"]
 
 
-async def _collect_listing_urls(
+def _collect_listing_urls(
     scraper,
     start_url: str,
     limit: int,
@@ -247,14 +246,14 @@ async def _collect_listing_urls(
         # Check if this is the last page
         if hasattr(scraper, "is_last_page") and scraper.is_last_page(html, current_page):
             logger.info(f"Last page detected at page {current_page}")
-            listing_urls = await scraper.extract_search_results(html)
+            listing_urls = scraper.extract_search_results(html)
             if listing_urls:
                 new_urls = [u for u in listing_urls if u not in all_listing_urls]
                 all_listing_urls.extend(new_urls)
                 logger.info(f"Found {len(new_urls)} new listings on last page (total: {len(all_listing_urls)})")
             break
 
-        listing_urls = await scraper.extract_search_results(html)
+        listing_urls = scraper.extract_search_results(html)
         if not listing_urls:
             logger.info(f"No more listings found on page {current_page}")
             break
@@ -361,7 +360,7 @@ def _fetch_listing_page(
     return html, proxy_state["key"]
 
 
-async def _scrape_listings(
+def _scrape_listings(
     scraper,
     urls: list[str],
     delay: float,
@@ -390,7 +389,7 @@ async def _scrape_listings(
             html, proxy_key = _fetch_listing_page(url, proxy, proxy_pool)
 
             # Request succeeded - extract listing data
-            listing = await scraper.extract_listing(html, url)
+            listing = scraper.extract_listing(html, url)
             if listing:
                 result = _check_and_save_listing(listing)
                 if result["saved"]:
@@ -433,7 +432,7 @@ async def _scrape_listings(
     return stats
 
 
-async def scrape_from_start_url(
+def scrape_from_start_url(
     scraper,
     start_url: str,
     limit: int,
@@ -464,11 +463,11 @@ async def scrape_from_start_url(
     logger.info(f"Using proxy: {effective_proxy}")
 
     # Phase 1: Collect listing URLs from search pages
-    urls = await _collect_listing_urls(scraper, start_url, limit, delay, proxy, proxy_pool)
+    urls = _collect_listing_urls(scraper, start_url, limit, delay, proxy, proxy_pool)
     logger.info(f"Collected {len(urls)} listing URLs to scrape")
 
     # Phase 2: Scrape individual listings
-    stats = await _scrape_listings(scraper, urls, delay, proxy, proxy_pool, checkpoint)
+    stats = _scrape_listings(scraper, urls, delay, proxy, proxy_pool, checkpoint)
     logger.info(f"Scraping complete. Saved {stats['scraped']}/{len(urls)} listings.")
 
     return stats
@@ -737,16 +736,14 @@ def _crawl_all_sites(
         for i, url in enumerate(urls, 1):
             print(f"\n[{i}/{len(urls)}] {url}")
             try:
-                stats = asyncio.run(
-                    scrape_from_start_url(
-                        scraper,
-                        url,
-                        limit=site_config.limit,
-                        delay=scraping_config.timing.delay_seconds,
-                        proxy=proxy_url,
-                        proxy_pool=proxy_pool,
-                        checkpoint=checkpoint
-                    )
+                stats = scrape_from_start_url(
+                    scraper,
+                    url,
+                    limit=site_config.limit,
+                    delay=scraping_config.timing.delay_seconds,
+                    proxy=proxy_url,
+                    proxy_pool=proxy_pool,
+                    checkpoint=checkpoint
                 )
                 # Aggregate stats
                 total_stats["scraped"] += stats["scraped"]

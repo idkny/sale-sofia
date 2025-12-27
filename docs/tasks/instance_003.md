@@ -79,6 +79,28 @@ archive/research/  archive/specs/          (code supersedes)
 
 ## Session History
 
+### 2025-12-27 (Session 6 - Spec 114: Scraper Monitoring)
+
+| Task | Status |
+|------|--------|
+| Research codebase monitoring gaps | ✅ Complete |
+| Research industry best practices | ✅ Complete |
+| Read architecture documentation | ✅ Complete |
+| Create Spec 114: Scraper Monitoring | ✅ Complete |
+| Add task to TASKS.md | ✅ Complete |
+
+**Summary**: Created comprehensive Spec 114 for Scraper Monitoring & Observability. Launched 3 parallel research agents to analyze: (1) existing monitoring in codebase, (2) architecture docs, (3) industry best practices. Designed 4-phase implementation with 12 tasks. Spec ready for implementation.
+
+**Files Created**:
+- `docs/specs/114_SCRAPER_MONITORING.md` - Full spec with MetricsCollector, SessionReportGenerator, and dashboard design
+
+**Key Findings**:
+- Good foundation exists: Loguru logging, error classification, retry, circuit breaker, rate limiter
+- Missing: Metrics persistence, session reports, health dashboard, trend analysis
+- Industry standard: Track success rate >90%, error rate <5%, block rate <2%
+
+---
+
 ### 2025-12-26 (Session 5 - Solution F Phase 7 Complete)
 
 | Task | Status |
@@ -116,73 +138,6 @@ archive/research/  archive/specs/          (code supersedes)
 - `proxies/proxy_scorer.py` - Added `set_proxy_order()`, `get_proxy_index()`, `set_mubeng_proxy_file()`, `_save_proxy_file()`
 - `main.py` - Updated to pass ordered keys to proxy pool
 - `tests/debug/test_mubeng_features.py` (new) - Mubeng feature verification tests
-
-**Next Session**: Continue with Phase 4 (X-Proxy-Offset header in requests), Phase 5 (retry logic), and remaining phases.
-
----
-
-### 2025-12-26 (Session 3 - Detailed Implementation Plan)
-
-| Task | Status |
-|------|--------|
-| Read full proxy system codebase | ✅ Complete |
-| Read architecture documentation | ✅ Complete |
-| Research proxy task history & learnings | ✅ Complete |
-| Verify mubeng `--watch` flag exists | ✅ Complete |
-| Verify `X-Proxy-Offset` header support | ✅ Complete |
-| Verify StealthyFetcher `extra_headers` param | ✅ Complete |
-| Create 7-phase atomic implementation plan | ✅ Complete |
-| Update TASKS.md with detailed sub-tasks | ✅ Complete |
-
----
-
-#### RESEARCH COMPLETED
-
-Launched 3 parallel research agents:
-1. **Proxy System Architecture** - Full analysis of `proxies/` directory
-2. **Architecture Documentation** - All 7 files in `docs/architecture/`
-3. **Task History** - Past bugs, fixes, and learnings from Sessions 1-14
-
-**Key Verifications:**
-- Mubeng `-w, --watch` flag confirmed: "Watch proxy file, live-reload from changes"
-- `X-Proxy-Offset` header: Mubeng uses `offset % proxy_count` for selection
-- `StealthyFetcher.fetch()` accepts `extra_headers` parameter ✅
-- `Fetcher.get()` uses `custom_config` for extra options
-
-**Files Analyzed:**
-- `proxies/mubeng_manager.py` - Lines 46-60 need modification
-- `proxies/proxies_main.py` - Need to return ordered proxy list
-- `proxies/proxy_scorer.py` - Need `get_proxy_index()`, `set_proxy_order()`, `_save_proxy_file()`
-- `main.py` - Need X-Proxy-Offset header and retry logic
-
----
-
-#### DETAILED PLAN CREATED
-
-**7 Phases, 23 atomic steps** - Each testable independently:
-
-| Phase | Goal | Steps |
-|-------|------|-------|
-| 0 | Pre-Implementation Verification | 4 steps |
-| 1 | Mubeng Configuration | 2 steps |
-| 2 | Proxy Order Tracking | 4 steps |
-| 3 | Persistence on Removal | 5 steps |
-| 4 | X-Proxy-Offset Header | 4 steps |
-| 5 | Retry Logic | 3 steps |
-| 6 | Integration Testing | 4 steps |
-| 7 | Edge Cases & Hardening | 4 steps |
-
-**Full plan**: See TASKS.md "Implementation Tasks" section
-
----
-
-#### RESUME INSTRUCTIONS FOR NEXT SESSION
-
-1. Read this session history
-2. Check TASKS.md for Phase 0 tasks
-3. Start with **Phase 0.1**: Create test script `tests/debug/test_mubeng_features.py`
-4. Test mubeng `--watch` and `X-Proxy-Offset` before any code changes
-5. Proceed through phases in order
 
 ---
 

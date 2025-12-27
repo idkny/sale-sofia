@@ -105,7 +105,7 @@ class BaseSiteScraper(ABC):
         self.base_url: str = ""
 
     @abstractmethod
-    async def extract_listing(self, html: str, url: str) -> Optional[ListingData]:
+    def extract_listing(self, html: str, url: str) -> Optional[ListingData]:
         """
         Extract all listing data from a single property page.
 
@@ -119,7 +119,7 @@ class BaseSiteScraper(ABC):
         pass
 
     @abstractmethod
-    async def extract_search_results(self, html: str) -> List[str]:
+    def extract_search_results(self, html: str) -> List[str]:
         """
         Extract listing URLs from a search results page.
 

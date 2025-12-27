@@ -1,7 +1,6 @@
 #!/usr/bin/env python3
 """Quick test for bazar.bg scraper - scrapes 2 listings using Scrapling."""
 
-import asyncio
 import time
 
 from scrapling.fetchers import Fetcher, StealthyFetcher
@@ -9,7 +8,7 @@ from scrapling.fetchers import Fetcher, StealthyFetcher
 from websites.bazar_bg.bazar_scraper import BazarBgScraper
 
 
-async def test_bazar_scraper():
+def test_bazar_scraper():
     """Test bazar.bg scraper with 2 listings."""
 
     # Correct URL format: /obiavi/apartamenti/{type}/sofia
@@ -34,7 +33,7 @@ async def test_bazar_scraper():
 
     # Extract listing URLs
     print("[2/3] Extracting listing URLs...")
-    listing_urls = await scraper.extract_search_results(html)
+    listing_urls = scraper.extract_search_results(html)
     print(f"      Found {len(listing_urls)} listings on page")
 
     if not listing_urls:
@@ -65,7 +64,7 @@ async def test_bazar_scraper():
             )
             html = response.html_content
 
-            listing = await scraper.extract_listing(html, url)
+            listing = scraper.extract_listing(html, url)
 
             if listing:
                 print(f"  ID: {listing.external_id}")
@@ -97,4 +96,4 @@ async def test_bazar_scraper():
 
 
 if __name__ == "__main__":
-    asyncio.run(test_bazar_scraper())
+    test_bazar_scraper()

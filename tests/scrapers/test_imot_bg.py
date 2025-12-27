@@ -29,14 +29,13 @@ def scraper():
 # SEARCH RESULTS EXTRACTION TESTS
 # =============================================================================
 
-@pytest.mark.asyncio
-async def test_extract_listing_urls(scraper, imot_search_html):
+def test_extract_listing_urls(scraper, imot_search_html):
     """
     Test extraction of listing URLs from search results page.
 
     Should extract all valid listing URLs and normalize them to absolute URLs.
     """
-    urls = await scraper.extract_search_results(imot_search_html)
+    urls = scraper.extract_search_results(imot_search_html)
 
     # Should find listing URLs
     assert len(urls) > 0, "Should extract at least one listing URL"
@@ -54,8 +53,7 @@ async def test_extract_listing_urls(scraper, imot_search_html):
 # LISTING DATA EXTRACTION TESTS
 # =============================================================================
 
-@pytest.mark.asyncio
-async def test_extract_listing_data(scraper, imot_listing_html):
+def test_extract_listing_data(scraper, imot_listing_html):
     """
     Test extraction of all fields from a listing page.
 
@@ -70,7 +68,7 @@ async def test_extract_listing_data(scraper, imot_listing_html):
     - Contact info
     """
     url = "https://www.imot.bg/obiava-123-prodava-tristaen-centar"
-    listing = await scraper.extract_listing(imot_listing_html, url)
+    listing = scraper.extract_listing(imot_listing_html, url)
 
     assert listing is not None, "Should extract listing data"
     assert isinstance(listing, ListingData), "Should return ListingData object"
@@ -84,8 +82,7 @@ async def test_extract_listing_data(scraper, imot_listing_html):
     assert listing.title is not None, "Should extract title"
 
 
-@pytest.mark.asyncio
-async def test_normalize_to_schema(scraper, imot_listing_html):
+def test_normalize_to_schema(scraper, imot_listing_html):
     """
     Test that extracted data matches ListingData schema.
 
@@ -96,7 +93,7 @@ async def test_normalize_to_schema(scraper, imot_listing_html):
     - Convert values to standard formats
     """
     url = "https://www.imot.bg/obiava-456-prodava-dvustaen-lozenets"
-    listing = await scraper.extract_listing(imot_listing_html, url)
+    listing = scraper.extract_listing(imot_listing_html, url)
 
     assert isinstance(listing, ListingData), "Should return ListingData instance"
 

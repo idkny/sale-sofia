@@ -1,5 +1,6 @@
 """Token bucket rate limiter per domain."""
 
+import asyncio
 import time
 from threading import Lock
 
@@ -107,6 +108,41 @@ class DomainRateLimiter:
 
         # Retry acquisition after waiting
         return self.acquire(domain, blocking=True)
+
+    async def acquire_async(self, domain: str, blocking: bool = True) -> bool:
+        """
+        Acquire a token for the domain (async version).
+
+        Args:
+            domain: Target domain
+            blocking: If True, wait until token available.
+                      If False, return False immediately if no token.
+
+        Returns:
+            True if token acquired, False if not (only when blocking=False)
+        """
+        with self._lock:
+            now = time.time()
+            self._refill_tokens(domain, now)
+
+            # Check if token available
+            if self._tokens[domain] >= 1.0:
+                self._tokens[domain] -= 1.0
+                return True
+
+            if not blocking:
+                return False
+
+            # Calculate wait time for one token
+            rate = self._get_rate(domain)
+            wait_time = 60.0 / rate
+
+        # Wait outside lock to allow other domains
+        logger.debug(f"Rate limit for {domain}, waiting {wait_time:.2f}s")
+        await asyncio.sleep(wait_time)
+
+        # Retry acquisition after waiting
+        return await self.acquire_async(domain, blocking=True)
 
     def reset(self) -> None:
         """Reset all state (for testing)."""

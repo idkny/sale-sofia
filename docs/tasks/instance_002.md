@@ -88,6 +88,37 @@ archive/research/  archive/specs/          (code supersedes)
 
 ## Session History
 
+### 2025-12-27 (Session 37 - Phase 4.2 Async Implementation)
+
+| Task | Status |
+|------|--------|
+| Add `acquire_async()` to rate_limiter.py | Complete |
+| Update scrapers to sync (remove fake async) | Complete |
+| Create `scraping/async_fetcher.py` | Complete |
+| Update main.py for sync consistency | Complete |
+| Write 11 async fetcher tests (100% coverage) | Complete |
+| Run Phase Completion Checklist | Complete |
+
+**Summary**: Implemented Phase 4.2 Async Implementation. Fixed fake async patterns, created true async fetcher with httpx.AsyncClient for future Celery integration. 563 tests passing.
+
+**Files Created**:
+- `scraping/__init__.py` - module exports
+- `scraping/async_fetcher.py` - async HTTP fetcher with circuit breaker, rate limiting
+- `tests/test_async_fetcher.py` - 11 tests (100% coverage)
+
+**Files Modified**:
+- `resilience/rate_limiter.py` - added `acquire_async()` method
+- `websites/base_scraper.py` - `async def` → `def` for extract methods
+- `websites/imot_bg/imot_scraper.py` - removed async from extract methods
+- `websites/bazar_bg/bazar_scraper.py` - removed async from extract methods
+- `main.py` - removed asyncio.run(), made scrape functions sync
+- `config/settings.py` - added `ASYNC_FETCHER_MAX_CONCURRENT`
+- `tests/scrapers/test_imot_bg.py` - removed await from tests
+- `tests/scrapers/test_bazar_bg.py` - removed await from tests
+- `tests/test_bazar.py` - removed async pattern
+
+---
+
 ### 2025-12-27 (Session 34 - Phase 4.1 Scraping Configuration + Integration)
 
 | Task | Status |
@@ -105,20 +136,6 @@ archive/research/  archive/specs/          (code supersedes)
 
 **Summary**: Implemented Phase 4.1 Scraping Configuration. Created 2-level config system (global defaults + per-site overrides) based on Scrapy/Colly/Crawlee best practices. Integrated into main.py, removed old settings. 37 tests passing.
 
-**Files Created**:
-- `config/scraping_defaults.yaml` - global defaults (timing, concurrency, retry, etc.)
-- `config/sites/imot_bg.yaml` - faster settings (less anti-bot)
-- `config/sites/bazar_bg.yaml` - conservative settings (anti-bot protection)
-- `config/scraping_config.py` - loader with 8 dataclasses, deep merge
-- `tests/test_scraping_config.py` - 7 tests
-
-**Files Modified**:
-- `main.py` - uses `load_scraping_config()` for delay/timeout
-- `config/loader.py` - simplified SiteConfig (limit only)
-- `config/settings.py` - removed `DEFAULT_SCRAPE_DELAY`
-- `config/__init__.py` - removed dead `SCRAPER_CONFIG`
-- `websites/SCRAPER_GUIDE.md` - added Step 8: Scraping Configuration
-
 ---
 
 ### 2025-12-27 (Session 33 - Phase 3.5 Cross-Site Duplicate Detection)
@@ -133,20 +150,6 @@ archive/research/  archive/specs/          (code supersedes)
 | Add cross-site comparison dashboard page | Complete |
 
 **Summary**: Implemented Phase 3.5 Cross-Site Duplicate Detection. Created fingerprinting system to identify same property across imot.bg and bazar.bg. Added price discrepancy tracking and dashboard comparison view.
-
----
-
-### 2025-12-27 (Session 31 - Phase 3 Change Detection)
-
-| Task | Status |
-|------|--------|
-| Create `scrape_history` table | Complete |
-| Create `listing_changes` table | Complete |
-| Add 7 CRUD functions | Complete |
-| Add `detect_all_changes()` | Complete |
-| Write 30 tests | Complete |
-
-**Summary**: Implemented Phase 3 Change Detection: added `scrape_history` and `listing_changes` tables, 7 CRUD functions, `detect_all_changes()` with SKIP_FIELDS, 30 tests.
 
 ---
 

@@ -49,8 +49,12 @@
 | Instance | Current Task |
 |----------|--------------|
 | 1 | Available |
-| 2 | Phase 4.2 Async Implementation (4.2.1-4.2.6) |
-| 3 | Spec 114: Scraper Monitoring (Phases 1-4) |
+| 2 | Available |
+| 3 | Available |
+
+**Session 37 (2025-12-27)**: Instance 2 - Phase 4.2 Async Implementation COMPLETE. Created `scraping/async_fetcher.py` with httpx.AsyncClient, added `acquire_async()` to rate_limiter, made scrapers/main.py sync. 11 new tests, 563 total passing.
+
+**Session 36 (2025-12-27)**: Instance 3 - Created Spec 114: Scraper Monitoring & Observability. Researched codebase monitoring gaps, industry best practices, and designed 4-phase implementation plan (12 tasks). Spec ready for implementation.
 
 **Session 35 (2025-12-27)**: Instance 1 - Phase 4.0 Database Concurrency COMPLETE. Created db_retry.py with @retry_on_busy decorator, enabled WAL mode + timeout in get_db_connection(), applied to 7 write functions. 17 concurrency tests passing.
 
@@ -140,26 +144,16 @@
 - [x] 4.1.4 Write unit tests (7 tests, 99% coverage)
 - [x] 4.1.5 Phase Completion Checklist + Integration
 
-##### Phase 4.2: Async Implementation (Fix Fake Async)
-> **Why second**: Clean foundation before Celery integration.
-> Current code has `async def` with blocking `time.sleep()` - needs real async.
+##### Phase 4.2: Async Implementation (COMPLETE)
+> Fixed fake async patterns. Created true async fetcher for Celery integration.
+> Files: `scraping/async_fetcher.py`, `resilience/rate_limiter.py` (acquire_async)
 
-- [ ] 4.2.1 Add async rate limiter method to `resilience/rate_limiter.py`
-  - `async def acquire_async(domain)` using `asyncio.sleep()`
-  - Keep sync `acquire()` for backward compatibility
-- [ ] 4.2.2 Update scrapers to use sync methods (remove fake async)
-  - `websites/base_scraper.py`: `async def` → `def` for extract methods
-  - `websites/imot_bg/imot_scraper.py`: Remove `async` (CPU-bound parsing)
-  - `websites/bazar_bg/bazar_scraper.py`: Remove `async` (CPU-bound parsing)
-- [ ] 4.2.3 Create async fetch functions using `httpx.AsyncClient`
-  - New file: `scraping/async_fetcher.py`
-  - `async def fetch_page(url, config)` with async rate limiting
-  - Uses `asyncio.Semaphore` for concurrency control per domain
-- [ ] 4.2.4 Update `main.py` to use real async or sync consistently
-  - Remove `asyncio.run()` wrappers (will move to Celery)
-  - Make scrape functions sync (Celery tasks handle async internally)
-- [ ] 4.2.5 Write unit tests for async fetcher
-- [ ] 4.2.6 **Run Phase Completion Checklist** (consistency + alignment)
+- [x] 4.2.1 Add async rate limiter method to `resilience/rate_limiter.py`
+- [x] 4.2.2 Update scrapers to use sync methods (remove fake async)
+- [x] 4.2.3 Create async fetch functions using `httpx.AsyncClient`
+- [x] 4.2.4 Update `main.py` to use real async or sync consistently
+- [x] 4.2.5 Write unit tests for async fetcher (11 tests, 100% coverage)
+- [x] 4.2.6 **Phase Completion Checklist** - Passed (563 tests passing)
 
 ##### Phase 4.3: Celery Site Tasks
 > **Why third**: Uses settings from 4.1 and async from 4.2.
@@ -218,7 +212,7 @@
 > **Goal**: Track scraper health, persist session reports, visualize performance.
 > **Independent**: Can run in parallel with Phase 4 work.
 
-#### Phase 1: Core Metrics [Instance 3]
+#### Phase 1: Core Metrics
 - [ ] 1.1 Create `scraping/metrics.py` with MetricsCollector class
 - [ ] 1.2 Create `scraping/session_report.py` with SessionReportGenerator
 - [ ] 1.3 Add health thresholds to `config/settings.py`

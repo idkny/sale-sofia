@@ -32,7 +32,7 @@ class BazarBgScraper(ScraplingMixin, BaseSiteScraper):
     # PUBLIC METHODS (required by BaseSiteScraper)
     # =========================================================================
 
-    async def extract_listing(self, html: str, url: str) -> Optional[ListingData]:
+    def extract_listing(self, html: str, url: str) -> Optional[ListingData]:
         """
         Extract listing data from a single property page.
 
@@ -121,7 +121,7 @@ class BazarBgScraper(ScraplingMixin, BaseSiteScraper):
         logger.debug(f"Extracted listing {external_id}: {price_eur} EUR, {sqm_total} sqm")
         return listing
 
-    async def extract_search_results(self, html: str) -> List[str]:
+    def extract_search_results(self, html: str) -> List[str]:
         """
         Extract listing URLs from a search results page.
 
