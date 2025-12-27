@@ -88,6 +88,28 @@ archive/research/  archive/specs/          (code supersedes)
 
 ## Session History
 
+### 2025-12-27 (Session 27 - Consolidate Scoring Constants)
+
+| Task | Status |
+|------|--------|
+| Fix min_count=5 bug in main.py | Complete |
+| Fix min_count=5 defaults in orchestrator.py | Complete |
+| Add scoring constants to config/settings.py | Complete |
+| Update proxy_scorer.py to import from settings | Complete |
+| Update proxy_validator.py to import from settings | Complete |
+
+**Summary**: Fixed min_count inconsistency bug (was hardcoded as 5, should use MIN_PROXIES_FOR_SCRAPING=10). Consolidated duplicate scoring constants (SCORE_SUCCESS_MULTIPLIER, SCORE_FAILURE_MULTIPLIER, MAX_PROXY_FAILURES, MIN_PROXY_SCORE) into config/settings.py. Both proxy_scorer.py and proxy_validator.py now import from settings. Fixed edge case in test_auto_prune_on_low_score test.
+
+**Files Modified**:
+- `config/settings.py` - added scoring constants section
+- `main.py:359,453` - use MIN_PROXIES_FOR_SCRAPING instead of hardcoded 5
+- `orchestrator.py:35,491,527` - import and use MIN_PROXIES_FOR_SCRAPING as defaults
+- `proxies/proxy_scorer.py:32-43` - import from settings, keep aliases for backward compat
+- `proxies/proxy_validator.py:29-51` - import from settings, keep aliases for backward compat
+- `tests/test_proxy_scorer.py:235-237` - fix edge case test (MIN_SCORE * 1.9 instead of * 2)
+
+---
+
 ### 2025-12-27 (Session 25 - Dashboard Integration + Unified Timeout)
 
 | Task | Status |

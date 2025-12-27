@@ -26,6 +26,12 @@ from typing import Optional
 import requests
 
 from paths import PROXIES_DIR
+from config.settings import (
+    SCORE_SUCCESS_MULTIPLIER,
+    SCORE_FAILURE_MULTIPLIER,
+    MAX_PROXY_FAILURES,
+    MIN_PROXY_SCORE,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -40,11 +46,11 @@ TEST_URLS = [
     ("https://api.ipify.org", "text"),  # Plain text IP
 ]
 
-# Scoring configuration
-SCORE_SUCCESS_MULTIPLIER = 1.1  # +10% on success
-SCORE_FAILURE_MULTIPLIER = 0.5  # -50% on failure
-MAX_FAILURES = 3  # Remove proxy after this many consecutive failures
-MIN_SCORE = 0.01  # Remove proxy if score drops below this
+# Aliases for backward compatibility
+MAX_FAILURES = MAX_PROXY_FAILURES
+MIN_SCORE = MIN_PROXY_SCORE
+
+# Quick validation timeout (shorter than scraping timeout for fast checks)
 DEFAULT_TIMEOUT = 10  # seconds
 
 

@@ -25,12 +25,11 @@ from loguru import logger
 from scrapling import Adaptor
 from scrapling.fetchers import Fetcher, StealthyFetcher
 
+from config.settings import MUBENG_PROXY
+
 # Storage for adaptive selectors
 SELECTOR_STORAGE = Path(__file__).parent.parent / "data" / "scrapling_selectors"
 SELECTOR_STORAGE.mkdir(parents=True, exist_ok=True)
-
-# Default mubeng proxy endpoint
-MUBENG_PROXY = "http://localhost:8089"
 
 # Mubeng CA certificate for HTTPS MITM proxy
 # -----------------------------------------

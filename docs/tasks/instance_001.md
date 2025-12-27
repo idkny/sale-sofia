@@ -79,6 +79,25 @@ archive/research/  archive/specs/          (code supersedes)
 
 ## Session History
 
+### 2025-12-27 (Session 26 - TASKS.md Cleanup + Centralized Proxy Settings)
+
+| Task | Status |
+|------|--------|
+| Clean up TASKS.md (remove duplicates, stale tasks) | ✅ Complete |
+| Centralize proxy settings in config/settings.py | ✅ Complete |
+| Fix inconsistent MIN_PROXIES values | ✅ Complete |
+
+**Summary**: Cleaned up TASKS.md by removing duplicate JIT Proxy Validation (already in Solution F), homes.bg task, and P3 research tasks. Centralized proxy settings (`MUBENG_PROXY`, `MIN_PROXIES_TO_START`, `MIN_PROXIES_FOR_SCRAPING`, `MAX_PROXY_RETRIES`) in config/settings.py. Fixed bug where min_proxies had inconsistent values (1, 5, 10) across different files.
+
+**Key Changes:**
+- `config/settings.py` - Added `MUBENG_PROXY`, `MIN_PROXIES_TO_START=1`, `MIN_PROXIES_FOR_SCRAPING=10`, `MAX_PROXY_RETRIES=3`
+- `main.py` - Imports from config.settings, uses MIN_PROXIES_FOR_SCRAPING
+- `websites/scrapling_base.py` - Imports MUBENG_PROXY from config.settings
+- `proxies/proxies_main.py` - Imports MIN_PROXIES_TO_START from config.settings
+- `docs/tasks/TASKS.md` - Removed duplicates, added implementation notes to Crawler Validation
+
+---
+
 ### 2025-12-26 (Session 13 - Service Lifecycle + TimeLimitExceeded Fix)
 
 | Task | Status |

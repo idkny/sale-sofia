@@ -31,16 +31,13 @@ from proxies.proxies_main import (
 from proxies.proxy_scorer import ScoredProxyPool
 from proxies.proxy_validator import preflight_check
 from utils.log_config import setup_logging
-from config.settings import PROXY_TIMEOUT_SECONDS, PROXY_TIMEOUT_MS
-
-# Default mubeng proxy endpoint - ALWAYS use proxy for scraping
-MUBENG_PROXY = "http://localhost:8089"
-
-# Maximum retries per URL when proxy fails
-MAX_PROXY_RETRIES = 3
-
-# Minimum proxies before triggering refresh
-MIN_PROXIES = 10
+from config.settings import (
+    MUBENG_PROXY,
+    MAX_PROXY_RETRIES,
+    MIN_PROXIES_FOR_SCRAPING,
+    PROXY_TIMEOUT_SECONDS,
+    PROXY_TIMEOUT_MS,
+)
 
 
 def _check_and_save_listing(listing) -> dict:
@@ -359,7 +356,7 @@ def _setup_infrastructure(orch) -> bool:
     # 3. Wait for proxies
     print()
     print("[INFO] Checking proxy availability...")
-    if not orch.wait_for_proxies(min_count=5, timeout=600):
+    if not orch.wait_for_proxies(min_count=MIN_PROXIES_FOR_SCRAPING, timeout=600):
         print("[ERROR] Could not get proxies. Aborting.")
         return False
 
@@ -387,7 +384,7 @@ def _start_proxy_rotator() -> tuple[str, Any, Any, list[str]]:
     print("[INFO] Starting proxy rotator...")
     proxy_url, mubeng_process, temp_proxy_file, ordered_proxy_keys = setup_mubeng_rotator(
         port=8089,
-        min_live_proxies=5,
+        min_live_proxies=MIN_PROXIES_FOR_SCRAPING,
     )
 
     if not mubeng_process:
@@ -426,7 +423,7 @@ def _run_preflight_level2(mubeng_process: Any) -> tuple[bool, Any, str, Any, lis
 
     proxy_url, new_process, new_temp_file, ordered_proxy_keys = setup_mubeng_rotator(
         port=8089,
-        min_live_proxies=5,
+        min_live_proxies=MIN_PROXIES_FOR_SCRAPING,
     )
     if not new_process:
         return False, new_process, proxy_url, new_temp_file, ordered_proxy_keys
@@ -453,7 +450,7 @@ def _run_preflight_level3(orch, proxy_pool: Optional[ScoredProxyPool]) -> tuple[
     print("[INFO] Full refresh: Fetching new proxies (this takes 5-10 min)...")
 
     mtime_before, task_id = orch.trigger_proxy_refresh()
-    if not orch.wait_for_refresh_completion(mtime_before, min_count=5, task_id=task_id):
+    if not orch.wait_for_refresh_completion(mtime_before, min_count=MIN_PROXIES_FOR_SCRAPING, task_id=task_id):
         print("[ERROR] Proxy refresh timed out or failed. Aborting.", flush=True)
         return False, None, "", None, []
 
@@ -469,7 +466,7 @@ def _run_preflight_level3(orch, proxy_pool: Optional[ScoredProxyPool]) -> tuple[
     print("[INFO] Restarting proxy rotator with fresh proxies...")
     proxy_url, new_process, new_temp_file, ordered_proxy_keys = setup_mubeng_rotator(
         port=8089,
-        min_live_proxies=5,
+        min_live_proxies=MIN_PROXIES_FOR_SCRAPING,
     )
     if not new_process:
         print("[ERROR] Failed to restart proxy rotator. Aborting.")
@@ -492,7 +489,7 @@ def _run_preflight_level3(orch, proxy_pool: Optional[ScoredProxyPool]) -> tuple[
 def _ensure_min_proxies(
     proxy_pool: Optional[ScoredProxyPool],
     orch,
-    min_count: int = MIN_PROXIES
+    min_count: int = MIN_PROXIES_FOR_SCRAPING
 ) -> bool:
     """
     Check proxy count and trigger refresh if below threshold.

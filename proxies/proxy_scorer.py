@@ -29,14 +29,18 @@ from pathlib import Path
 from typing import Optional
 
 from proxies import proxy_to_url
+from config.settings import (
+    SCORE_SUCCESS_MULTIPLIER,
+    SCORE_FAILURE_MULTIPLIER,
+    MAX_PROXY_FAILURES,
+    MIN_PROXY_SCORE,
+)
 
 logger = logging.getLogger(__name__)
 
-# Scoring configuration
-SCORE_SUCCESS_MULTIPLIER = 1.1  # +10% reward on success
-SCORE_FAILURE_MULTIPLIER = 0.5  # -50% penalty on failure
-MAX_FAILURES = 3  # Auto-remove after this many consecutive failures
-MIN_SCORE = 0.01  # Auto-remove if score drops below this
+# Aliases for backward compatibility with tests
+MAX_FAILURES = MAX_PROXY_FAILURES
+MIN_SCORE = MIN_PROXY_SCORE
 
 
 class ScoredProxyPool:

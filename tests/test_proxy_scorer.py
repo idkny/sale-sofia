@@ -232,10 +232,11 @@ class TestAutoPruning:
         key = "1.2.3.4:8080"
         initial_count = len(proxy_pool.proxies)
 
-        # Set score very low
-        proxy_pool.scores[key]["score"] = MIN_SCORE * 2
+        # Set score low enough that after failure multiplier (0.5), it drops BELOW MIN_SCORE
+        # 0.019 * 0.5 = 0.0095 < 0.01 (MIN_SCORE)
+        proxy_pool.scores[key]["score"] = MIN_SCORE * 1.9
 
-        # One more failure should trigger removal
+        # One more failure should trigger removal (score drops below MIN_SCORE)
         proxy_pool.record_result(key, success=False)
 
         # Proxy should be removed

@@ -32,6 +32,7 @@ import redis
 from loguru import logger
 
 from paths import LOGS_DIR, PROXIES_DIR, ROOT_DIR
+from config.settings import MIN_PROXIES_FOR_SCRAPING
 from proxies.redis_keys import (
     job_completed_chunks_key,
     job_result_count_key,
@@ -487,7 +488,7 @@ class Orchestrator:
 
         return mtime_before, task_id
 
-    def wait_for_proxies(self, min_count: int = 5, timeout: int = 2400) -> bool:
+    def wait_for_proxies(self, min_count: int = MIN_PROXIES_FOR_SCRAPING, timeout: int = 2400) -> bool:
         """
         Wait for USABLE proxies to be available.
 
@@ -523,7 +524,7 @@ class Orchestrator:
     def wait_for_refresh_completion(
         self,
         mtime_before: float,
-        min_count: int = 5,
+        min_count: int = MIN_PROXIES_FOR_SCRAPING,
         timeout: int = 0,
         task_id: Optional[str] = None,
     ) -> bool:

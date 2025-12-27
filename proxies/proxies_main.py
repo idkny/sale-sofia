@@ -8,6 +8,7 @@ from typing import List, Optional, Tuple
 from celery import chain
 
 import config
+from config.settings import MIN_PROXIES_TO_START
 from paths import PROXIES_DIR
 from proxies import proxy_to_url
 from utils.utils import free_port
@@ -19,8 +20,6 @@ from .mubeng_manager import (
 from .tasks import check_scraped_proxies_task, scrape_new_proxies_task
 
 logger = logging.getLogger(__name__)
-
-MIN_LIVE_PROXIES_DEFAULT = 1
 
 
 def scrape_proxies():
@@ -48,7 +47,7 @@ def check_proxies():
 
 
 def get_and_filter_proxies(
-    min_live_proxies: int = MIN_LIVE_PROXIES_DEFAULT,
+    min_live_proxies: int = MIN_PROXIES_TO_START,
 ) -> Tuple[Optional[Path], List[str]]:
     """
     Load proxies from live_proxies.json, filter out Transparent (exposes IP),
@@ -143,7 +142,7 @@ def _check_and_refresh_proxies():
 def setup_mubeng_rotator(
     port: int,
     country_codes: Optional[List[str]] = None,
-    min_live_proxies: int = MIN_LIVE_PROXIES_DEFAULT,
+    min_live_proxies: int = MIN_PROXIES_TO_START,
 ) -> Tuple[Optional[str], Optional[subprocess.Popen], Optional[Path], List[str]]:
     """
     Set up and start the Mubeng proxy rotator with ALL available proxies.
