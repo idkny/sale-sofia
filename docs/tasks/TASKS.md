@@ -28,7 +28,9 @@
 
 ## Completed Work Summary
 
-> **Archive**: [TASKS_COMPLETED_2025-12-27.md](../../archive/tasks/TASKS_COMPLETED_2025-12-27.md)
+> **Archives**:
+> - [TASKS_COMPLETED_2025-12-28.md](../../archive/tasks/TASKS_COMPLETED_2025-12-28.md) - Latest
+> - [TASKS_COMPLETED_2025-12-27.md](../../archive/tasks/TASKS_COMPLETED_2025-12-27.md)
 
 | Section | Tasks | Status |
 |---------|-------|--------|
@@ -38,10 +40,13 @@
 | Celery + Mubeng + PSC Integration (Phases 1-2) | 14 | Completed |
 | Page Change Detection (Phases 1-3) | 8 | Completed |
 | Ollama Integration (Phases 1-5, 3.6) | 45+ | Completed |
-| Crawler Validation (Phase 0) | 7 | Completed |
+| Crawler Validation (Phases 0-5) | 71 | Completed (894 tests) |
 | Scraper Resilience (Phases 1-4) | 33 | Completed (153 tests) |
-| Pre-Production Hardening (Phases 1-3) | 10 | Completed (563 tests) |
+| Scraper Monitoring (Phases 1-4) | 12 | Completed |
+| Pre-Production Hardening (Phases 1-3) | 10 | Completed |
 | Historical Completed Work | 35+ | Completed |
+
+**Total Tests**: 894 passed, 8 skipped
 
 ---
 
@@ -50,40 +55,10 @@
 | Instance | Current Task |
 |----------|--------------|
 | 1 | Available |
-| 2 | 5.3 Performance benchmarking |
+| 2 | Available |
 | 3 | Available |
 
-**Session 46 (2025-12-28)**: Instance 2 - Phase 5.1 E2E Testing COMPLETE. Created `tests/test_e2e_pipeline.py` with 32 tests covering full pipeline: scrape → store → dashboard. Tests include: data saving, filters, stats, change detection, session reports, edge cases. 894 tests passing.
-
-**Session 44 (2025-12-28)**: Instance 2 - Phase 4.3.3 + 4.3.4 COMPLETE. Completed celery_app.py registration (4.3.3.3). Completed all Phase 4.3.4 Integration tasks: orchestrator methods, main.py PARALLEL_SCRAPING mode, 12 integration tests, consistency checklist. Fixed hardcoded values in scraping/tasks.py. Archived spec 115. 781 tests passing.
-
-**Session 43 (2025-12-28)**: Instance 2 - Phase 4.3.2 Redis-Backed Rate Limiter COMPLETE. Created `resilience/redis_rate_limiter.py` with Lua script for atomic token acquisition, added feature flag, updated factory function. 29 new tests, 675 total passing.
-
-**Session 42 (2025-12-28)**: Instance 2 - Phase 4.3.1 Redis Circuit Breaker COMPLETE. Fixed pytest path issue (removed shadowing `tests/resilience/` directory). Completed 4.3.1.1-4.3.1.4: created Redis-backed circuit breaker, feature flag, factory function update. 35 new tests, 646 total passing.
-
-**Session 40 (2025-12-28)**: Instance 2 - Phase 4.3 Spec + Pre-requisites. Created Spec 115 (Celery Site Tasks) from validation research. Completed 4.3.0.1 (timeout fix) and 4.3.0.2 (DB init race condition fix). 77 tests verified.
-
-**Session 39 (2025-12-28)**: Instance 2 - Orchestration Validation. Launched 6 architect-review agents to validate all modules for Celery correctness. Found 3 critical issues, 3 modules need Redis backing. Created 7 validation docs. Added BLOCKING task for next session.
-
-**Session 39 (2025-12-28)**: Instance 1 - Pre-Production Hardening COMPLETE. Phase 1: Added field allowlist to update_listing_evaluation(). Phase 2: Deployed 2 agents for impact analysis (3 cancelled, 3 implemented). Phase 3: Consolidated extract_domain() to resilience/, removed update_listing_features(), documented agency_store.py. 563 tests passing.
-
-**Session 38 (2025-12-28)**: Instance 1 - Pre-Production Audit. Deployed 10 agents total. Found 4 potential issues, 3 cancelled after impact analysis. Added Pre-Production Hardening tasks to TASKS.md.
-
-**Session 37 (2025-12-27)**: Instance 2 - Phase 4.2 Async Implementation COMPLETE. Created `scraping/async_fetcher.py` with httpx.AsyncClient, added `acquire_async()` to rate_limiter, made scrapers/main.py sync. 11 new tests, 563 total passing.
-
-**Session 33 (2025-12-27)**: Instance 1 - Phase 4 Task Consolidation. Analyzed async/parallel patterns, researched Celery best practices, consolidated "async orchestrator" + "Celery integration" into unified Phase 4 with 4 sub-phases (22 tasks).
-
-**Session 32 (2025-12-27)**: Instance 1 - Spec 112 Phase 4 (Detection) COMPLETE. Created response_validator.py, added Retry-After handling. 153 resilience tests passing. Spec archived.
-
-**Session 31 (2025-12-27)**: Instance 2 - Phase 3 Change Detection COMPLETE. Added scrape_history + listing_changes tables, 7 CRUD functions, detect_all_changes(), 30 tests passing.
-
-**Session 30 (2025-12-27)**: Instance 2 - Crawler Validation Phase 1 complete. All 46 scraper tests passing. Fixed floor extraction, price JS patterns, sqm patterns, and test fixtures for both scrapers.
-
-**Session 30 (2025-12-27)**: Instance 1 - Spec 112 Phase 2 Implementation + Cleanup. Created circuit_breaker.py and rate_limiter.py. Integrated into main.py. 87 tests passing.
-
-**Session 29 (2025-12-27)**: Instance 1 - Spec 112 Phase 1 Implementation. Created resilience/ module. 45 tests passing.
-
-**Session 28 (2025-12-27)**: Instance 2 - Ollama Phase 3.6 complete. 100% accuracy via dictionary-first extraction.
+**Session 47 (2025-12-28)**: Instance 2 - Phase 5 COMPLETE. All tasks archived to `TASKS_COMPLETED_2025-12-28.md`. 894 tests passing.
 
 **Claim**: Add `[Instance N]` next to task before starting
 **Complete**: Add `[x]` and remove `[Instance N]` when done
@@ -92,239 +67,78 @@
 
 ## Pending Tasks
 
-### Orchestration Research Review (P0) - COMPLETE
-
-> **UNBLOCKED** - Spec 115 written, Phase 4.3 tasks updated
-
-**Completed** (Session 40):
-- [x] Review 7 validation documents
-- [x] Write spec for Phase 4.3 based on validation findings → [115_CELERY_SITE_TASKS.md](../specs/115_CELERY_SITE_TASKS.md)
-- [x] Update Phase 4.3 tasks (added pre-requisites)
-
-**Research archived**: `docs/research/orchestration_*.md`, `docs/research/validation_*.md`
+*No pending tasks. All phases complete. See archives for completed work.*
 
 ---
 
-### Crawler Validation & Enhancement (P1)
+## Future Enhancements (Backlog)
 
-**Spec**: [106_CRAWLER_VALIDATION_PLAN.md](../specs/106_CRAWLER_VALIDATION_PLAN.md)
+> **Note**: These are ideas for future development. Not prioritized, no timeline.
 
-> **Phase 0**: COMPLETE (Scrapling migration)
-> **Phase 2**: SUPERSEDED by LLM extraction (Specs 107/108/110 achieved 100% accuracy)
+### Operations
+- [ ] Backup strategy (scheduled DB backups, retention policy)
+- [ ] Systemd services (auto-start on server wake/boot)
 
-#### Phase 1: Scraper Validation (COMPLETE)
-- [x] Create test harness (`tests/scrapers/`) - 46 tests, 46 passing
-- [x] Validate imot.bg scraper (pagination, extraction, save) - 23/23 tests passing
-- [x] Validate bazar.bg scraper (pagination, extraction, save) - 23/23 tests passing
-- [x] Create validation matrix - [106A_CRAWLER_VALIDATION_MATRIX.md](../../archive/specs/106A_CRAWLER_VALIDATION_MATRIX.md)
-- [x] **Phase Completion Checklist** - Passed (no hardcoded values, spec aligned)
+### Notifications & Alerts
+- [ ] Failure alerts (Telegram/email when scraping fails)
+- [ ] New listing alerts (notify when listings match user criteria)
+- [ ] Circuit breaker alerts (alert when sites become unavailable)
+- [ ] Daily digest (summary of new/changed listings)
 
-#### Phase 3: Change Detection & History (COMPLETE)
-> Tables and functions added to `data/data_store_main.py` and `data/change_detector.py`.
-- [x] Create `scrape_history` table - tracks URL scrape metadata
-- [x] Create `listing_changes` table - tracks ALL field changes over time
-- [x] Add 7 CRUD functions (upsert_scrape_history, record_field_change, etc.)
-- [x] Add `detect_all_changes()` function with SKIP_FIELDS
-- [x] Write 30 tests (`tests/test_change_detection.py`) - 100% pass
-- [x] **Phase Completion Checklist** - Passed (no hardcoded values, spec aligned)
+### Generic Scraper Template & Additional Sites
 
-#### Phase 3.5: Cross-Site Duplicate Detection & Merging (COMPLETE)
-> **Spec**: [106B_CROSS_SITE_DEDUPLICATION.md](../../archive/specs/106B_CROSS_SITE_DEDUPLICATION.md)
-> Files: `data/property_fingerprinter.py`, `data/property_merger.py`, `app/pages/4_Cross_Site.py`
+**Spec**: [116_GENERIC_SCRAPER_TEMPLATE.md](../specs/116_GENERIC_SCRAPER_TEMPLATE.md)
 
-- [x] Create `listing_sources` table (track which sites list property)
-- [x] Build `PropertyFingerprinter` class (identify duplicates)
-- [x] Build `PropertyMerger` class (smart data merging)
-- [x] Track price discrepancies across sites
-- [x] Add cross-site comparison view to dashboard
-- [x] **Phase Completion Checklist** - Passed (added settings to config/settings.py)
+> **Goal**: Config-driven scraper - add new sites with YAML only, no code changes.
+> **Pattern**: User provides filtered URL → scraper extracts using selector fallback chains.
 
-#### Phase 4: Celery Site Orchestration (CONSOLIDATED)
-> **Goal**: Parallel site scraping via Celery with proper async and per-site configuration.
-> **Consolidates**: "Build async orchestrator" + "Integrate with Celery" (same goal).
-> **Dependencies**: Resilience module (complete), Rate limiter (complete).
+#### Phase 1: Core Framework
+- [ ] 1.1 Create `websites/generic/__init__.py`
+- [ ] 1.2 Create `config_loader.py` (YAML loading + validation)
+- [ ] 1.3 Create `selector_chain.py` (fallback extraction engine)
+- [ ] 1.4 Create `config_scraper.py` (generic ConfigScraper class)
+- [ ] 1.5 Write unit tests for config loading and selector chains
 
-##### Phase 4.0: Database Concurrency (COMPLETE)
-> Files: `data/db_retry.py`, `data/data_store_main.py`, `tests/test_db_concurrency.py`
-> Settings: `config/settings.py` - SQLITE_TIMEOUT, SQLITE_WAL_MODE, SQLITE_BUSY_*
+#### Phase 2: Field Parsers
+- [ ] 2.1 Create field type parsers (currency, number, floor_pattern)
+- [ ] 2.2 Support Bulgarian patterns (BGN/EUR, кв.м, етаж X от Y)
+- [ ] 2.3 Write unit tests for all parsers
 
-- [x] 4.0.1 Add database settings to `config/settings.py`
-- [x] 4.0.2 Update `get_db_connection()` with WAL mode + timeout
-- [x] 4.0.3 Create `data/db_retry.py` with `@retry_on_busy()` decorator
-- [x] 4.0.4 Apply `@retry_on_busy()` to 7 write functions
-- [x] 4.0.5 Write concurrent write tests (17 tests passing)
-- [x] 4.0.6 **Phase Completion Checklist** - Passed (200 tests total)
+#### Phase 3: Pagination Support
+- [ ] 3.1 Implement numbered pagination
+- [ ] 3.2 Implement next_link pagination
+- [ ] 3.3 Implement load_more pagination
+- [ ] 3.4 Implement infinite_scroll pagination
+- [ ] 3.5 Write pagination tests
 
-##### Phase 4.1: Scraping Settings Configuration (COMPLETE)
-> **Spec archived**: `archive/specs/113_SCRAPING_CONFIGURATION.md`
-> Created 2-level config: `scraping_defaults.yaml` + `config/sites/*.yaml`
-> Integrated into main.py. Old `DEFAULT_SCRAPE_DELAY` removed.
+#### Phase 4: OLX.bg Pilot
+- [ ] 4.1 Research OLX.bg HTML structure
+- [ ] 4.2 Create `config/sites/olx_bg.yaml`
+- [ ] 4.3 Test extraction with sample pages
+- [ ] 4.4 Verify pagination works
+- [ ] 4.5 Integration test: full scrape
 
-- [x] 4.1.1 Create `config/scraping_defaults.yaml`
-- [x] 4.1.2 Create `config/sites/` with per-site overrides
-- [x] 4.1.3 Create `config/scraping_config.py` loader
-- [x] 4.1.4 Write unit tests (7 tests, 99% coverage)
-- [x] 4.1.5 Phase Completion Checklist + Integration
+#### Phase 5: Homes.bg
+- [ ] 5.1 Research homes.bg HTML structure
+- [ ] 5.2 Create `config/sites/homes_bg.yaml`
+- [ ] 5.3 Test and verify
 
-##### Phase 4.2: Async Implementation (COMPLETE)
-> Fixed fake async patterns. Created true async fetcher for Celery integration.
-> Files: `scraping/async_fetcher.py`, `resilience/rate_limiter.py` (acquire_async)
+#### Phase 6: Migration (Optional)
+- [ ] 6.1 Create YAML configs for imot.bg/bazar.bg
+- [ ] 6.2 Validate against existing scraper output
+- [ ] 6.3 Deprecate old scraper code
 
-- [x] 4.2.1 Add async rate limiter method to `resilience/rate_limiter.py`
-- [x] 4.2.2 Update scrapers to use sync methods (remove fake async)
-- [x] 4.2.3 Create async fetch functions using `httpx.AsyncClient`
-- [x] 4.2.4 Update `main.py` to use real async or sync consistently
-- [x] 4.2.5 Write unit tests for async fetcher (11 tests, 100% coverage)
-- [x] 4.2.6 **Phase Completion Checklist** - Passed (563 tests passing)
+### Analytics & Insights
+- [ ] Price trends (historical price analysis per neighborhood)
+- [ ] Market heatmaps (visualization of pricing by area)
+- [ ] Deal scoring (identify underpriced listings)
+- [ ] Time-on-market tracking (how long listings stay active)
 
-##### Phase 4.3: Celery Site Tasks (COMPLETE)
-> **Spec**: [115_CELERY_SITE_TASKS.md](../../archive/specs/115_CELERY_SITE_TASKS.md) (archived)
-> Parallel site scraping via Celery with shared resilience state.
-> **Research**: `docs/research/validation_synthesis.md`, `docs/research/orchestration_synthesis.md`
-
-**BEFORE EACH TASK** (mandatory):
-1. **Impact Analysis**: Review how the change affects the project (callers, dependencies, side effects)
-2. **Test Identification**: Identify which tests to run before/after to verify no regressions
-3. **Implementation**: Make the change
-4. **Verification**: Run identified tests, confirm no new bugs introduced
-
-###### Phase 4.3.0: Pre-requisites (Critical Fixes)
-> Must complete before any Celery work. Found by validation agents.
-
-- [x] 4.3.0.1 Fix timeout forwarding in `orchestrator.py:521`
-  - Impact: `wait_for_proxies()` callers, `main.py:508`
-  - Tests: `tests/unit/test_orchestrator_helpers.py` (30 passed)
-- [x] 4.3.0.2 Move DB init out of module-level in `data_store_main.py`
-  - Impact: All imports of `data_store_main`, worker startup
-  - Tests: `tests/test_db_concurrency.py`, `tests/test_change_detection.py` (47 passed)
-- [x] 4.3.0.3 Add `@retry_on_busy()` to read functions in `data_store_main.py`
-  - Impact: All `get_*` function callers
-  - Tests: `tests/test_db_concurrency.py`, `tests/test_change_detection.py` (47 passed, 563 total)
-- [x] 4.3.0.4 Increase `SQLITE_BUSY_RETRIES` from 3 to 5
-  - Impact: All `@retry_on_busy()` decorated functions
-  - Tests: `tests/test_db_concurrency.py` (17 passed)
-
-###### Phase 4.3.1: Redis-Backed Circuit Breaker (COMPLETE)
-- [x] 4.3.1.1 Create `resilience/redis_circuit_breaker.py`
-  - Impact: New file, no existing code affected
-  - Tests: `tests/test_redis_circuit_breaker.py` (35 passed)
-- [x] 4.3.1.2 Add `REDIS_CIRCUIT_BREAKER_ENABLED` feature flag
-  - Impact: `config/settings.py` only
-  - Tests: None (config only)
-- [x] 4.3.1.3 Update `resilience/circuit_breaker.py` factory function
-  - Impact: All `get_circuit_breaker()` callers
-  - Tests: `tests/test_resilience_phase2.py` (42 passed)
-- [x] 4.3.1.4 Write unit tests for Redis circuit breaker
-  - Impact: None (test only)
-  - Tests: 35 tests in `tests/test_redis_circuit_breaker.py`
-
-###### Phase 4.3.2: Redis-Backed Rate Limiter (COMPLETE)
-- [x] 4.3.2.1 Create `resilience/redis_rate_limiter.py` (Lua script for atomicity)
-  - Impact: New file, no existing code affected
-  - Tests: `tests/test_redis_rate_limiter.py` (29 passed)
-- [x] 4.3.2.2 Add `REDIS_RATE_LIMITER_ENABLED` feature flag
-  - Impact: `config/settings.py` only
-  - Tests: None (config only)
-- [x] 4.3.2.3 Update factory function in `resilience/rate_limiter.py`
-  - Impact: All `get_rate_limiter()` callers
-  - Tests: `tests/test_redis_rate_limiter.py::TestFactoryFunction` (2 passed)
-- [x] 4.3.2.4 Write unit tests for Redis rate limiter
-  - Impact: None (test only)
-  - Tests: 29 tests in `tests/test_redis_rate_limiter.py`
-
-###### Phase 4.3.3: Scraping Celery Tasks
-- [x] 4.3.3.1 Create `scraping/redis_keys.py` (key patterns)
-  - Impact: New file, no existing code affected
-  - Tests: `tests/test_redis_keys.py` (22 passed)
-- [x] 4.3.3.2 Create `scraping/tasks.py` with dispatcher/worker/callback
-  - Impact: New file, no existing code affected
-  - Tests: `tests/test_scraping_tasks.py` (25 passed)
-- [x] 4.3.3.3 Update `celery_app.py` to include `scraping.tasks`
-  - Impact: Celery task registration
-  - Tests: `tests/proxies/test_celery_tasks.py`
-- [x] 4.3.3.4 Write unit tests for Celery tasks
-  - Impact: None (test only)
-  - Tests: `tests/test_scraping_tasks.py` (25 passed)
-
-###### Phase 4.3.4: Integration
-- [x] 4.3.4.1 Add scraping orchestration methods to `orchestrator.py`
-  - Impact: Orchestrator API
-  - Tests: `tests/unit/test_orchestrator_helpers.py`
-- [x] 4.3.4.2 Update `main.py` with `PARALLEL_SCRAPING` mode
-  - Impact: Main entry point, scraping flow
-  - Tests: Manual E2E test
-- [x] 4.3.4.3 Add new settings to `config/settings.py`
-  - Impact: Config only
-  - Tests: None (config only)
-- [x] 4.3.4.4 Integration tests (chord workflow, progress tracking)
-  - Impact: None (test only)
-  - Tests: Self-verifying
-- [x] 4.3.4.5 **Run Phase Completion Checklist** (consistency + alignment)
-
-##### Phase 4.4: Integration Testing (COMPLETE)
-> **Why last**: Validates end-to-end with real Celery workers.
-> **Result**: 81 tests (15+14+28+24), 862 total passing.
-
-- [x] 4.4.1 Test parallel scraping with 2+ sites (15 tests)
-  - Verify sites run concurrently (check timestamps)
-  - Verify rate limiting per domain works
-- [x] 4.4.2 Test site-specific config overrides (14 tests)
-  - Fast site (imot.bg) vs slow site (bazar.bg)
-  - Verify different delays applied
-  - **Finding**: delay_seconds not wired to Celery path (documented in tests)
-- [x] 4.4.3 Test crash recovery with checkpoints (28 tests)
-  - Kill worker mid-scrape, restart, verify resume
-- [x] 4.4.4 Test circuit breaker + Celery interaction (24 tests)
-  - Trigger failures, verify circuit opens, task retries
-- [x] 4.4.5 **Run Phase Completion Checklist** (full E2E validation)
-  - **FIXED**: `delay_seconds` now drives DOMAIN_RATE_LIMITS via `get_domain_rate_limits()`
-  - imot.bg: 1.5s delay → 40 req/min, bazar.bg: 3.0s delay → 20 req/min
-  - Consistency: YAML is single source of truth for rate limiting
-  - Alignment: Spec 115 archived, code is source of truth
-  - Tests: 862 passed, 0 failures
-
----
-
-#### Phase 5: Full Pipeline & Monitoring
-> **Depends on**: Phase 4 complete (Celery orchestration working).
-
-- [x] 5.1 E2E testing (scrape → store → dashboard) - 32 tests
-- [x] 5.2 Add Celery Flower for task monitoring (standalone, no Docker)
-  - Added `flower>=2.0.0` to `requirements.txt`
-  - Created `scripts/start_flower.sh`
-  - Added FLOWER_PORT, FLOWER_BROKER_API to `config/settings.py`
-  - Verified: Flower detects all 12 Celery tasks
-- [ ] [Instance 2] 5.3 Performance benchmarking (parallel vs sequential)
-- [ ] 5.4 **Run Phase Completion Checklist** (consistency + alignment)
-
----
-
-### Scraper Monitoring & Observability (P1) - COMPLETE
-
-**Spec**: [114_SCRAPER_MONITORING.md](../../archive/specs/114_SCRAPER_MONITORING.md) (archived)
-
-> **Goal**: Track scraper health, persist session reports, visualize performance.
-> **Independent**: Can run in parallel with Phase 4 work.
-
-#### Phase 1: Core Metrics
-- [x] 1.1 Create `scraping/metrics.py` with MetricsCollector class
-- [x] 1.2 Create `scraping/session_report.py` with SessionReportGenerator
-- [x] 1.3 Add health thresholds to `config/settings.py`
-- [x] 1.4 Write unit tests for metrics and reports (48 tests, 646 total passing)
-
-#### Phase 2: Integration
-- [x] 2.1 Add `get_all_states()` to `resilience/circuit_breaker.py`
-- [x] 2.2 Add `get_stats()` to `proxies/proxy_scorer.py`
-- [x] 2.3 Integrate MetricsCollector into `main.py` scraping flow
-
-#### Phase 3: Dashboard
-- [x] 3.1 Create `app/pages/5_Scraper_Health.py` with basic layout
-- [x] 3.2 Add trend charts (success rate over time)
-- [x] 3.3 Add health indicators and run history table
-
-#### Phase 4: Testing (COMPLETE)
-- [x] 4.1 Integration test: full scrape with metrics collection (23 tests)
-- [x] 4.2 Dashboard test: verify report loading and display (24 tests)
+### Code Quality
+- [ ] Code coverage (increase to 90%+)
+- [ ] Type hints (full mypy compliance)
+- [ ] Documentation (README, architecture docs, API docs)
+- [ ] Dependency audit (security scan, update packages)
 
 ---
 
@@ -336,4 +150,4 @@
 
 ---
 
-**Last Updated**: 2025-12-28 (Pre-Production Hardening complete, archived)
+**Last Updated**: 2025-12-28 (All tasks archived, clean slate)
