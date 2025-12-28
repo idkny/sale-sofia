@@ -79,6 +79,29 @@ archive/research/  archive/specs/          (code supersedes)
 
 ## Session History
 
+### 2025-12-28 (Session 7 - Spec 114 Implementation Complete)
+
+| Task | Status |
+|------|--------|
+| 3.1 Create Scraper Health dashboard (basic layout) | ✅ Complete |
+| 3.2 Add trend charts (success rate over time) | ✅ Complete |
+| 3.3 Add health indicators and run history table | ✅ Complete |
+| 4.1 Integration test: full scrape with metrics | ✅ Complete |
+| 4.2 Dashboard test: verify report loading | ✅ Complete |
+| Archive Spec 114 | ✅ Complete |
+
+**Summary**: Completed Spec 114 Phases 3-4 (Dashboard + Testing). Created Scraper Health dashboard page with health metric cards, trend charts, domain health table, and run history table. Added 47 new tests (23 integration + 24 dashboard). Spec 114 fully implemented and archived.
+
+**Files Created**:
+- `app/pages/5_Scraper_Health.py` - Scraper health dashboard
+- `tests/test_scraper_monitoring_integration.py` - 23 integration tests
+- `tests/test_scraper_health_dashboard.py` - 24 dashboard logic tests
+
+**Files Archived**:
+- `docs/specs/114_SCRAPER_MONITORING.md` → `archive/specs/114_SCRAPER_MONITORING.md`
+
+---
+
 ### 2025-12-27 (Session 6 - Spec 114: Scraper Monitoring)
 
 | Task | Status |
@@ -117,27 +140,6 @@ archive/research/  archive/specs/          (code supersedes)
 - `proxies/proxy_scorer.py` - Added `fcntl.flock()` locking, 200ms delay after file write, `reload_proxies()` hook
 
 **Solution F Complete**: All 7 phases implemented and tested.
-
----
-
-### 2025-12-26 (Session 4 - Solution F Phases 0-3 Implementation)
-
-| Task | Status |
-|------|--------|
-| Phase 0: Create mubeng test script | ✅ Complete |
-| Phase 0: Test --watch, X-Proxy-Offset, no rotate-on-error | ✅ Complete |
-| Phase 1: Update mubeng_manager.py config | ✅ Complete |
-| Phase 2: Add proxy order tracking | ✅ Complete |
-| Phase 3: Implement persistence on removal | ✅ Complete |
-
-**Summary**: Implemented Solution F Phases 0-3. All mubeng features verified with test script. Updated mubeng config (-w flag, removed --rotate-on-error). Added proxy order tracking to proxies_main.py and proxy_scorer.py. Implemented file persistence on proxy removal with --watch reload support.
-
-**Files Modified**:
-- `proxies/mubeng_manager.py` - Added `-w` flag, removed `--rotate-on-error`
-- `proxies/proxies_main.py` - Returns ordered proxy list
-- `proxies/proxy_scorer.py` - Added `set_proxy_order()`, `get_proxy_index()`, `set_mubeng_proxy_file()`, `_save_proxy_file()`
-- `main.py` - Updated to pass ordered keys to proxy pool
-- `tests/debug/test_mubeng_features.py` (new) - Mubeng feature verification tests
 
 ---
 

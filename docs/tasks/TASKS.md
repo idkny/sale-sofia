@@ -51,7 +51,7 @@
 |----------|--------------|
 | 1 | Available |
 | 2 | Available |
-| 3 | 3.1 Create Scraper Health dashboard page |
+| 3 | Available |
 
 **Session 43 (2025-12-28)**: Instance 2 - Phase 4.3.2 Redis-Backed Rate Limiter COMPLETE. Created `resilience/redis_rate_limiter.py` with Lua script for atomic token acquisition, added feature flag, updated factory function. 29 new tests, 675 total passing.
 
@@ -229,18 +229,18 @@
   - Tests: 29 tests in `tests/test_redis_rate_limiter.py`
 
 ###### Phase 4.3.3: Scraping Celery Tasks
-- [ ] 4.3.3.1 Create `scraping/redis_keys.py` (key patterns)
+- [x] 4.3.3.1 Create `scraping/redis_keys.py` (key patterns)
   - Impact: New file, no existing code affected
-  - Tests: New tests to create
-- [ ] 4.3.3.2 Create `scraping/tasks.py` with dispatcher/worker/callback
+  - Tests: `tests/test_redis_keys.py` (22 passed)
+- [x] 4.3.3.2 Create `scraping/tasks.py` with dispatcher/worker/callback
   - Impact: New file, no existing code affected
-  - Tests: New tests to create
+  - Tests: `tests/test_scraping_tasks.py` (25 passed)
 - [ ] 4.3.3.3 Update `celery_app.py` to include `scraping.tasks`
   - Impact: Celery task registration
   - Tests: `tests/proxies/test_celery_tasks.py`
-- [ ] 4.3.3.4 Write unit tests for Celery tasks
+- [x] 4.3.3.4 Write unit tests for Celery tasks
   - Impact: None (test only)
-  - Tests: Self-verifying
+  - Tests: `tests/test_scraping_tasks.py` (25 passed)
 
 ###### Phase 4.3.4: Integration
 - [ ] 4.3.4.1 Add scraping orchestration methods to `orchestrator.py`
@@ -285,9 +285,9 @@
 
 ---
 
-### Scraper Monitoring & Observability (P1)
+### Scraper Monitoring & Observability (P1) - COMPLETE
 
-**Spec**: [114_SCRAPER_MONITORING.md](../specs/114_SCRAPER_MONITORING.md)
+**Spec**: [114_SCRAPER_MONITORING.md](../../archive/specs/114_SCRAPER_MONITORING.md) (archived)
 
 > **Goal**: Track scraper health, persist session reports, visualize performance.
 > **Independent**: Can run in parallel with Phase 4 work.
@@ -304,13 +304,13 @@
 - [x] 2.3 Integrate MetricsCollector into `main.py` scraping flow
 
 #### Phase 3: Dashboard
-- [ ] [Instance 3] 3.1 Create `app/pages/5_Scraper_Health.py` with basic layout
-- [ ] 3.2 Add trend charts (success rate over time)
-- [ ] 3.3 Add health indicators and run history table
+- [x] 3.1 Create `app/pages/5_Scraper_Health.py` with basic layout
+- [x] 3.2 Add trend charts (success rate over time)
+- [x] 3.3 Add health indicators and run history table
 
-#### Phase 4: Testing
-- [ ] 4.1 Integration test: full scrape with metrics collection
-- [ ] 4.2 Dashboard test: verify report loading and display
+#### Phase 4: Testing (COMPLETE)
+- [x] 4.1 Integration test: full scrape with metrics collection (23 tests)
+- [x] 4.2 Dashboard test: verify report loading and display (24 tests)
 
 ---
 

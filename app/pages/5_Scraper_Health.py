@@ -73,7 +73,7 @@ try:
             st.metric(
                 label=f"{status_emoji(success_status)} Success Rate",
                 value=f"{latest.success_rate:.1f}%",
-                delta=f"vs 90% baseline" if latest.success_rate >= 90 else f"{latest.success_rate - 90:.1f}% vs baseline",
+                delta="vs 90% baseline" if latest.success_rate >= 90 else f"{latest.success_rate - 90:.1f}% vs baseline",
                 delta_color="normal" if latest.success_rate >= 90 else "inverse",
             )
 
@@ -83,7 +83,7 @@ try:
             st.metric(
                 label=f"{status_emoji(error_status)} Error Rate",
                 value=f"{error_rate:.1f}%",
-                delta=f"vs 5% baseline" if error_rate <= 5 else f"+{error_rate - 5:.1f}% vs baseline",
+                delta="vs 5% baseline" if error_rate <= 5 else f"+{error_rate - 5:.1f}% vs baseline",
                 delta_color="normal" if error_rate <= 5 else "inverse",
             )
 
@@ -93,7 +93,7 @@ try:
             st.metric(
                 label=f"{status_emoji(block_status)} Block Rate",
                 value=f"{block_rate:.1f}%",
-                delta=f"vs 2% baseline" if block_rate <= 2 else f"+{block_rate - 2:.1f}% vs baseline",
+                delta="vs 2% baseline" if block_rate <= 2 else f"+{block_rate - 2:.1f}% vs baseline",
                 delta_color="normal" if block_rate <= 2 else "inverse",
             )
 
@@ -103,7 +103,7 @@ try:
             st.metric(
                 label=f"{status_emoji(response_status)} Avg Response",
                 value=f"{latest.avg_response_time_ms:.0f}ms",
-                delta=f"vs 2000ms baseline" if latest.avg_response_time_ms <= 2000 else f"+{latest.avg_response_time_ms - 2000:.0f}ms vs baseline",
+                delta="vs 2000ms baseline" if latest.avg_response_time_ms <= 2000 else f"+{latest.avg_response_time_ms - 2000:.0f}ms vs baseline",
                 delta_color="normal" if latest.avg_response_time_ms <= 2000 else "inverse",
             )
 
@@ -133,12 +133,88 @@ try:
 
         st.markdown("---")
 
-        # Placeholder sections for future tasks
-        st.subheader("Success Rate Trend")
-        st.info("Chart coming in 3.2")
+        # Trend charts (Phase 3.2)
+        st.subheader("Trend Charts")
 
-        st.subheader("Run History")
-        st.info("Table coming in 3.3")
+        if len(reports) < 2:
+            st.info("Need at least 2 reports to show trends. Run more scraper sessions.")
+        else:
+            import pandas as pd
+
+            # Prepare data: reverse to chronological order (oldest first)
+            chronological = list(reversed(reports))
+
+            # Build DataFrame
+            trend_data = []
+            for r in chronological:
+                trend_data.append({
+                    "time": r.start_time[:16].replace("T", " "),
+                    "Success Rate (%)": r.success_rate,
+                    "Avg Response (ms)": r.avg_response_time_ms,
+                })
+            df = pd.DataFrame(trend_data)
+            df = df.set_index("time")
+
+            # Two columns for side-by-side charts
+            chart_col1, chart_col2 = st.columns(2)
+
+            with chart_col1:
+                st.markdown("**Success Rate Trend**")
+                st.line_chart(df[["Success Rate (%)"]])
+
+            with chart_col2:
+                st.markdown("**Response Time Trend**")
+                st.line_chart(df[["Avg Response (ms)"]])
+
+        # Run History and Domain Health tables (Phase 3.3)
+        st.subheader("Run History & Domain Health")
+
+        table_col1, table_col2 = st.columns(2)
+
+        # Domain Health Table (left column)
+        with table_col1:
+            st.markdown("**Domain Health (Latest Run)**")
+            domain_breakdown = latest.domain_breakdown if hasattr(latest, "domain_breakdown") else {}
+
+            if domain_breakdown:
+                domain_data = []
+                for domain, stats in domain_breakdown.items():
+                    success_rate = stats.get("success_rate", 0.0)
+                    avg_response = stats.get("avg_response_ms", 0)
+                    domain_data.append({
+                        "Domain": domain,
+                        "Success Rate": f"{success_rate:.1f}%",
+                        "Avg Response": f"{avg_response:.0f}ms",
+                    })
+                domain_df = pd.DataFrame(domain_data)
+                st.dataframe(domain_df, use_container_width=True, hide_index=True)
+            else:
+                st.info("No domain breakdown available.")
+
+        # Run History Table (right column)
+        with table_col2:
+            st.markdown("**Run History (Last 10 Runs)**")
+            history_data = []
+            for r in reports[:10]:
+                # Format date nicely
+                date_str = r.start_time[:16].replace("T", " ")
+                # Duration in minutes
+                duration_str = f"{r.duration_seconds / 60:.1f}m"
+                # Success rate
+                success_str = f"{r.success_rate:.1f}%"
+                # Status emoji
+                health_emoji = {"healthy": "🟢", "degraded": "🟡", "critical": "🔴"}.get(r.health_status, "⚪")
+
+                history_data.append({
+                    "Date": date_str,
+                    "Duration": duration_str,
+                    "URLs": r.total_urls,
+                    "Success Rate": success_str,
+                    "Errors": r.failed,
+                    "Status": f"{health_emoji} {r.health_status}",
+                })
+            history_df = pd.DataFrame(history_data)
+            st.dataframe(history_df, use_container_width=True, hide_index=True)
 
 except ImportError as e:
     st.error(f"Import error: {e}")
