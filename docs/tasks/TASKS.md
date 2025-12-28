@@ -158,6 +158,10 @@
 ##### Phase 4.3: Celery Site Tasks
 > **Why third**: Uses settings from 4.1 and async from 4.2.
 > One Celery task per site, internal async for concurrent URL fetching.
+>
+> **Recommended**: Do Spec 114 Phase 1-2 (Core Metrics + Integration) BEFORE Phase 4.3.
+> Reason: Having metrics/visibility helps debug Celery issues. Without monitoring, you're debugging blind.
+> See: `docs/research/orchestration_research_prompt.md` for deep-dive research context.
 
 - [ ] 4.3.1 Create `scraping/tasks.py` with site scraping task
   - `@celery_app.task def scrape_site_task(site, start_urls)`
@@ -234,6 +238,51 @@
 
 ---
 
+### Pre-Production Hardening (P0)
+
+**Research**: [pre_production_audit_2025-12-28.md](../research/pre_production_audit_2025-12-28.md)
+
+> **Context**: 6 AI agents audited codebase. 4 issues identified, 3 cancelled after impact analysis.
+> Only 1 change confirmed safe. Other recommendations need impact analysis before implementing.
+
+#### Phase 1: Confirmed Safe Change
+- [ ] 1.1 Read research file `docs/research/pre_production_audit_2025-12-28.md`
+- [ ] 1.2 Implement field allowlist in `update_listing_evaluation()`
+  - Add `ALLOWED_UPDATE_FIELDS` set (37 fields)
+  - Add validation loop before SQL building
+  - Location: `data/data_store_main.py` around line 460
+- [ ] 1.3 Run tests: `PYTHONPATH=. pytest tests/test_db_concurrency.py -v`
+  - Expected: 17 passed (no regression)
+
+#### Phase 2: Impact Analysis for Other Recommendations
+> Before implementing any of these, run agents to check if they're actually needed.
+
+- [ ] 2.1 **Impact analysis**: Consolidate `_calculate_delay()` duplicates
+  - Files: `resilience/retry.py:29` vs `data/db_retry.py:24`
+  - Question: Will importing from resilience break db_retry's independence?
+- [ ] 2.2 **Impact analysis**: Consolidate `detect_encoding()` duplicates
+  - Files: `websites/scrapling_base.py:51` vs `tests/scrapers/fetch_fixtures.py:42`
+  - Question: Will test imports production code correctly?
+- [ ] 2.3 **Impact analysis**: Consolidate `_extract_domain()` duplicates
+  - Files: `main.py:78` vs `scraping/async_fetcher.py:40`
+  - Question: Where should shared utility live?
+- [ ] 2.4 **Impact analysis**: Fix `get_db_connection()` in agency_store.py
+  - Files: `data/agency_store.py:20` missing WAL mode
+  - Question: Is agency_store even used? Check for callers.
+- [ ] 2.5 **Impact analysis**: Remove dead `archive/browsers/` directory
+  - Question: Any hidden dependencies? Check all imports.
+- [ ] 2.6 **Impact analysis**: Remove dead `update_listing_features()` function
+  - Question: Any callers we missed?
+
+#### Phase 3: Post-Analysis Implementation
+> Only implement after Phase 2 confirms changes are safe.
+
+- [ ] 3.1 Implement confirmed-safe consolidations
+- [ ] 3.2 Remove confirmed-safe dead code
+- [ ] 3.3 Run full test suite: `PYTHONPATH=. pytest tests/ -v`
+
+---
+
 ## Related Documents
 
 - [docs/specs/](../specs/) - Active specifications
@@ -242,4 +291,4 @@
 
 ---
 
-**Last Updated**: 2025-12-27 (Added Spec 114: Scraper Monitoring & Observability)
+**Last Updated**: 2025-12-28 (Added Pre-Production Hardening tasks from audit)

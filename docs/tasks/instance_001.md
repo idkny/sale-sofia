@@ -79,6 +79,35 @@ archive/research/  archive/specs/          (code supersedes)
 
 ## Session History
 
+### 2025-12-28 (Session 38 - Pre-Production Audit)
+
+| Task | Status |
+|------|--------|
+| Research LLM coding mistakes | ✅ Complete |
+| Deploy 6 audit agents (security, duplicates, errors, dead code, config, tests) | ✅ Complete |
+| Compile initial audit report | ✅ Complete |
+| Run 4 impact analysis agents on recommendations | ✅ Complete |
+| Revise recommendations based on impact analysis | ✅ Complete |
+| Add Pre-Production Hardening tasks to TASKS.md | ✅ Complete |
+
+**Summary**: Comprehensive pre-production audit. Deployed 10 agents total. Found 4 potential issues, but impact analysis revealed 3 should NOT be changed (fail-fast is correct, timeout is dead code, ports already type-safe). Only 1 safe change: add field allowlist to `update_listing_evaluation()`. Added Pre-Production Hardening section to TASKS.md with phased approach.
+
+**Files Created**:
+- `docs/research/llm_coding_mistakes.md` - LLM mistake patterns reference
+- `docs/research/pre_production_audit_2025-12-28.md` - Focused audit report with 1 action item
+- `tests/debug/audit_dead_code.py` - Dead code analysis script
+
+**Files Modified**:
+- `docs/tasks/TASKS.md` - Added Pre-Production Hardening (P0) section with 3 phases
+
+**Key Findings**:
+- DB error handling: "Fail fast at import" is CORRECT design - cancelled
+- PROXY_WAIT_TIMEOUT: Parameter is dead code (never forwarded) - cancelled
+- Port validation: All ports already typed integers - deferred
+- Field allowlist: Safe to proceed - 1 action item remaining
+
+---
+
 ### 2025-12-27 (Session 35 - Phase 4.0 Database Concurrency)
 
 | Task | Status |
@@ -118,28 +147,7 @@ archive/research/  archive/specs/          (code supersedes)
 
 ---
 
-### 2025-12-27 (Session 33 - Phase 4 Task Consolidation)
-
-| Task | Status |
-|------|--------|
-| Analyze async/parallel patterns in codebase | ✅ Complete |
-| Research Celery best practices (via agents) | ✅ Complete |
-| Consolidate duplicate tasks in TASKS.md | ✅ Complete |
-| Create Phase 4 sub-phases (4.1-4.4) | ✅ Complete |
-
-**Summary**: Planning session - no code written. Analyzed current "fake async" pattern (async def with blocking time.sleep). Researched Celery best practices for web scraping. Consolidated "Build async orchestrator" + "Integrate with Celery" into unified Phase 4: Celery Site Orchestration with 4 sub-phases (22 total tasks). Defined 2-level config structure (general defaults + per-site overrides).
-
-**Files Modified**:
-- `docs/tasks/TASKS.md` - Consolidated Phase 4, added 22 detailed tasks in logical order
-
-**Key Decisions**:
-- Settings first (4.1), then async cleanup (4.2), then Celery tasks (4.3), then testing (4.4)
-- Keep `config/settings.py` for infrastructure, add `config/scraping_*.yaml` for scraping behavior
-- One Celery task per site with internal asyncio for concurrent URL fetching
-
----
-
-*(Sessions 32 and earlier archived to `archive/sessions/`)*
+*(Sessions 34 and earlier archived to `archive/sessions/`)*
 
 ---
 
