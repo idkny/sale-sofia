@@ -150,4 +150,4 @@
 
 ---
 
-**Last Updated**: 2025-12-28 (All tasks archived, clean slate)
+**Last Updated**: 2025-12-28 (Spec 116 Generic Scraper Template added)
