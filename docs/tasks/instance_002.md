@@ -15,60 +15,18 @@ updated_at: 2025-12-28
 
 ## IMMEDIATE NEXT SESSION TASK
 
-**BLOCKING TASK**: Review orchestration research and write Phase 4.3 spec.
+Continue **Phase 4.3 Pre-requisites**:
+- [x] 4.3.0.1 Fix timeout forwarding (done)
+- [x] 4.3.0.2 Move DB init to function (done)
+- [ ] 4.3.0.3 Add `@retry_on_busy()` to read functions
+- [ ] 4.3.0.4 Increase `SQLITE_BUSY_RETRIES` to 5
 
-### What Happened This Session (Session 39)
+Then proceed to:
+- Phase 4.3.1: Redis-backed circuit breaker
+- Phase 4.3.2: Redis-backed rate limiter
+- Phase 4.3.3: Scraping Celery tasks
 
-1. Read `docs/research/orchestration_research_prompt.md` - guidance for Phase 4.3 research
-2. Previous session had already launched research agents (8 docs in `docs/research/orchestration_*.md`)
-3. This session launched **6 validation agents** to audit module correctness (not just describe how they work)
-4. All 6 agents completed and findings were synthesized into 7 documents
-
-### Documents Created This Session
-
-| File | Content |
-|------|---------|
-| `docs/research/validation_scraping.md` | Scraping module ready for Celery wrapping |
-| `docs/research/validation_resilience.md` | Circuit breaker/rate limiter BROKEN for distributed |
-| `docs/research/validation_data.md` | SQLite race conditions, fix before 10+ workers |
-| `docs/research/validation_proxies.md` | Celery patterns CORRECT, template for 4.3 |
-| `docs/research/validation_orchestrator.md` | One timeout bug, needs site registry |
-| `docs/research/validation_llm.md` | No rate limiting, needs semaphore |
-| `docs/research/validation_synthesis.md` | **READ THIS FIRST** - consolidated findings |
-
-### Critical Issues Found
-
-1. **`orchestrator.py:522`** - timeout not forwarded to `wait_for_refresh_completion()`
-   - Can cause infinite loop in Redis polling fallback
-   - Fix: Add `timeout=timeout` parameter
-
-2. **`data_store_main.py:1316-1320`** - module-level init race condition
-   - 10 workers run `init_db()` simultaneously on import
-   - Fix: Move to explicit startup script with file lock
-
-3. **Read functions unprotected** - all `get_*` functions in data_store_main.py
-   - No `@retry_on_busy()` decorator
-   - Can fail during write contention
-
-### Modules Needing Redis Backing
-
-| Module | Current State | Problem |
-|--------|---------------|---------|
-| Circuit Breaker | In-memory singleton | Worker A blocks domain, Worker B doesn't know |
-| Rate Limiter | In-memory singleton | 4 workers x 10 req/min = 40 req/min |
-| LLM | No rate limiting | 10 workers flood Ollama |
-
-### Next Session TODO
-
-1. **Read `docs/research/validation_synthesis.md`** - has full implementation roadmap
-2. **Review other 6 validation docs** for details
-3. **Write Phase 4.3 spec** based on findings:
-   - Include critical fixes as pre-requisites
-   - Define scraping/tasks.py structure (copy from proxies/tasks.py)
-   - Define Redis backing approach for resilience module
-   - Define LLM rate limiting approach
-4. **Update TASKS.md** Phase 4.3 tasks if needed
-5. **Unblock other tasks** once complete
+**Spec**: [115_CELERY_SITE_TASKS.md](../specs/115_CELERY_SITE_TASKS.md)
 
 ---
 
@@ -147,6 +105,30 @@ archive/research/  archive/specs/          (code supersedes)
 
 ## Session History
 
+### 2025-12-28 (Session 40 - Phase 4.3 Spec + Pre-requisites)
+
+| Task | Status |
+|------|--------|
+| Review validation research documents | Complete |
+| Write Spec 115 (Celery Site Tasks) | Complete |
+| Update TASKS.md with mandatory 4-step process | Complete |
+| 4.3.0.1 Fix timeout forwarding | Complete |
+| 4.3.0.2 Move DB init to function | Complete |
+| Archive 16 research files | Complete |
+
+**Summary**: Created Spec 115 from validation research. Added mandatory "Impact Analysis → Test → Implement → Verify" process to all Phase 4.3 tasks. Fixed 2 critical bugs: timeout forwarding and DB init race condition. 77 tests verified. Research archived.
+
+**Files Created**:
+- `docs/specs/115_CELERY_SITE_TASKS.md`
+
+**Files Modified**:
+- `orchestrator.py:521` - Added `timeout=timeout` parameter
+- `data/data_store_main.py` - Created `initialize_database()` function
+- `main.py` - Added explicit database init call
+- `docs/tasks/TASKS.md` - Updated Phase 4.3 tasks with impact/tests
+
+---
+
 ### 2025-12-28 (Session 39 - Orchestration Validation)
 
 | Task | Status |
@@ -189,25 +171,6 @@ archive/research/  archive/specs/          (code supersedes)
 | Run Phase Completion Checklist | Complete |
 
 **Summary**: Implemented Phase 4.2 Async Implementation. Fixed fake async patterns, created true async fetcher with httpx.AsyncClient for future Celery integration. 563 tests passing.
-
----
-
-### 2025-12-27 (Session 34 - Phase 4.1 Scraping Configuration + Integration)
-
-| Task | Status |
-|------|--------|
-| Research scraper settings (Scrapy/Colly/Crawlee) | Complete |
-| Create spec 113 | Complete |
-| Create `config/scraping_defaults.yaml` | Complete |
-| Create `config/sites/*.yaml` per-site overrides | Complete |
-| Create `config/scraping_config.py` loader | Complete |
-| Write 7 unit tests (99% coverage) | Complete |
-| Integrate into main.py | Complete |
-| Remove old `DEFAULT_SCRAPE_DELAY` | Complete |
-| Update `SCRAPER_GUIDE.md` | Complete |
-| Archive spec 113 | Complete |
-
-**Summary**: Implemented Phase 4.1 Scraping Configuration. Created 2-level config system (global defaults + per-site overrides) based on Scrapy/Colly/Crawlee best practices. Integrated into main.py, removed old settings. 37 tests passing.
 
 ---
 

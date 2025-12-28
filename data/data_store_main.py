@@ -1312,9 +1312,45 @@ def link_listing_to_sources(
     return is_new_duplicate
 
 
-# Initialize database on import
-init_db()
-migrate_listings_schema()
-init_viewings_table()
-init_change_detection_tables()
-init_listing_sources_table()
+# Database initialization flag
+_database_initialized = False
+
+
+def initialize_database() -> None:
+    """
+    Initialize database with all tables and migrations.
+
+    Safe to call multiple times (idempotent).
+    Should be called ONCE from main.py before spawning Celery workers.
+
+    This replaces the previous module-level init which caused race conditions
+    when multiple workers imported simultaneously.
+    """
+    global _database_initialized
+
+    if _database_initialized:
+        return
+
+    # Use file lock to prevent race conditions during init
+    import fcntl
+    lock_path = str(DB_PATH) + ".init.lock"
+
+    try:
+        with open(lock_path, "w") as lock_file:
+            fcntl.flock(lock_file.fileno(), fcntl.LOCK_EX)
+
+            # Double-check after acquiring lock
+            if _database_initialized:
+                return
+
+            init_db()
+            migrate_listings_schema()
+            init_viewings_table()
+            init_change_detection_tables()
+            init_listing_sources_table()
+
+            _database_initialized = True
+
+    except Exception as e:
+        logger.error(f"Database initialization failed: {e}")
+        raise

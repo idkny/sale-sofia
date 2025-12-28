@@ -53,6 +53,8 @@
 | 2 | Available |
 | 3 | Available |
 
+**Session 40 (2025-12-28)**: Instance 2 - Phase 4.3 Spec + Pre-requisites. Created Spec 115 (Celery Site Tasks) from validation research. Completed 4.3.0.1 (timeout fix) and 4.3.0.2 (DB init race condition fix). 77 tests verified.
+
 **Session 39 (2025-12-28)**: Instance 2 - Orchestration Validation. Launched 6 architect-review agents to validate all modules for Celery correctness. Found 3 critical issues, 3 modules need Redis backing. Created 7 validation docs. Added BLOCKING task for next session.
 
 **Session 39 (2025-12-28)**: Instance 1 - Pre-Production Hardening COMPLETE. Phase 1: Added field allowlist to update_listing_evaluation(). Phase 2: Deployed 2 agents for impact analysis (3 cancelled, 3 implemented). Phase 3: Consolidated extract_domain() to resilience/, removed update_listing_features(), documented agency_store.py. 563 tests passing.
@@ -181,12 +183,12 @@
 ###### Phase 4.3.0: Pre-requisites (Critical Fixes)
 > Must complete before any Celery work. Found by validation agents.
 
-- [ ] 4.3.0.1 Fix timeout forwarding in `orchestrator.py:522`
+- [x] 4.3.0.1 Fix timeout forwarding in `orchestrator.py:521`
   - Impact: `wait_for_proxies()` callers, `main.py:508`
-  - Tests: `tests/unit/test_orchestrator_helpers.py`
-- [ ] 4.3.0.2 Move DB init out of module-level in `data_store_main.py`
+  - Tests: `tests/unit/test_orchestrator_helpers.py` (30 passed)
+- [x] 4.3.0.2 Move DB init out of module-level in `data_store_main.py`
   - Impact: All imports of `data_store_main`, worker startup
-  - Tests: `tests/test_db_concurrency.py`, `tests/data/`
+  - Tests: `tests/test_db_concurrency.py`, `tests/test_change_detection.py` (47 passed)
 - [ ] 4.3.0.3 Add `@retry_on_busy()` to read functions in `data_store_main.py`
   - Impact: All `get_*` function callers
   - Tests: `tests/test_db_concurrency.py`, `tests/data/`
@@ -287,7 +289,7 @@
 > **Independent**: Can run in parallel with Phase 4 work.
 
 #### Phase 1: Core Metrics
-- [ ] 1.1 Create `scraping/metrics.py` with MetricsCollector class
+- [x] 1.1 Create `scraping/metrics.py` with MetricsCollector class
 - [ ] 1.2 Create `scraping/session_report.py` with SessionReportGenerator
 - [ ] 1.3 Add health thresholds to `config/settings.py`
 - [ ] 1.4 Write unit tests for metrics and reports

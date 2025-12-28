@@ -860,6 +860,11 @@ def main() -> None:
     """Main entry point for Sofia Real Estate Scraper."""
     load_dotenv()
     setup_logging(LOGS_DIR)
+
+    # Initialize database before any operations (Phase 4.3.0.2)
+    # Must happen before Celery workers spawn to prevent race conditions
+    data_store_main.initialize_database()
+
     run_auto_mode()
 
 

@@ -517,9 +517,8 @@ class Orchestrator:
         mtime_before, task_id = self.trigger_proxy_refresh()
 
         # Use signal-based wait (chord/Redis) instead of blind file polling
-        # Don't pass timeout - let wait_for_refresh_completion use dynamic timeout
-        # based on chunk count (per spec 105/107)
-        return self.wait_for_refresh_completion(mtime_before, min_count, task_id=task_id)
+        # Pass timeout to enforce caller's timeout preference (default 2400s)
+        return self.wait_for_refresh_completion(mtime_before, min_count, timeout=timeout, task_id=task_id)
 
     def wait_for_refresh_completion(
         self,
