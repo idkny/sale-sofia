@@ -13,6 +13,7 @@ Starts the full automated scraping pipeline:
 """
 
 import signal
+import subprocess
 import sys
 import time
 from datetime import datetime
@@ -984,7 +985,15 @@ def run_auto_mode() -> None:
             print("[INFO] Stopping proxy rotator...")
             stop_mubeng_rotator(mubeng_process, temp_proxy_file)
 
-    print("[INFO] All processes stopped. Goodbye!")
+    print("[INFO] All processes stopped.")
+
+    # Auto-launch dashboard
+    print()
+    print("=" * 60)
+    print("LAUNCHING DASHBOARD")
+    print("=" * 60)
+    print("[INFO] Starting Streamlit dashboard at http://localhost:8501")
+    subprocess.run(["streamlit", "run", "app/streamlit_app.py"])
 
 
 def main() -> None:

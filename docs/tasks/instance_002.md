@@ -4,7 +4,7 @@ type: session_file
 project: sale-sofia
 instance: 2
 created_at: 2025-12-24
-updated_at: 2025-12-28 (Session 47)
+updated_at: 2025-12-28 (Session 48)
 ---
 
 # Instance 2 Session
@@ -24,7 +24,7 @@ Check **Future Enhancements (Backlog)** in TASKS.md for ideas:
 - Analytics & Insights
 - Code Quality
 
-**Note**: 894 tests passing. Code is source of truth.
+**Note**: 900+ tests passing. Code is source of truth.
 
 ---
 
@@ -103,6 +103,21 @@ archive/research/  archive/specs/          (code supersedes)
 
 ## Session History
 
+### 2025-12-28 (Session 48 - README Update + Auto-Start Dashboard)
+
+| Task | Status |
+|------|--------|
+| Update README.md with comprehensive usage guide | Complete |
+| Auto-start dashboard after scraping | Complete |
+
+**Summary**: Updated README.md to be a comprehensive usage guide for users and future Claude instances. Implemented auto-start dashboard feature - Streamlit now launches automatically when main.py completes scraping. 902 tests passing.
+
+**Files Modified**:
+- `README.md` - Complete rewrite with comprehensive usage guide
+- `main.py` - Added auto-launch of Streamlit dashboard after scraping
+
+---
+
 ### 2025-12-28 (Session 47 - Phase 5 COMPLETE, All Tasks Archived)
 
 | Task | Status |
@@ -129,29 +144,6 @@ archive/research/  archive/specs/          (code supersedes)
 
 **Files Created**:
 - `tests/test_e2e_pipeline.py` - 32 E2E tests
-
----
-
-### 2025-12-28 (Session 44 - Phase 4.3.3 + 4.3.4 COMPLETE)
-
-| Task | Status |
-|------|--------|
-| 4.3.3.3 Update celery_app.py | Complete |
-| 4.3.4.1 Add orchestrator methods | Complete |
-| 4.3.4.2 Update main.py PARALLEL_SCRAPING | Complete |
-| 4.3.4.4 Integration tests | Complete |
-| 4.3.4.5 Phase Completion Checklist | Complete |
-
-**Summary**: Completed remaining Phase 4.3.3 (celery_app registration) and all Phase 4.3.4 Integration tasks. Added 3 orchestrator methods, PARALLEL_SCRAPING mode to main.py, 12 integration tests. Fixed hardcoded values in scraping/tasks.py to use settings. Archived spec 115. 781 tests passing.
-
-**Files Created**:
-- `tests/test_scraping_integration.py` - 12 integration tests
-
-**Files Modified**:
-- `celery_app.py` - Added `scraping.tasks` to include list
-- `orchestrator.py` - Added 3 scraping orchestration methods
-- `main.py` - Added PARALLEL_SCRAPING mode with `_wait_for_parallel_scraping()`
-- `scraping/tasks.py` - Fixed hardcoded values to use settings
 
 ---
 
