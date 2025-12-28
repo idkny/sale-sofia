@@ -49,9 +49,9 @@
 
 | Instance | Current Task |
 |----------|--------------|
-| 1 | 4.4.2 - Test site-specific config overrides |
-| 2 | Available |
-| 3 | 4.4.1 - Test parallel scraping with 2+ sites |
+| 1 | Available |
+| 2 | 4.4.3 - Test crash recovery with checkpoints |
+| 3 | Available |
 
 **Session 44 (2025-12-28)**: Instance 2 - Phase 4.3.3 + 4.3.4 COMPLETE. Completed celery_app.py registration (4.3.3.3). Completed all Phase 4.3.4 Integration tasks: orchestrator methods, main.py PARALLEL_SCRAPING mode, 12 integration tests, consistency checklist. Fixed hardcoded values in scraping/tasks.py. Archived spec 115. 781 tests passing.
 
@@ -262,13 +262,14 @@
 ##### Phase 4.4: Integration Testing
 > **Why last**: Validates end-to-end with real Celery workers.
 
-- [ ] [Instance 3] 4.4.1 Test parallel scraping with 2+ sites
+- [x] 4.4.1 Test parallel scraping with 2+ sites (15 tests)
   - Verify sites run concurrently (check timestamps)
   - Verify rate limiting per domain works
-- [ ] [Instance 1] 4.4.2 Test site-specific config overrides
+- [x] 4.4.2 Test site-specific config overrides (14 tests)
   - Fast site (imot.bg) vs slow site (bazar.bg)
   - Verify different delays applied
-- [ ] 4.4.3 Test crash recovery with checkpoints
+  - **Finding**: delay_seconds not wired to Celery path (documented in tests)
+- [ ] [Instance 2] 4.4.3 Test crash recovery with checkpoints
   - Kill worker mid-scrape, restart, verify resume
 - [ ] 4.4.4 Test circuit breaker + Celery interaction
   - Trigger failures, verify circuit opens, task retries

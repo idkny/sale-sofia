@@ -79,6 +79,21 @@ archive/research/  archive/specs/          (code supersedes)
 
 ## Session History
 
+### 2025-12-28 (Session 45 - Phase 4.4.2 Site-Specific Config Overrides)
+
+| Task | Status |
+|------|--------|
+| 4.4.2 Test site-specific config overrides | ✅ Complete |
+
+**Summary**: Completed Phase 4.4.2 - tested site-specific configuration overrides. Created 14 tests covering config loading (5), chunk sizing (2), rate limits (2), integration (3), and gap documentation (2). **Key Finding**: `delay_seconds` from YAML config is not wired into Celery path - rate limiter uses `DOMAIN_RATE_LIMITS` from settings.py instead. This gap is documented in tests.
+
+**Files Created**:
+- `tests/test_site_config_overrides.py` - 14 tests
+
+**Test Results**: 810 passed, 8 skipped
+
+---
+
 ### 2025-12-28 (Session 44 - Phase 4.3.3 Scraping Celery Tasks)
 
 | Task | Status |
@@ -120,25 +135,7 @@ archive/research/  archive/specs/          (code supersedes)
 
 ---
 
-### 2025-12-28 (Session 40 - Scraper Monitoring Phase 1)
-
-| Task | Status |
-|------|--------|
-| 1.1 Create `scraping/metrics.py` with MetricsCollector | ✅ Complete |
-| 1.2 Create `scraping/session_report.py` with SessionReportGenerator | ✅ Complete |
-| 1.3 Add health thresholds to `config/settings.py` | ✅ Complete |
-| 1.4 Write unit tests for metrics and reports | ✅ Complete |
-
-**Summary**: Implemented Scraper Monitoring Phase 1 (Core Metrics). Created MetricsCollector class for tracking request/response metrics, SessionReportGenerator for persisting JSON reports, and added health thresholds to settings.
-
-**Files Created**:
-- `scraping/metrics.py` - MetricsCollector, RequestStatus enum, RunMetrics dataclass
-- `scraping/session_report.py` - SessionReportGenerator, SessionReport dataclass
-- `tests/test_scraper_monitoring.py` - 48 unit tests
-
----
-
-*(Sessions 39 and earlier archived to `archive/sessions/`)*
+*(Sessions 40 and earlier archived to `archive/sessions/`)*
 
 ---
 
