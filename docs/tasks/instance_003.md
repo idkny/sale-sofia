@@ -79,6 +79,29 @@ archive/research/  archive/specs/          (code supersedes)
 
 ## Session History
 
+### 2025-12-28 (Session 8 - Phase 4.4 Integration Testing)
+
+| Task | Status |
+|------|--------|
+| 4.3.4.3 Add new settings to config/settings.py | ✅ Complete |
+| 4.4.1 Test parallel scraping with 2+ sites | ✅ Complete |
+| 4.4.4 Test circuit breaker + Celery interaction | ✅ Complete |
+| Remove alerting task from Phase 5 | ✅ Complete |
+
+**Summary**: Completed Phase 4.4 Integration Testing tasks. Added Celery site task settings (PARALLEL_SCRAPING_ENABLED, SCRAPING_CHUNK_SIZE, time limits). Created 39 new integration tests (15 parallel scraping + 24 circuit breaker). Removed email/Slack alerting from Phase 5 per user request. Phase 4.4 now complete with 81 tests total.
+
+**Files Created**:
+- `tests/test_parallel_scraping_integration.py` - 15 tests for concurrent execution, rate limiting, progress tracking
+- `tests/test_circuit_breaker_celery_integration.py` - 24 tests for circuit breaker + Celery interaction
+
+**Files Modified**:
+- `config/settings.py` - Added PARALLEL_SCRAPING_ENABLED, SCRAPING_CHUNK_SIZE, SCRAPING_SOFT/HARD_TIME_LIMIT
+- `docs/specs/106_CRAWLER_VALIDATION_PLAN.md` - Removed alerting references
+
+**Test Count**: 870 tests total
+
+---
+
 ### 2025-12-28 (Session 7 - Spec 114 Implementation Complete)
 
 | Task | Status |
@@ -121,25 +144,6 @@ archive/research/  archive/specs/          (code supersedes)
 - Good foundation exists: Loguru logging, error classification, retry, circuit breaker, rate limiter
 - Missing: Metrics persistence, session reports, health dashboard, trend analysis
 - Industry standard: Track success rate >90%, error rate <5%, block rate <2%
-
----
-
-### 2025-12-26 (Session 5 - Solution F Phase 7 Complete)
-
-| Task | Status |
-|------|--------|
-| 7.1: Add MIN_PROXIES check before scraping | ✅ Complete |
-| 7.2: Add file locking for concurrent access | ✅ Complete |
-| 7.3: Add delay after file write (200ms) | ✅ Complete |
-| 7.4: Add hook for proxy refresh | ✅ Complete |
-
-**Summary**: Completed Solution F Phase 7 (Edge Cases & Hardening). All 4 sub-tasks implemented. All 15 Solution F tests pass. Solution F is now fully complete.
-
-**Files Modified**:
-- `main.py` - Added `MIN_PROXIES=5`, `_ensure_min_proxies()` function, check before/between sites
-- `proxies/proxy_scorer.py` - Added `fcntl.flock()` locking, 200ms delay after file write, `reload_proxies()` hook
-
-**Solution F Complete**: All 7 phases implemented and tested.
 
 ---
 

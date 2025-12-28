@@ -50,7 +50,7 @@
 | Instance | Current Task |
 |----------|--------------|
 | 1 | Available |
-| 2 | 4.4.3 - Test crash recovery with checkpoints |
+| 2 | Available |
 | 3 | Available |
 
 **Session 44 (2025-12-28)**: Instance 2 - Phase 4.3.3 + 4.3.4 COMPLETE. Completed celery_app.py registration (4.3.3.3). Completed all Phase 4.3.4 Integration tasks: orchestrator methods, main.py PARALLEL_SCRAPING mode, 12 integration tests, consistency checklist. Fixed hardcoded values in scraping/tasks.py. Archived spec 115. 781 tests passing.
@@ -259,8 +259,9 @@
   - Tests: Self-verifying
 - [x] 4.3.4.5 **Run Phase Completion Checklist** (consistency + alignment)
 
-##### Phase 4.4: Integration Testing
+##### Phase 4.4: Integration Testing (COMPLETE)
 > **Why last**: Validates end-to-end with real Celery workers.
+> **Result**: 81 tests (15+14+28+24), 862 total passing.
 
 - [x] 4.4.1 Test parallel scraping with 2+ sites (15 tests)
   - Verify sites run concurrently (check timestamps)
@@ -269,11 +270,14 @@
   - Fast site (imot.bg) vs slow site (bazar.bg)
   - Verify different delays applied
   - **Finding**: delay_seconds not wired to Celery path (documented in tests)
-- [ ] [Instance 2] 4.4.3 Test crash recovery with checkpoints
+- [x] 4.4.3 Test crash recovery with checkpoints (28 tests)
   - Kill worker mid-scrape, restart, verify resume
-- [ ] 4.4.4 Test circuit breaker + Celery interaction
+- [x] 4.4.4 Test circuit breaker + Celery interaction (24 tests)
   - Trigger failures, verify circuit opens, task retries
-- [ ] 4.4.5 **Run Phase Completion Checklist** (full E2E validation)
+- [x] 4.4.5 **Run Phase Completion Checklist** (full E2E validation)
+  - Consistency: Test hardcoded values acceptable (lower thresholds for faster tests)
+  - Alignment: Spec 115 archived, code is source of truth
+  - Tests: 862 passing, 0 failures
 
 ---
 
