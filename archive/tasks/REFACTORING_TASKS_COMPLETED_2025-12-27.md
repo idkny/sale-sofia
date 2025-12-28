@@ -327,7 +327,7 @@
 
 ## Scrapling Migration Tasks
 
-**Source**: Research in `docs/research/SCRAPLING_MIGRATION_RESEARCH.md`
+**Source**: Research in `archive/research/SCRAPLING_MIGRATION_RESEARCH.md`
 **Goal**: Replace custom `browsers/` module with Scrapling's built-in fetchers
 
 ### Task 21: Update requirements.txt

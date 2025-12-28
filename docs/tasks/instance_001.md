@@ -117,8 +117,8 @@ archive/research/  archive/specs/          (code supersedes)
 **Summary**: Comprehensive pre-production audit. Deployed 10 agents total. Found 4 potential issues, but impact analysis revealed 3 should NOT be changed (fail-fast is correct, timeout is dead code, ports already type-safe). Only 1 safe change: add field allowlist to `update_listing_evaluation()`. Added Pre-Production Hardening section to TASKS.md with phased approach.
 
 **Files Created**:
-- `docs/research/llm_coding_mistakes.md` - LLM mistake patterns reference
-- `docs/research/pre_production_audit_2025-12-28.md` - Focused audit report with 1 action item
+- `archive/research/llm_coding_mistakes.md` - LLM mistake patterns reference
+- `archive/research/pre_production_audit_2025-12-28.md` - Focused audit report with 1 action item
 - `tests/debug/audit_dead_code.py` - Dead code analysis script
 
 **Files Modified**:

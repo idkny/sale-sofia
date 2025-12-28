@@ -390,12 +390,12 @@
 
 ## Pre-Production Hardening (P0) - COMPLETE
 
-**Research**: [pre_production_audit_2025-12-28.md](../../docs/research/pre_production_audit_2025-12-28.md)
+**Research**: [pre_production_audit_2025-12-28.md](../research/pre_production_audit_2025-12-28.md)
 
 > Context: 6 AI agents audited codebase. 4 issues identified, 3 cancelled after impact analysis.
 
 ### Phase 1: Confirmed Safe Change
-- [x] 1.1 Read research file `docs/research/pre_production_audit_2025-12-28.md`
+- [x] 1.1 Read research file `archive/research/pre_production_audit_2025-12-28.md`
 - [x] 1.2 Implement field allowlist in `update_listing_evaluation()`
   - Added `ALLOWED_UPDATE_FIELDS` set (37 fields)
   - Location: `data/data_store_main.py` around line 473
