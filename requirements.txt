@@ -1,6 +1,7 @@
 black
 Brotli==1.1.0
 celery==5.4.0
+flower>=2.0.0  # Celery monitoring UI (run: celery -A celery_app flower)
 python-dotenv
 geoip2==5.1.0
 httpx>=0.28.1

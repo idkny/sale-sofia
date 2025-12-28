@@ -74,12 +74,22 @@ REDIS_CIRCUIT_BREAKER_ENABLED = False
 # When False: uses in-memory rate limiter (single-process only)
 REDIS_RATE_LIMITER_ENABLED = False
 
+# =============================================================================
+# FLOWER SETTINGS (Celery monitoring UI)
+# =============================================================================
+# Run: celery -A celery_app flower --port=$FLOWER_PORT
+# Or use: scripts/start_flower.sh
+
+FLOWER_PORT = 5555
+FLOWER_BROKER_API = "redis://localhost:6379/0"
+
 # Rate limiting (requests per minute per domain)
-DOMAIN_RATE_LIMITS = {
-    "imot.bg": 10,
-    "bazar.bg": 10,
-    "default": 10,
-}
+# Computed from YAML configs: rate = 60 / delay_seconds
+# imot.bg: 1.5s delay -> 40 req/min
+# bazar.bg: 3.0s delay -> 20 req/min
+from config.scraping_config import get_domain_rate_limits
+
+DOMAIN_RATE_LIMITS = get_domain_rate_limits()
 
 # Checkpoint settings
 CHECKPOINT_BATCH_SIZE = 10  # Save every N URLs

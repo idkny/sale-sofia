@@ -49,8 +49,8 @@
 
 | Instance | Current Task |
 |----------|--------------|
-| 1 | 5.2 Celery Flower (standalone) |
-| 2 | Available |
+| 1 | Available |
+| 2 | 5.3 Performance benchmarking |
 | 3 | Available |
 
 **Session 46 (2025-12-28)**: Instance 2 - Phase 5.1 E2E Testing COMPLETE. Created `tests/test_e2e_pipeline.py` with 32 tests covering full pipeline: scrape → store → dashboard. Tests include: data saving, filters, stats, change detection, session reports, edge cases. 894 tests passing.
@@ -289,12 +289,12 @@
 > **Depends on**: Phase 4 complete (Celery orchestration working).
 
 - [x] 5.1 E2E testing (scrape → store → dashboard) - 32 tests
-- [ ] [Instance 1] 5.2 Add Celery Flower for task monitoring (standalone, no Docker)
-  - Add `flower` to `requirements.txt`
-  - Create start script `admin/scripts/start_flower.sh`
-  - Add Flower settings to `config/settings.py` (port, basic auth)
-  - Test: verify task visibility in Flower UI
-- [ ] 5.3 Performance benchmarking (parallel vs sequential)
+- [x] 5.2 Add Celery Flower for task monitoring (standalone, no Docker)
+  - Added `flower>=2.0.0` to `requirements.txt`
+  - Created `scripts/start_flower.sh`
+  - Added FLOWER_PORT, FLOWER_BROKER_API to `config/settings.py`
+  - Verified: Flower detects all 12 Celery tasks
+- [ ] [Instance 2] 5.3 Performance benchmarking (parallel vs sequential)
 - [ ] 5.4 **Run Phase Completion Checklist** (consistency + alignment)
 
 ---

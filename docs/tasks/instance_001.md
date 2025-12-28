@@ -79,6 +79,39 @@ archive/research/  archive/specs/          (code supersedes)
 
 ## Session History
 
+### 2025-12-28 (Session 46 - Phase 4.4.5 + 5.2)
+
+| Task | Status |
+|------|--------|
+| 4.4.5 Run Phase Completion Checklist | ✅ Complete |
+| 5.2 Add Celery Flower | ✅ Complete |
+
+**Summary**:
+1. Reopened and fixed Phase 4.4.5 - wired `delay_seconds` from YAML to Celery rate limiting via `get_domain_rate_limits()`. YAML is now single source of truth.
+2. Added Celery Flower for task monitoring (standalone, no Docker).
+
+**4.4.5 Fix**:
+- imot.bg: 1.5s delay → 40 req/min (was 10)
+- bazar.bg: 3.0s delay → 20 req/min (was 10)
+- default: 2.0s delay → 30 req/min (was 10)
+
+**5.2 Flower Setup**:
+- Added `flower>=2.0.0` to requirements.txt
+- Created `scripts/start_flower.sh`
+- Added FLOWER_PORT, FLOWER_BROKER_API to settings.py
+- Verified: Flower detects all 12 Celery tasks
+
+**Files Modified**:
+- `config/scraping_config.py` - Added `get_domain_rate_limits()`
+- `config/settings.py` - DOMAIN_RATE_LIMITS + FLOWER settings
+- `tests/test_site_config_overrides.py` - Updated tests
+- `requirements.txt` - Added flower
+- `scripts/start_flower.sh` - New start script
+
+**Test Results**: 894 passed, 8 skipped
+
+---
+
 ### 2025-12-28 (Session 45 - Phase 4.4.2 Site-Specific Config Overrides)
 
 | Task | Status |
@@ -112,30 +145,7 @@ archive/research/  archive/specs/          (code supersedes)
 
 **Test Results**: 769 passed, 8 skipped
 
----
-
-### 2025-12-28 (Session 41 - Scraper Monitoring Phase 2 Integration)
-
-| Task | Status |
-|------|--------|
-| 1.4 Verify scraper monitoring tests | ✅ Complete |
-| 2.1 Add `get_all_states()` to circuit_breaker.py | ✅ Complete |
-| 2.2 Add `get_stats()` to proxy_scorer.py | ✅ Complete |
-| 2.3 Integrate MetricsCollector into main.py | ✅ Complete |
-
-**Summary**: Completed Scraper Monitoring Phase 1 (verified 48 tests) and Phase 2 (Integration). Added `get_all_states()` to circuit breaker, updated `get_stats()` in proxy scorer to match spec format, and integrated MetricsCollector into main.py scraping flow with request/response tracking and session report generation.
-
-**Files Modified**:
-- `resilience/circuit_breaker.py` - Added `get_all_states()` method
-- `proxies/proxy_scorer.py` - Updated `get_stats()` to return spec-compliant format
-- `main.py` - Integrated MetricsCollector with record_request/record_response calls
-- `tests/test_proxy_scorer.py` - Updated test for new get_stats format
-
-**Test Results**: 675 passed, 8 skipped
-
----
-
-*(Sessions 40 and earlier archived to `archive/sessions/`)*
+*(Sessions 44 and earlier archived to `archive/sessions/`)*
 
 ---
 

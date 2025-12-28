@@ -248,73 +248,60 @@ class TestConfigIntegration:
         assert config.timing.delay_seconds == expected_delay
 
 
-class TestConfigGapDocumentation:
-    """Document known gaps in config usage.
+class TestYamlToRateLimitIntegration:
+    """Verify YAML config drives DOMAIN_RATE_LIMITS via get_domain_rate_limits().
 
-    NOTE: These tests document current behavior, not necessarily desired behavior.
+    YAML is single source of truth for rate limiting:
+    - delay_seconds -> rate = 60 / delay_seconds (req/min)
+    - get_domain_rate_limits() computes DOMAIN_RATE_LIMITS from YAML
     """
 
-    def test_celery_tasks_do_not_use_delay_seconds(self):
-        """KNOWN GAP: Celery tasks don't use delay_seconds from YAML config.
+    def test_celery_uses_yaml_derived_rate_limits(self):
+        """Celery rate limiting derives from YAML delay_seconds.
 
-        In Celery mode:
-        - Rate limiting uses DOMAIN_RATE_LIMITS from settings.py (requests/minute)
-        - The timing.delay_seconds from YAML is NOT used
+        Flow:
+        1. YAML defines timing.delay_seconds per site
+        2. get_domain_rate_limits() converts to req/min: rate = 60 / delay
+        3. settings.DOMAIN_RATE_LIMITS uses get_domain_rate_limits()
+        4. Rate limiter uses DOMAIN_RATE_LIMITS
 
-        In sequential mode (main.py):
-        - delay_seconds IS used via scrape_from_start_url()
-
-        This gap means site-specific delays only apply to sequential scraping,
-        not parallel Celery scraping.
+        This ensures YAML is the single source of truth.
         """
-        import ast
-        import inspect
-        from scraping import tasks
+        from config.settings import DOMAIN_RATE_LIMITS
+        from config.scraping_config import get_domain_rate_limits
 
-        # Read the source code
-        source = inspect.getsource(tasks)
+        # Verify DOMAIN_RATE_LIMITS matches computed values
+        computed = get_domain_rate_limits()
+        assert DOMAIN_RATE_LIMITS == computed
 
-        # Verify delay_seconds is NOT used in tasks.py
-        assert "delay_seconds" not in source
-        assert "timing.delay" not in source
-        assert "config.timing" not in source
+        # Verify imot.bg and bazar.bg have different rates
+        assert DOMAIN_RATE_LIMITS["imot.bg"] != DOMAIN_RATE_LIMITS["bazar.bg"]
 
-        # Document the gap for future improvement
-        # TODO: Consider wiring delay_seconds into async_fetcher or rate_limiter
-
-    def test_domain_rate_limits_are_uniform(self):
-        """KNOWN GAP: DOMAIN_RATE_LIMITS has same rate for all sites.
-
-        Both imot.bg and bazar.bg have 10 req/min in DOMAIN_RATE_LIMITS,
-        even though their YAML configs have different delay_seconds.
+    def test_domain_rate_limits_match_yaml_delays(self):
+        """DOMAIN_RATE_LIMITS correctly reflects YAML delay_seconds.
 
         YAML delay_seconds to equivalent rate:
         - imot.bg: 1.5s delay = 40 req/min
         - bazar.bg: 3.0s delay = 20 req/min
-
-        But DOMAIN_RATE_LIMITS has 10 req/min for both.
+        - default: 2.0s delay = 30 req/min
         """
         from config.settings import DOMAIN_RATE_LIMITS
 
-        # Document current state (both same)
         imot_rate = DOMAIN_RATE_LIMITS.get("imot.bg", DOMAIN_RATE_LIMITS["default"])
         bazar_rate = DOMAIN_RATE_LIMITS.get("bazar.bg", DOMAIN_RATE_LIMITS["default"])
 
-        # Currently both are 10 req/min
-        assert imot_rate == 10
-        assert bazar_rate == 10
+        # Rates now match YAML config
+        assert imot_rate == 40  # 60 / 1.5 = 40
+        assert bazar_rate == 20  # 60 / 3.0 = 20
+        assert DOMAIN_RATE_LIMITS["default"] == 30  # 60 / 2.0 = 30
 
-        # Document the mismatch with YAML config
+        # Verify YAML config alignment
         imot_config = load_scraping_config("imot.bg")
         bazar_config = load_scraping_config("bazar.bg")
 
-        # YAML says different delays, but rate limits are same
-        assert imot_config.timing.delay_seconds != bazar_config.timing.delay_seconds
-        assert imot_rate == bazar_rate  # This is the gap
+        # Calculate expected rates from YAML
+        imot_expected = int(60 / imot_config.timing.delay_seconds)
+        bazar_expected = int(60 / bazar_config.timing.delay_seconds)
 
-        # Calculate what rate limits SHOULD be based on delay_seconds
-        imot_expected_rate = 60 / imot_config.timing.delay_seconds  # 40 req/min
-        bazar_expected_rate = 60 / bazar_config.timing.delay_seconds  # 20 req/min
-
-        assert imot_expected_rate == 40.0
-        assert bazar_expected_rate == 20.0
+        assert imot_rate == imot_expected
+        assert bazar_rate == bazar_expected

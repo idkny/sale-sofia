@@ -97,6 +97,47 @@ def _normalize_site_name(site: str) -> str:
     return site.replace(".", "_").replace("-", "_")
 
 
+def get_domain_rate_limits(default_rate: int = 10) -> dict:
+    """
+    Compute DOMAIN_RATE_LIMITS from YAML configs.
+
+    Converts delay_seconds to requests per minute: rate = 60 / delay_seconds
+
+    Args:
+        default_rate: Default rate for unknown domains (req/min)
+
+    Returns:
+        Dict mapping domain to rate limit (requests per minute)
+    """
+    config_dir = Path(__file__).parent
+    sites_dir = config_dir / "sites"
+
+    rate_limits = {"default": default_rate}
+
+    # Load defaults for fallback
+    defaults_path = config_dir / "scraping_defaults.yaml"
+    if defaults_path.exists():
+        with open(defaults_path, "r") as f:
+            defaults = yaml.safe_load(f) or {}
+        default_delay = defaults.get("timing", {}).get("delay_seconds", 2.0)
+        rate_limits["default"] = int(60 / default_delay)
+
+    # Load each site config
+    if sites_dir.exists():
+        for site_file in sites_dir.glob("*.yaml"):
+            # Convert filename back to domain: imot_bg.yaml -> imot.bg
+            domain = site_file.stem.replace("_", ".")
+
+            with open(site_file, "r") as f:
+                site_config = yaml.safe_load(f) or {}
+
+            # Get delay_seconds, falling back to default
+            delay = site_config.get("timing", {}).get("delay_seconds", default_delay)
+            rate_limits[domain] = int(60 / delay)
+
+    return rate_limits
+
+
 def load_scraping_config(site: str) -> ScrapingConfig:
     """
     Load scraping configuration with merge logic.
