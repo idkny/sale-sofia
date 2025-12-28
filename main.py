@@ -17,14 +17,13 @@ import sys
 import time
 from datetime import datetime
 from typing import Any, Optional
-from urllib.parse import urlparse
 
 from dotenv import load_dotenv
 from loguru import logger
 
 from scrapling.fetchers import Fetcher, StealthyFetcher
 
-from resilience.circuit_breaker import get_circuit_breaker
+from resilience.circuit_breaker import extract_domain, get_circuit_breaker
 from resilience.exceptions import BlockedException, CircuitOpenException
 from resilience.rate_limiter import get_rate_limiter
 from resilience.response_validator import detect_soft_block
@@ -73,12 +72,6 @@ def _setup_signal_handlers():
     """Set up graceful shutdown handlers."""
     signal.signal(signal.SIGTERM, _signal_handler)
     signal.signal(signal.SIGINT, _signal_handler)
-
-
-def _extract_domain(url: str) -> str:
-    """Extract domain from URL for circuit breaker tracking."""
-    parsed = urlparse(url)
-    return parsed.netloc or parsed.path.split('/')[0]
 
 
 def _check_and_save_listing(listing) -> dict:
@@ -156,7 +149,7 @@ def _fetch_search_page(
     """
     circuit_breaker = get_circuit_breaker()
     rate_limiter = get_rate_limiter()
-    domain = _extract_domain(url)
+    domain = extract_domain(url)
 
     # Check circuit breaker FIRST
     if not circuit_breaker.can_request(domain):
@@ -302,7 +295,7 @@ def _fetch_listing_page(
     """
     circuit_breaker = get_circuit_breaker()
     rate_limiter = get_rate_limiter()
-    domain = _extract_domain(url)
+    domain = extract_domain(url)
 
     # Check circuit breaker FIRST
     if not circuit_breaker.can_request(domain):

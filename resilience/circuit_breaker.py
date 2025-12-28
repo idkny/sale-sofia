@@ -11,8 +11,15 @@ from dataclasses import dataclass
 from datetime import datetime
 from enum import Enum
 from typing import Optional
+from urllib.parse import urlparse
 
 from loguru import logger
+
+
+def extract_domain(url: str) -> str:
+    """Extract domain from URL for rate limiting and circuit breaker tracking."""
+    parsed = urlparse(url)
+    return parsed.netloc or parsed.path.split("/")[0]
 
 # Import settings with fallback defaults
 try:

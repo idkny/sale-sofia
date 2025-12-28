@@ -79,6 +79,30 @@ archive/research/  archive/specs/          (code supersedes)
 
 ## Session History
 
+### 2025-12-28 (Session 39 - Pre-Production Hardening Implementation)
+
+| Task | Status |
+|------|--------|
+| Phase 1: Add field allowlist to update_listing_evaluation() | ✅ Complete |
+| Phase 2: Deploy impact analysis agents (6 items) | ✅ Complete |
+| Phase 3: Implement confirmed-safe changes | ✅ Complete |
+| Archive completed tasks to TASKS_COMPLETED | ✅ Complete |
+
+**Summary**: Implemented Pre-Production Hardening. Phase 1: Added ALLOWED_UPDATE_FIELDS (37 fields) for SQL injection prevention. Phase 2: Deployed 2 agents - analyzed 6 recommendations, cancelled 3 (keep duplicates separate), implemented 3. Phase 3: Consolidated extract_domain() to resilience/, removed update_listing_features(), documented agency_store.py in FILE_STRUCTURE.md.
+
+**Files Modified**:
+- `data/data_store_main.py` - Added field allowlist, removed update_listing_features()
+- `resilience/circuit_breaker.py` - Added extract_domain() function
+- `main.py` - Import extract_domain from resilience
+- `scraping/async_fetcher.py` - Import extract_domain from resilience
+- `docs/architecture/FILE_STRUCTURE.md` - Documented agency_store.py purpose
+- `docs/tasks/TASKS.md` - Archived Pre-Production Hardening section
+- `archive/tasks/TASKS_COMPLETED_2025-12-27.md` - Added completed tasks
+
+**Test Results**: 563 passed, 8 skipped
+
+---
+
 ### 2025-12-28 (Session 38 - Pre-Production Audit)
 
 | Task | Status |
@@ -134,20 +158,7 @@ archive/research/  archive/specs/          (code supersedes)
 
 ---
 
-### 2025-12-27 (Session 34 - Database Concurrency Analysis)
-
-| Task | Status |
-|------|--------|
-| Review codebase for database concurrency issues | ✅ Complete |
-| Read architecture docs (DESIGN_PATTERNS, CONVENTIONS) | ✅ Complete |
-| Analyze `data_store_main.py` for SQLite limitations | ✅ Complete |
-| Add Phase 4.0 Database Concurrency tasks to TASKS.md | ✅ Complete |
-
-**Summary**: Research session - no code written. Identified critical database concurrency issue: SQLite in `data_store_main.py` has no WAL mode, no timeout, no retry on BUSY errors. Added Phase 4.0 as BLOCKER before Phase 4.1.
-
----
-
-*(Sessions 34 and earlier archived to `archive/sessions/`)*
+*(Sessions 35 and earlier archived to `archive/sessions/`)*
 
 ---
 

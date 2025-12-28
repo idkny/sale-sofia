@@ -8,7 +8,6 @@ Provides true async I/O for concurrent URL fetching with:
 """
 
 import asyncio
-from urllib.parse import urlparse
 
 import httpx
 from loguru import logger
@@ -18,7 +17,7 @@ from config.settings import (
     MUBENG_PROXY,
     PROXY_TIMEOUT_SECONDS,
 )
-from resilience.circuit_breaker import get_circuit_breaker
+from resilience.circuit_breaker import extract_domain, get_circuit_breaker
 from resilience.exceptions import BlockedException, CircuitOpenException
 from resilience.rate_limiter import get_rate_limiter
 from resilience.response_validator import detect_soft_block
@@ -35,12 +34,6 @@ DEFAULT_HEADERS = {
     "Accept-Encoding": "gzip, deflate, br",
     "Connection": "keep-alive",
 }
-
-
-def _extract_domain(url: str) -> str:
-    """Extract domain from URL for rate limiting and circuit breaker."""
-    parsed = urlparse(url)
-    return parsed.netloc or parsed.path.split("/")[0]
 
 
 async def fetch_page(
@@ -66,7 +59,7 @@ async def fetch_page(
         BlockedException: If soft block detected in response
         httpx.HTTPError: On network/HTTP errors
     """
-    domain = _extract_domain(url)
+    domain = extract_domain(url)
     circuit_breaker = get_circuit_breaker()
     rate_limiter = get_rate_limiter()
 

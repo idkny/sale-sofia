@@ -470,6 +470,32 @@ def update_listing_evaluation(
     # Add any kwargs (for feature flags, etc.)
     field_map.update(kwargs)
 
+    # Allowlist of valid field names for SQL injection prevention
+    ALLOWED_UPDATE_FIELDS = {
+        # Explicit function parameters
+        "status", "decision", "decision_reason", "follow_up_actions",
+        "estimated_renovation_eur", "user_notes",
+        # User evaluation
+        "date_found", "has_legal_issues", "floor_plan_url", "building_condition_notes",
+        # Feature flags from original schema
+        "has_elevator", "has_balcony", "has_garden", "has_parking", "has_storage", "condition",
+        # Extended features
+        "has_security_entrance", "has_ac_preinstalled", "has_central_heating",
+        "has_gas_heating", "has_double_glazing", "has_security_door",
+        "has_video_intercom", "has_separate_kitchen",
+        # Furnishing
+        "is_furnished", "has_builtin_wardrobes", "has_appliances", "is_recently_renovated",
+        # Outdoor
+        "has_terrace", "has_multiple_balconies", "has_laundry_space", "has_garage",
+        # Location amenities
+        "near_park", "near_schools", "near_supermarket", "near_restaurants", "is_quiet_street",
+    }
+
+    # Validate field names before building SQL
+    for field in field_map.keys():
+        if field not in ALLOWED_UPDATE_FIELDS:
+            raise ValueError(f"Invalid field name for update: {field}")
+
     for field, value in field_map.items():
         if value is not None:
             updates.append(f"{field} = ?")
@@ -492,17 +518,6 @@ def update_listing_evaluation(
         return False
     finally:
         conn.close()
-
-
-def update_listing_features(listing_id: int, features: Dict[str, Any]) -> bool:
-    """
-    Update feature boolean flags for a listing.
-
-    Args:
-        listing_id: Listing ID
-        features: Dict of feature column names to boolean values
-    """
-    return update_listing_evaluation(listing_id, **features)
 
 
 # ============================================================

@@ -89,6 +89,7 @@ sale-sofia/
 │
 ├── data/                     # Data storage and database operations
 │   ├── data_store_main.py    # SQLite CRUD operations (listings, viewings, etc.)
+│   ├── agency_store.py       # Agency database management (future agency research/tracking)
 │   ├── db_retry.py           # @retry_on_busy() decorator for SQLite concurrency
 │   ├── change_detector.py    # Listing change detection
 │   ├── property_fingerprinter.py  # Cross-site duplicate detection

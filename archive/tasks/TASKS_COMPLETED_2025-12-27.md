@@ -16,6 +16,7 @@
 | Crawler Validation Phase 0 | 7 | Completed |
 | Scraper Resilience Phases 1-4 | 33 | Completed (153 tests) |
 | Historical Completed Work | 35+ | Completed |
+| Pre-Production Hardening Phases 1-3 | 10 | Completed (563 tests) |
 
 ---
 
@@ -387,4 +388,34 @@
 
 ---
 
-**Archived**: 2025-12-27
+## Pre-Production Hardening (P0) - COMPLETE
+
+**Research**: [pre_production_audit_2025-12-28.md](../../docs/research/pre_production_audit_2025-12-28.md)
+
+> Context: 6 AI agents audited codebase. 4 issues identified, 3 cancelled after impact analysis.
+
+### Phase 1: Confirmed Safe Change
+- [x] 1.1 Read research file `docs/research/pre_production_audit_2025-12-28.md`
+- [x] 1.2 Implement field allowlist in `update_listing_evaluation()`
+  - Added `ALLOWED_UPDATE_FIELDS` set (37 fields)
+  - Location: `data/data_store_main.py` around line 473
+- [x] 1.3 Run tests: 17 passed (concurrency), 563 passed (full suite)
+
+### Phase 2: Impact Analysis
+> Agents analyzed 6 recommendations. 3 cancelled, 3 implemented.
+
+- [x] 2.1 `_calculate_delay()` - **KEEP SEPARATE** (different signatures, prevents coupling)
+- [x] 2.2 `detect_encoding()` - **KEEP SEPARATE** (test isolation, standalone script)
+- [x] 2.3 `_extract_domain()` - **CONSOLIDATED** to `resilience/circuit_breaker.py`
+- [x] 2.4 `agency_store.py` - **KEEP** (future feature, documented in FILE_STRUCTURE.md)
+- [x] 2.5 `archive/browsers/` - **KEEP IN ARCHIVE** (already properly archived)
+- [x] 2.6 `update_listing_features()` - **REMOVED** (redundant wrapper, 0 callers)
+
+### Phase 3: Implementation
+- [x] 3.1 Consolidated `extract_domain()` to resilience/circuit_breaker.py
+- [x] 3.2 Removed `update_listing_features()` from data_store_main.py
+- [x] 3.3 Full test suite: 563 passed, 8 skipped
+
+---
+
+**Archived**: 2025-12-28

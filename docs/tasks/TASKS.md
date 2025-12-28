@@ -40,6 +40,7 @@
 | Ollama Integration (Phases 1-5, 3.6) | 45+ | Completed |
 | Crawler Validation (Phase 0) | 7 | Completed |
 | Scraper Resilience (Phases 1-4) | 33 | Completed (153 tests) |
+| Pre-Production Hardening (Phases 1-3) | 10 | Completed (563 tests) |
 | Historical Completed Work | 35+ | Completed |
 
 ---
@@ -52,15 +53,11 @@
 | 2 | Available |
 | 3 | Available |
 
+**Session 39 (2025-12-28)**: Instance 1 - Pre-Production Hardening COMPLETE. Phase 1: Added field allowlist to update_listing_evaluation(). Phase 2: Deployed 2 agents for impact analysis (3 cancelled, 3 implemented). Phase 3: Consolidated extract_domain() to resilience/, removed update_listing_features(), documented agency_store.py. 563 tests passing.
+
+**Session 38 (2025-12-28)**: Instance 1 - Pre-Production Audit. Deployed 10 agents total. Found 4 potential issues, 3 cancelled after impact analysis. Added Pre-Production Hardening tasks to TASKS.md.
+
 **Session 37 (2025-12-27)**: Instance 2 - Phase 4.2 Async Implementation COMPLETE. Created `scraping/async_fetcher.py` with httpx.AsyncClient, added `acquire_async()` to rate_limiter, made scrapers/main.py sync. 11 new tests, 563 total passing.
-
-**Session 36 (2025-12-27)**: Instance 3 - Created Spec 114: Scraper Monitoring & Observability. Researched codebase monitoring gaps, industry best practices, and designed 4-phase implementation plan (12 tasks). Spec ready for implementation.
-
-**Session 35 (2025-12-27)**: Instance 1 - Phase 4.0 Database Concurrency COMPLETE. Created db_retry.py with @retry_on_busy decorator, enabled WAL mode + timeout in get_db_connection(), applied to 7 write functions. 17 concurrency tests passing.
-
-**Session 34 (2025-12-27)**: Instance 2 - Phase 4.1 Scraping Configuration COMPLETE. Created 2-level config system (scraping_defaults.yaml + sites/*.yaml), ScrapingConfig loader with 8 dataclasses, 7 tests passing (99% coverage).
-
-**Session 33 (2025-12-27)**: Instance 2 - Phase 3.5 Cross-Site Duplicate Detection COMPLETE. Created listing_sources table, PropertyFingerprinter, PropertyMerger, price discrepancy tracking, dashboard page. 527 tests passing.
 
 **Session 33 (2025-12-27)**: Instance 1 - Phase 4 Task Consolidation. Analyzed async/parallel patterns, researched Celery best practices, consolidated "async orchestrator" + "Celery integration" into unified Phase 4 with 4 sub-phases (22 tasks).
 
@@ -238,51 +235,6 @@
 
 ---
 
-### Pre-Production Hardening (P0)
-
-**Research**: [pre_production_audit_2025-12-28.md](../research/pre_production_audit_2025-12-28.md)
-
-> **Context**: 6 AI agents audited codebase. 4 issues identified, 3 cancelled after impact analysis.
-> Only 1 change confirmed safe. Other recommendations need impact analysis before implementing.
-
-#### Phase 1: Confirmed Safe Change
-- [ ] 1.1 Read research file `docs/research/pre_production_audit_2025-12-28.md`
-- [ ] 1.2 Implement field allowlist in `update_listing_evaluation()`
-  - Add `ALLOWED_UPDATE_FIELDS` set (37 fields)
-  - Add validation loop before SQL building
-  - Location: `data/data_store_main.py` around line 460
-- [ ] 1.3 Run tests: `PYTHONPATH=. pytest tests/test_db_concurrency.py -v`
-  - Expected: 17 passed (no regression)
-
-#### Phase 2: Impact Analysis for Other Recommendations
-> Before implementing any of these, run agents to check if they're actually needed.
-
-- [ ] 2.1 **Impact analysis**: Consolidate `_calculate_delay()` duplicates
-  - Files: `resilience/retry.py:29` vs `data/db_retry.py:24`
-  - Question: Will importing from resilience break db_retry's independence?
-- [ ] 2.2 **Impact analysis**: Consolidate `detect_encoding()` duplicates
-  - Files: `websites/scrapling_base.py:51` vs `tests/scrapers/fetch_fixtures.py:42`
-  - Question: Will test imports production code correctly?
-- [ ] 2.3 **Impact analysis**: Consolidate `_extract_domain()` duplicates
-  - Files: `main.py:78` vs `scraping/async_fetcher.py:40`
-  - Question: Where should shared utility live?
-- [ ] 2.4 **Impact analysis**: Fix `get_db_connection()` in agency_store.py
-  - Files: `data/agency_store.py:20` missing WAL mode
-  - Question: Is agency_store even used? Check for callers.
-- [ ] 2.5 **Impact analysis**: Remove dead `archive/browsers/` directory
-  - Question: Any hidden dependencies? Check all imports.
-- [ ] 2.6 **Impact analysis**: Remove dead `update_listing_features()` function
-  - Question: Any callers we missed?
-
-#### Phase 3: Post-Analysis Implementation
-> Only implement after Phase 2 confirms changes are safe.
-
-- [ ] 3.1 Implement confirmed-safe consolidations
-- [ ] 3.2 Remove confirmed-safe dead code
-- [ ] 3.3 Run full test suite: `PYTHONPATH=. pytest tests/ -v`
-
----
-
 ## Related Documents
 
 - [docs/specs/](../specs/) - Active specifications
@@ -291,4 +243,4 @@
 
 ---
 
-**Last Updated**: 2025-12-28 (Added Pre-Production Hardening tasks from audit)
+**Last Updated**: 2025-12-28 (Pre-Production Hardening complete, archived)
