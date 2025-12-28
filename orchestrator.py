@@ -115,6 +115,34 @@ class Orchestrator:
                 "result_count": None,
             }
 
+    def start_site_scraping(self, site_name: str, start_urls: list) -> dict:
+        """Dispatch site scraping task."""
+        from scraping.tasks import dispatch_site_scraping
+
+        result = dispatch_site_scraping.delay(site_name, start_urls)
+        return {"task_id": result.id, "site": site_name}
+
+    def start_all_sites_scraping(self, sites_config: dict) -> dict:
+        """Dispatch all sites in parallel."""
+        from scraping.tasks import scrape_all_sites
+
+        result = scrape_all_sites.delay(sites_config)
+        return {"group_id": result.id}
+
+    def get_scraping_progress(self, job_id: str) -> dict:
+        """Get scraping job progress from Redis."""
+        from scraping.redis_keys import ScrapingKeys
+
+        r = self._get_redis_client()
+        return {
+            "job_id": job_id,
+            "status": r.get(ScrapingKeys.status(job_id)) or "UNKNOWN",
+            "total_chunks": int(r.get(ScrapingKeys.total_chunks(job_id)) or 0),
+            "completed_chunks": int(r.get(ScrapingKeys.completed_chunks(job_id)) or 0),
+            "result_count": int(r.get(ScrapingKeys.result_count(job_id)) or 0),
+            "error_count": int(r.get(ScrapingKeys.error_count(job_id)) or 0),
+        }
+
     def __enter__(self):
         """Context manager entry."""
         print("[INFO] Cleaning up stale processes...")

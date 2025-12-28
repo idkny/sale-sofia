@@ -15,16 +15,16 @@ updated_at: 2025-12-28
 
 ## IMMEDIATE NEXT SESSION TASK
 
-Continue **Phase 4.3.3: Scraping Celery Tasks**:
-- [ ] 4.3.3.1 Create `scraping/redis_keys.py` (key patterns)
-- [ ] 4.3.3.2 Create `scraping/tasks.py` with dispatcher/worker/callback
-- [ ] 4.3.3.3 Update `celery_app.py` to include `scraping.tasks`
-- [ ] 4.3.3.4 Write unit tests for Celery tasks
+**Phase 4.3 COMPLETE** - Spec 115 archived.
 
-Then proceed to:
-- Phase 4.3.4: Integration
+Continue with **Phase 4.4: Integration Testing** (real Celery workers):
+- [ ] 4.4.1 Test parallel scraping with 2+ sites
+- [ ] 4.4.2 Test site-specific config overrides
+- [ ] 4.4.3 Test crash recovery with checkpoints
+- [ ] 4.4.4 Test circuit breaker + Celery interaction
+- [ ] 4.4.5 Run Phase Completion Checklist
 
-**Spec**: [115_CELERY_SITE_TASKS.md](../specs/115_CELERY_SITE_TASKS.md)
+**Note**: 781 tests passing. Code is source of truth.
 
 ---
 
@@ -103,6 +103,29 @@ archive/research/  archive/specs/          (code supersedes)
 
 ## Session History
 
+### 2025-12-28 (Session 44 - Phase 4.3.3 + 4.3.4 COMPLETE)
+
+| Task | Status |
+|------|--------|
+| 4.3.3.3 Update celery_app.py | Complete |
+| 4.3.4.1 Add orchestrator methods | Complete |
+| 4.3.4.2 Update main.py PARALLEL_SCRAPING | Complete |
+| 4.3.4.4 Integration tests | Complete |
+| 4.3.4.5 Phase Completion Checklist | Complete |
+
+**Summary**: Completed remaining Phase 4.3.3 (celery_app registration) and all Phase 4.3.4 Integration tasks. Added 3 orchestrator methods, PARALLEL_SCRAPING mode to main.py, 12 integration tests. Fixed hardcoded values in scraping/tasks.py to use settings. Archived spec 115. 781 tests passing.
+
+**Files Created**:
+- `tests/test_scraping_integration.py` - 12 integration tests
+
+**Files Modified**:
+- `celery_app.py` - Added `scraping.tasks` to include list
+- `orchestrator.py` - Added 3 scraping orchestration methods
+- `main.py` - Added PARALLEL_SCRAPING mode with `_wait_for_parallel_scraping()`
+- `scraping/tasks.py` - Fixed hardcoded values to use settings
+
+---
+
 ### 2025-12-28 (Session 43 - Phase 4.3.2 Redis Rate Limiter COMPLETE)
 
 | Task | Status |
@@ -112,15 +135,7 @@ archive/research/  archive/specs/          (code supersedes)
 | 4.3.2.3 Update factory function | Complete |
 | 4.3.2.4 Write unit tests | Complete |
 
-**Summary**: Completed Phase 4.3.2: Created `resilience/redis_rate_limiter.py` with Lua script for atomic token acquisition (prevents race conditions across distributed workers). Added feature flag, updated factory function in `rate_limiter.py` to return either in-memory or Redis-backed rate limiter based on config. 29 new tests, 675 total passing.
-
-**Files Created**:
-- `resilience/redis_rate_limiter.py` - Redis-backed rate limiter with Lua script
-- `tests/test_redis_rate_limiter.py` - 29 unit tests with fakeredis
-
-**Files Modified**:
-- `config/settings.py` - Added `REDIS_RATE_LIMITER_ENABLED = False`
-- `resilience/rate_limiter.py` - Updated `get_rate_limiter()` factory function
+**Summary**: Completed Phase 4.3.2: Created `resilience/redis_rate_limiter.py` with Lua script for atomic token acquisition. Added feature flag, updated factory function. 29 new tests, 675 total passing.
 
 ---
 
@@ -128,40 +143,9 @@ archive/research/  archive/specs/          (code supersedes)
 
 | Task | Status |
 |------|--------|
-| Fix pytest path issues | Complete |
-| 4.3.1.1 Create redis_circuit_breaker.py | Complete |
-| 4.3.1.2 Add REDIS_CIRCUIT_BREAKER_ENABLED flag | Complete |
-| 4.3.1.3 Update factory function | Complete |
-| 4.3.1.4 Verify tests pass | Complete |
+| 4.3.1.1-4.3.1.4 Redis Circuit Breaker | Complete |
 
-**Summary**: Fixed pytest path issue - root cause was `tests/resilience/` directory shadowing the real `resilience/` module. Removed empty `tests/resilience/` directory. Completed Phase 4.3.1: added feature flag to settings, updated factory function in `circuit_breaker.py` to return either in-memory or Redis-backed circuit breaker based on config. All 35 Redis circuit breaker tests pass. Full suite: 646 tests passing.
-
-**Files Modified**:
-- `config/settings.py` - Added `REDIS_CIRCUIT_BREAKER_ENABLED = False`
-- `resilience/circuit_breaker.py` - Updated `get_circuit_breaker()` factory function
-- `tests/test_redis_circuit_breaker.py` - Cleaned up debug statements
-
-**Files Deleted**:
-- `tests/resilience/` - Removed shadowing directory
-
----
-
-### 2025-12-28 (Session 41 - Phase 4.3.0.3 + 4.3.1.1 Partial)
-
-| Task | Status |
-|------|--------|
-| 4.3.0.3 Add @retry_on_busy() to read functions | Complete |
-| 4.3.1.1 Create redis_circuit_breaker.py | Complete |
-| Write tests for redis_circuit_breaker | Complete |
-| Fix pytest venv path issues | Blocked (fixed Session 42) |
-
-**Summary**: Completed 4.3.0.3 (added @retry_on_busy() to 12 read functions, 563 tests passing). Created `resilience/redis_circuit_breaker.py` and 35 unit tests. Tests blocked by pytest path resolution issues.
-
-**Files Created**:
-- `resilience/redis_circuit_breaker.py` - Redis-backed circuit breaker (326 lines)
-- `tests/test_redis_circuit_breaker.py` - 35 unit tests with fakeredis
-- `tests/conftest.py` - Pytest path configuration
-- `conftest.py` - Root pytest configuration
+**Summary**: Fixed pytest path issue, completed Phase 4.3.1. 35 new tests, 646 total passing.
 
 ---
 

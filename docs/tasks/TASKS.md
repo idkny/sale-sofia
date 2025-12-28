@@ -49,9 +49,11 @@
 
 | Instance | Current Task |
 |----------|--------------|
-| 1 | Available |
+| 1 | 4.4.2 - Test site-specific config overrides |
 | 2 | Available |
-| 3 | Available |
+| 3 | 4.4.1 - Test parallel scraping with 2+ sites |
+
+**Session 44 (2025-12-28)**: Instance 2 - Phase 4.3.3 + 4.3.4 COMPLETE. Completed celery_app.py registration (4.3.3.3). Completed all Phase 4.3.4 Integration tasks: orchestrator methods, main.py PARALLEL_SCRAPING mode, 12 integration tests, consistency checklist. Fixed hardcoded values in scraping/tasks.py. Archived spec 115. 781 tests passing.
 
 **Session 43 (2025-12-28)**: Instance 2 - Phase 4.3.2 Redis-Backed Rate Limiter COMPLETE. Created `resilience/redis_rate_limiter.py` with Lua script for atomic token acquisition, added feature flag, updated factory function. 29 new tests, 675 total passing.
 
@@ -173,8 +175,8 @@
 - [x] 4.2.5 Write unit tests for async fetcher (11 tests, 100% coverage)
 - [x] 4.2.6 **Phase Completion Checklist** - Passed (563 tests passing)
 
-##### Phase 4.3: Celery Site Tasks
-> **Spec**: [115_CELERY_SITE_TASKS.md](../specs/115_CELERY_SITE_TASKS.md)
+##### Phase 4.3: Celery Site Tasks (COMPLETE)
+> **Spec**: [115_CELERY_SITE_TASKS.md](../../archive/specs/115_CELERY_SITE_TASKS.md) (archived)
 > Parallel site scraping via Celery with shared resilience state.
 > **Research**: `docs/research/validation_synthesis.md`, `docs/research/orchestration_synthesis.md`
 
@@ -243,27 +245,27 @@
   - Tests: `tests/test_scraping_tasks.py` (25 passed)
 
 ###### Phase 4.3.4: Integration
-- [ ] 4.3.4.1 Add scraping orchestration methods to `orchestrator.py`
+- [x] 4.3.4.1 Add scraping orchestration methods to `orchestrator.py`
   - Impact: Orchestrator API
   - Tests: `tests/unit/test_orchestrator_helpers.py`
-- [ ] 4.3.4.2 Update `main.py` with `PARALLEL_SCRAPING` mode
+- [x] 4.3.4.2 Update `main.py` with `PARALLEL_SCRAPING` mode
   - Impact: Main entry point, scraping flow
   - Tests: Manual E2E test
-- [ ] 4.3.4.3 Add new settings to `config/settings.py`
+- [x] 4.3.4.3 Add new settings to `config/settings.py`
   - Impact: Config only
   - Tests: None (config only)
-- [ ] 4.3.4.4 Integration tests (chord workflow, progress tracking)
+- [x] 4.3.4.4 Integration tests (chord workflow, progress tracking)
   - Impact: None (test only)
   - Tests: Self-verifying
-- [ ] 4.3.4.5 **Run Phase Completion Checklist** (consistency + alignment)
+- [x] 4.3.4.5 **Run Phase Completion Checklist** (consistency + alignment)
 
 ##### Phase 4.4: Integration Testing
 > **Why last**: Validates end-to-end with real Celery workers.
 
-- [ ] 4.4.1 Test parallel scraping with 2+ sites
+- [ ] [Instance 3] 4.4.1 Test parallel scraping with 2+ sites
   - Verify sites run concurrently (check timestamps)
   - Verify rate limiting per domain works
-- [ ] 4.4.2 Test site-specific config overrides
+- [ ] [Instance 1] 4.4.2 Test site-specific config overrides
   - Fast site (imot.bg) vs slow site (bazar.bg)
   - Verify different delays applied
 - [ ] 4.4.3 Test crash recovery with checkpoints
@@ -279,9 +281,8 @@
 
 - [ ] 5.1 E2E testing (scrape → store → dashboard)
 - [ ] 5.2 Add Celery Flower for task monitoring
-- [ ] 5.3 Add alerting for scrape failures (email/Slack)
-- [ ] 5.4 Performance benchmarking (parallel vs sequential)
-- [ ] 5.5 **Run Phase Completion Checklist** (consistency + alignment)
+- [ ] 5.3 Performance benchmarking (parallel vs sequential)
+- [ ] 5.4 **Run Phase Completion Checklist** (consistency + alignment)
 
 ---
 

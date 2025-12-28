@@ -205,3 +205,21 @@ SCRAPER_ALERT_THRESHOLDS = {
 # Report retention
 SCRAPER_REPORTS_RETENTION_DAYS = 30
 SCRAPER_REPORTS_DIR = "data/reports"
+
+# =============================================================================
+# CELERY SITE TASKS SETTINGS
+# =============================================================================
+# Used in: scraping/tasks.py, main.py
+# Spec: 115_CELERY_SITE_TASKS.md
+
+# Feature flag for parallel scraping via Celery
+# When True: sites scraped in parallel via Celery workers
+# When False: sequential scraping (current behavior)
+PARALLEL_SCRAPING_ENABLED = False
+
+# Number of URLs per worker task chunk
+SCRAPING_CHUNK_SIZE = 25
+
+# Celery task time limits (seconds)
+SCRAPING_SOFT_TIME_LIMIT = 600   # 10 min - task receives SoftTimeLimitExceeded
+SCRAPING_HARD_TIME_LIMIT = 720   # 12 min - task forcefully terminated

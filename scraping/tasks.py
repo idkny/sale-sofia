@@ -10,6 +10,11 @@ import redis
 from celery import chord, group
 
 from celery_app import celery_app
+from config.settings import (
+    SCRAPING_CHUNK_SIZE,
+    SCRAPING_HARD_TIME_LIMIT,
+    SCRAPING_SOFT_TIME_LIMIT,
+)
 from scraping.redis_keys import ScrapingKeys
 
 logger = logging.getLogger(__name__)
@@ -86,7 +91,7 @@ def dispatch_site_scraping(self, site_name: str, start_urls: list) -> dict:
     # Phase 2: Split into chunks
     chunk_size = config.concurrency.max_per_domain * 10  # ~20 URLs per chunk
     if chunk_size < 10:
-        chunk_size = 25  # fallback
+        chunk_size = SCRAPING_CHUNK_SIZE  # fallback
     chunks = [
         all_listing_urls[i : i + chunk_size]
         for i in range(0, len(all_listing_urls), chunk_size)
@@ -120,8 +125,8 @@ def dispatch_site_scraping(self, site_name: str, start_urls: list) -> dict:
 
 @celery_app.task(
     bind=True,
-    soft_time_limit=600,  # 10 min soft limit
-    time_limit=720,  # 12 min hard limit
+    soft_time_limit=SCRAPING_SOFT_TIME_LIMIT,
+    time_limit=SCRAPING_HARD_TIME_LIMIT,
     max_retries=2,
     default_retry_delay=30,
 )

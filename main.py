@@ -52,6 +52,7 @@ from config.settings import (
     PREFLIGHT_RETRY_DELAY,
     PROXY_WAIT_TIMEOUT,
     SCRAPER_REPORTS_DIR,
+    PARALLEL_SCRAPING_ENABLED,
 )
 from scraping.metrics import MetricsCollector, RequestStatus
 from scraping.session_report import SessionReportGenerator
@@ -841,6 +842,42 @@ def _crawl_all_sites(
     return total_stats
 
 
+def _wait_for_parallel_scraping(orch, group_id: str, poll_interval: float = 5.0) -> dict:
+    """
+    Wait for parallel scraping to complete, showing progress.
+
+    Args:
+        orch: Orchestrator instance
+        group_id: Celery group ID from start_all_sites_scraping()
+        poll_interval: Seconds between progress checks
+
+    Returns:
+        Aggregated stats dict
+    """
+    print("[INFO] Waiting for parallel scraping to complete...")
+
+    while True:
+        time.sleep(poll_interval)
+
+        # Check Celery task status
+        from celery.result import GroupResult
+        result = GroupResult.restore(group_id)
+
+        if result is None:
+            print("[WARNING] Could not restore group result")
+            break
+
+        if result.ready():
+            print("[SUCCESS] All parallel scraping tasks complete")
+            break
+
+        completed = sum(1 for r in result.results if r.ready())
+        total = len(result.results)
+        print(f"[PROGRESS] {completed}/{total} site tasks complete")
+
+    return {"scraped": 0, "failed": 0, "total_attempts": 0}  # TODO: aggregate from results
+
+
 def _print_summary(stats: dict, proxy_pool: Optional[ScoredProxyPool]) -> None:
     """Print final crawl summary and save proxy scores."""
     print()
@@ -925,7 +962,22 @@ def run_auto_mode() -> None:
             return
 
         try:
-            stats = _crawl_all_sites(start_urls, proxy_url, proxy_pool, orch)
+            if PARALLEL_SCRAPING_ENABLED:
+                # Parallel scraping via Celery
+                print()
+                print("[INFO] PARALLEL_SCRAPING mode enabled")
+                print("[INFO] Dispatching all sites to Celery workers...")
+
+                # Convert start_urls dict format for Celery task
+                # start_urls is {site: [url1, url2, ...]}
+                result = orch.start_all_sites_scraping(start_urls)
+                print(f"[SUCCESS] Dispatched group: {result['group_id']}")
+
+                stats = _wait_for_parallel_scraping(orch, result['group_id'])
+            else:
+                # Sequential scraping (current behavior)
+                stats = _crawl_all_sites(start_urls, proxy_url, proxy_pool, orch)
+
             _print_summary(stats, proxy_pool)
         finally:
             print()

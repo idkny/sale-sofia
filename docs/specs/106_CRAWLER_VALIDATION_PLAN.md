@@ -988,7 +988,7 @@ def scrape_property(self, site: str, url: str):
 | Day | Task | Deliverable |
 |-----|------|-------------|
 | 1-2 | Add homes.bg scraper | Third site working |
-| 2-3 | Add monitoring/alerting | Dashboards, alerts |
+| 2-3 | Add monitoring | Dashboards |
 | 3-4 | Documentation | Runbooks, troubleshooting |
 | 4-5 | Production deploy | Running in production |
 
@@ -998,7 +998,7 @@ def scrape_property(self, site: str, url: str):
 
 | Risk | Impact | Mitigation |
 |------|--------|------------|
-| Site structure changes | Scraper breaks | Monitor extraction success rate, alert on drops |
+| Site structure changes | Scraper breaks | Monitor extraction success rate in dashboard |
 | IP blocking | Can't scrape | Proxy rotation (already have mubeng) |
 | Rate limit too aggressive | Miss data | Start conservative, tune up gradually |
 | Description extraction low accuracy | Missing data | LLM fallback, manual review for high-value |
