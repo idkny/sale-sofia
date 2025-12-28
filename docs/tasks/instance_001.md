@@ -79,6 +79,26 @@ archive/research/  archive/specs/          (code supersedes)
 
 ## Session History
 
+### 2025-12-28 (Session 44 - Phase 4.3.3 Scraping Celery Tasks)
+
+| Task | Status |
+|------|--------|
+| 4.3.3.1 Create `scraping/redis_keys.py` | ✅ Complete |
+| 4.3.3.2 Create `scraping/tasks.py` | ✅ Complete |
+| 4.3.3.4 Write unit tests for Celery tasks | ✅ Complete |
+
+**Summary**: Implemented Phase 4.3.3 Scraping Celery Tasks (3 of 4 tasks). Created `scraping/redis_keys.py` with ScrapingKeys class (8 key patterns, 22 tests). Created `scraping/tasks.py` with dispatcher/worker/callback pattern for parallel site scraping (25 tests). Task 4.3.3.3 (celery_app.py update) remains.
+
+**Files Created**:
+- `scraping/redis_keys.py` - ScrapingKeys class with Redis key patterns
+- `scraping/tasks.py` - dispatch_site_scraping, scrape_chunk, aggregate_results, scrape_all_sites
+- `tests/test_redis_keys.py` - 22 tests
+- `tests/test_scraping_tasks.py` - 25 tests
+
+**Test Results**: 769 passed, 8 skipped
+
+---
+
 ### 2025-12-28 (Session 41 - Scraper Monitoring Phase 2 Integration)
 
 | Task | Status |
@@ -118,31 +138,7 @@ archive/research/  archive/specs/          (code supersedes)
 
 ---
 
-### 2025-12-28 (Session 39 - Pre-Production Hardening Implementation)
-
-| Task | Status |
-|------|--------|
-| Phase 1: Add field allowlist to update_listing_evaluation() | ✅ Complete |
-| Phase 2: Deploy impact analysis agents (6 items) | ✅ Complete |
-| Phase 3: Implement confirmed-safe changes | ✅ Complete |
-| Archive completed tasks to TASKS_COMPLETED | ✅ Complete |
-
-**Summary**: Implemented Pre-Production Hardening. Phase 1: Added ALLOWED_UPDATE_FIELDS (37 fields) for SQL injection prevention. Phase 2: Deployed 2 agents - analyzed 6 recommendations, cancelled 3 (keep duplicates separate), implemented 3. Phase 3: Consolidated extract_domain() to resilience/, removed update_listing_features(), documented agency_store.py in FILE_STRUCTURE.md.
-
-**Files Modified**:
-- `data/data_store_main.py` - Added field allowlist, removed update_listing_features()
-- `resilience/circuit_breaker.py` - Added extract_domain() function
-- `main.py` - Import extract_domain from resilience
-- `scraping/async_fetcher.py` - Import extract_domain from resilience
-- `docs/architecture/FILE_STRUCTURE.md` - Documented agency_store.py purpose
-- `docs/tasks/TASKS.md` - Archived Pre-Production Hardening section
-- `archive/tasks/TASKS_COMPLETED_2025-12-27.md` - Added completed tasks
-
-**Test Results**: 563 passed, 8 skipped
-
----
-
-*(Sessions 38 and earlier archived to `archive/sessions/`)*
+*(Sessions 39 and earlier archived to `archive/sessions/`)*
 
 ---
 

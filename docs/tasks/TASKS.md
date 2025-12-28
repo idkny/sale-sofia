@@ -235,7 +235,7 @@
 - [x] 4.3.3.2 Create `scraping/tasks.py` with dispatcher/worker/callback
   - Impact: New file, no existing code affected
   - Tests: `tests/test_scraping_tasks.py` (25 passed)
-- [ ] 4.3.3.3 Update `celery_app.py` to include `scraping.tasks`
+- [x] 4.3.3.3 Update `celery_app.py` to include `scraping.tasks`
   - Impact: Celery task registration
   - Tests: `tests/proxies/test_celery_tasks.py`
 - [x] 4.3.3.4 Write unit tests for Celery tasks

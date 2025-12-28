@@ -26,7 +26,7 @@ celery_app = Celery(
     "sale_sofia",
     broker=BROKER_URL,
     backend=RESULT_BACKEND,
-    include=["proxies.tasks"],  # Auto-discover tasks
+    include=["proxies.tasks", "scraping.tasks"],  # Auto-discover tasks
 )
 
 # Celery configuration
