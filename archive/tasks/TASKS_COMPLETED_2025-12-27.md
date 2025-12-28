@@ -140,7 +140,7 @@
 
 ## Debugging: Celery + Mubeng + PSC Integration (P1) - COMPLETE
 
-**Spec**: [101_DEBUG_CELERY_MUBENG_PROXIES.md](../../docs/specs/101_DEBUG_CELERY_MUBENG_PROXIES.md)
+**Spec**: [101_DEBUG_CELERY_MUBENG_PROXIES.md](../specs/101_DEBUG_CELERY_MUBENG_PROXIES.md)
 
 ### Phase 1: Isolated Component Tests (2025-12-25 - ALL PASSED)
 - [x] Test 1.1: Redis connectivity - v7.0.15, standalone mode
@@ -163,7 +163,7 @@
 
 ## Page Change Detection (P2) - Phases 1-3 COMPLETE
 
-**Spec**: [111_PAGE_CHANGE_DETECTION.md](../../docs/specs/111_PAGE_CHANGE_DETECTION.md)
+**Spec**: [111_PAGE_CHANGE_DETECTION.md](../specs/111_PAGE_CHANGE_DETECTION.md)
 
 ### Phase 1: Basic Hash Detection
 - [x] Add DB columns via migration (content_hash, last_change_at, change_count, price_history, consecutive_unchanged)
@@ -184,7 +184,7 @@
 
 ## Ollama Integration (P1) - Phases 1-5 COMPLETE
 
-**Spec**: [107_OLLAMA_INTEGRATION.md](../../docs/specs/107_OLLAMA_INTEGRATION.md)
+**Spec**: [107_OLLAMA_INTEGRATION.md](../specs/107_OLLAMA_INTEGRATION.md)
 
 ### Phase 1: Foundation + Health Check
 - [x] Update manifest.json and FILE_STRUCTURE.md for `llm/` folder
@@ -209,7 +209,7 @@
 - [x] Test: Extract from 5 descriptions - **78% extraction** (7/9 fields avg)
 
 ### Phase 3.5: Prompt Accuracy Improvements
-**Spec**: [108_OLLAMA_PROMPT_IMPROVEMENTS.md](../../docs/specs/108_OLLAMA_PROMPT_IMPROVEMENTS.md)
+**Spec**: [108_OLLAMA_PROMPT_IMPROVEMENTS.md](../specs/108_OLLAMA_PROMPT_IMPROVEMENTS.md)
 
 #### Research (Complete)
 - [x] Investigate why model returns Bulgarian despite English prompt constraints
@@ -225,7 +225,7 @@
 - [x] Keep `_translate_values()` as safety fallback
 
 ### Phase 3.6: Achieve 95%+ Extraction Accuracy (P1)
-**Spec**: [110_DYNAMIC_BULGARIAN_DICTIONARY.md](../../docs/specs/110_DYNAMIC_BULGARIAN_DICTIONARY.md)
+**Spec**: [110_DYNAMIC_BULGARIAN_DICTIONARY.md](../specs/110_DYNAMIC_BULGARIAN_DICTIONARY.md)
 **Result**: 97.4% accuracy achieved (Session 9, 2025-12-26)
 
 #### Research (Complete - 2025-12-26)

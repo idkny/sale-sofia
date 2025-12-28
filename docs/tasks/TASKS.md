@@ -53,6 +53,8 @@
 | 2 | Available |
 | 3 | Available |
 
+**Session 39 (2025-12-28)**: Instance 2 - Orchestration Validation. Launched 6 architect-review agents to validate all modules for Celery correctness. Found 3 critical issues, 3 modules need Redis backing. Created 7 validation docs. Added BLOCKING task for next session.
+
 **Session 39 (2025-12-28)**: Instance 1 - Pre-Production Hardening COMPLETE. Phase 1: Added field allowlist to update_listing_evaluation(). Phase 2: Deployed 2 agents for impact analysis (3 cancelled, 3 implemented). Phase 3: Consolidated extract_domain() to resilience/, removed update_listing_features(), documented agency_store.py. 563 tests passing.
 
 **Session 38 (2025-12-28)**: Instance 1 - Pre-Production Audit. Deployed 10 agents total. Found 4 potential issues, 3 cancelled after impact analysis. Added Pre-Production Hardening tasks to TASKS.md.
@@ -80,6 +82,19 @@
 
 ## Pending Tasks
 
+### Orchestration Research Review (P0) - COMPLETE
+
+> **UNBLOCKED** - Spec 115 written, Phase 4.3 tasks updated
+
+**Completed** (Session 40):
+- [x] Review 7 validation documents
+- [x] Write spec for Phase 4.3 based on validation findings → [115_CELERY_SITE_TASKS.md](../specs/115_CELERY_SITE_TASKS.md)
+- [x] Update Phase 4.3 tasks (added pre-requisites)
+
+**Research archived**: `docs/research/orchestration_*.md`, `docs/research/validation_*.md`
+
+---
+
 ### Crawler Validation & Enhancement (P1)
 
 **Spec**: [106_CRAWLER_VALIDATION_PLAN.md](../specs/106_CRAWLER_VALIDATION_PLAN.md)
@@ -91,7 +106,7 @@
 - [x] Create test harness (`tests/scrapers/`) - 46 tests, 46 passing
 - [x] Validate imot.bg scraper (pagination, extraction, save) - 23/23 tests passing
 - [x] Validate bazar.bg scraper (pagination, extraction, save) - 23/23 tests passing
-- [x] Create validation matrix - [106A_CRAWLER_VALIDATION_MATRIX.md](../specs/106A_CRAWLER_VALIDATION_MATRIX.md)
+- [x] Create validation matrix - [106A_CRAWLER_VALIDATION_MATRIX.md](../../archive/specs/106A_CRAWLER_VALIDATION_MATRIX.md)
 - [x] **Phase Completion Checklist** - Passed (no hardcoded values, spec aligned)
 
 #### Phase 3: Change Detection & History (COMPLETE)
@@ -104,7 +119,7 @@
 - [x] **Phase Completion Checklist** - Passed (no hardcoded values, spec aligned)
 
 #### Phase 3.5: Cross-Site Duplicate Detection & Merging (COMPLETE)
-> **Spec**: [106B_CROSS_SITE_DEDUPLICATION.md](../specs/106B_CROSS_SITE_DEDUPLICATION.md)
+> **Spec**: [106B_CROSS_SITE_DEDUPLICATION.md](../../archive/specs/106B_CROSS_SITE_DEDUPLICATION.md)
 > Files: `data/property_fingerprinter.py`, `data/property_merger.py`, `app/pages/4_Cross_Site.py`
 
 - [x] Create `listing_sources` table (track which sites list property)
@@ -153,30 +168,88 @@
 - [x] 4.2.6 **Phase Completion Checklist** - Passed (563 tests passing)
 
 ##### Phase 4.3: Celery Site Tasks
-> **Why third**: Uses settings from 4.1 and async from 4.2.
-> One Celery task per site, internal async for concurrent URL fetching.
->
-> **Recommended**: Do Spec 114 Phase 1-2 (Core Metrics + Integration) BEFORE Phase 4.3.
-> Reason: Having metrics/visibility helps debug Celery issues. Without monitoring, you're debugging blind.
-> See: `docs/research/orchestration_research_prompt.md` for deep-dive research context.
+> **Spec**: [115_CELERY_SITE_TASKS.md](../specs/115_CELERY_SITE_TASKS.md)
+> Parallel site scraping via Celery with shared resilience state.
+> **Research**: `docs/research/validation_synthesis.md`, `docs/research/orchestration_synthesis.md`
 
-- [ ] 4.3.1 Create `scraping/tasks.py` with site scraping task
-  - `@celery_app.task def scrape_site_task(site, start_urls)`
-  - Loads config via `load_scraping_config(site)`
-  - Uses `asyncio.run()` internally for concurrent fetching
-  - Checkpoint integration for crash recovery
-- [ ] 4.3.2 Update `celery_app.py` to include scraping tasks
-  - Add `scraping.tasks` to `include` list
-  - Configure task timeouts based on site config
-- [ ] 4.3.3 Update `main.py` to submit Celery group
-  - Replace sequential `for site in start_urls` loop
-  - Use `group([scrape_site_task.s(site, urls) for site, urls in ...])`
-  - Wait for group completion with progress display
-- [ ] 4.3.4 Add task retry logic with exponential backoff
-  - `@celery_app.task(bind=True, max_retries=3)`
-  - Use existing `resilience/` patterns
-- [ ] 4.3.5 Write unit tests for Celery tasks (mock async)
-- [ ] 4.3.6 **Run Phase Completion Checklist** (consistency + alignment)
+**BEFORE EACH TASK** (mandatory):
+1. **Impact Analysis**: Review how the change affects the project (callers, dependencies, side effects)
+2. **Test Identification**: Identify which tests to run before/after to verify no regressions
+3. **Implementation**: Make the change
+4. **Verification**: Run identified tests, confirm no new bugs introduced
+
+###### Phase 4.3.0: Pre-requisites (Critical Fixes)
+> Must complete before any Celery work. Found by validation agents.
+
+- [ ] 4.3.0.1 Fix timeout forwarding in `orchestrator.py:522`
+  - Impact: `wait_for_proxies()` callers, `main.py:508`
+  - Tests: `tests/unit/test_orchestrator_helpers.py`
+- [ ] 4.3.0.2 Move DB init out of module-level in `data_store_main.py`
+  - Impact: All imports of `data_store_main`, worker startup
+  - Tests: `tests/test_db_concurrency.py`, `tests/data/`
+- [ ] 4.3.0.3 Add `@retry_on_busy()` to read functions in `data_store_main.py`
+  - Impact: All `get_*` function callers
+  - Tests: `tests/test_db_concurrency.py`, `tests/data/`
+- [ ] 4.3.0.4 Increase `SQLITE_BUSY_RETRIES` from 3 to 5
+  - Impact: All `@retry_on_busy()` decorated functions
+  - Tests: `tests/test_db_concurrency.py`
+
+###### Phase 4.3.1: Redis-Backed Circuit Breaker
+- [ ] 4.3.1.1 Create `resilience/redis_circuit_breaker.py`
+  - Impact: New file, no existing code affected
+  - Tests: New tests to create
+- [ ] 4.3.1.2 Add `REDIS_CIRCUIT_BREAKER_ENABLED` feature flag
+  - Impact: `config/settings.py` only
+  - Tests: None (config only)
+- [ ] 4.3.1.3 Update `resilience/__init__.py` factory function
+  - Impact: All `get_circuit_breaker()` callers
+  - Tests: `tests/resilience/`
+- [ ] 4.3.1.4 Write unit tests for Redis circuit breaker
+  - Impact: None (test only)
+  - Tests: Self-verifying
+
+###### Phase 4.3.2: Redis-Backed Rate Limiter
+- [ ] 4.3.2.1 Create `resilience/redis_rate_limiter.py` (Lua script for atomicity)
+  - Impact: New file, no existing code affected
+  - Tests: New tests to create
+- [ ] 4.3.2.2 Add `REDIS_RATE_LIMITER_ENABLED` feature flag
+  - Impact: `config/settings.py` only
+  - Tests: None (config only)
+- [ ] 4.3.2.3 Update factory function in `resilience/__init__.py`
+  - Impact: All `get_rate_limiter()` callers
+  - Tests: `tests/resilience/`
+- [ ] 4.3.2.4 Write unit tests for Redis rate limiter
+  - Impact: None (test only)
+  - Tests: Self-verifying
+
+###### Phase 4.3.3: Scraping Celery Tasks
+- [ ] 4.3.3.1 Create `scraping/redis_keys.py` (key patterns)
+  - Impact: New file, no existing code affected
+  - Tests: New tests to create
+- [ ] 4.3.3.2 Create `scraping/tasks.py` with dispatcher/worker/callback
+  - Impact: New file, no existing code affected
+  - Tests: New tests to create
+- [ ] 4.3.3.3 Update `celery_app.py` to include `scraping.tasks`
+  - Impact: Celery task registration
+  - Tests: `tests/proxies/test_celery_tasks.py`
+- [ ] 4.3.3.4 Write unit tests for Celery tasks
+  - Impact: None (test only)
+  - Tests: Self-verifying
+
+###### Phase 4.3.4: Integration
+- [ ] 4.3.4.1 Add scraping orchestration methods to `orchestrator.py`
+  - Impact: Orchestrator API
+  - Tests: `tests/unit/test_orchestrator_helpers.py`
+- [ ] 4.3.4.2 Update `main.py` with `PARALLEL_SCRAPING` mode
+  - Impact: Main entry point, scraping flow
+  - Tests: Manual E2E test
+- [ ] 4.3.4.3 Add new settings to `config/settings.py`
+  - Impact: Config only
+  - Tests: None (config only)
+- [ ] 4.3.4.4 Integration tests (chord workflow, progress tracking)
+  - Impact: None (test only)
+  - Tests: Self-verifying
+- [ ] 4.3.4.5 **Run Phase Completion Checklist** (consistency + alignment)
 
 ##### Phase 4.4: Integration Testing
 > **Why last**: Validates end-to-end with real Celery workers.

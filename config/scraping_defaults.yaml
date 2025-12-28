@@ -48,6 +48,6 @@ anti_detection:
 
 # --- Behavior ---
 behavior:
-  respect_robots_txt: true    # Honor robots.txt
+  respect_robots_txt: false   # Honor robots.txt
   follow_crawl_delay: true    # Honor Crawl-Delay directive
   cookies_enabled: true       # Enable cookie handling

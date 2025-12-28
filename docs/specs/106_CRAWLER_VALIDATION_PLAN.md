@@ -285,7 +285,7 @@ async def extract_from_description(description: str) -> dict:
 
 **Goal**: Verify each scraper can complete the full crawl cycle.
 
-> **Status**: COMPLETE. Test harness created (`tests/scrapers/`). 46 tests, all passing. Validation matrix documented in [106A_CRAWLER_VALIDATION_MATRIX.md](106A_CRAWLER_VALIDATION_MATRIX.md).
+> **Status**: COMPLETE. Test harness created (`tests/scrapers/`). 46 tests, all passing. Validation matrix documented in [106A_CRAWLER_VALIDATION_MATRIX.md](../../archive/specs/106A_CRAWLER_VALIDATION_MATRIX.md).
 
 ### 1.1 Create Test Harness
 

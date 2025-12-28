@@ -4,12 +4,71 @@ type: session_file
 project: sale-sofia
 instance: 2
 created_at: 2025-12-24
-updated_at: 2025-12-27
+updated_at: 2025-12-28
 ---
 
 # Instance 2 Session
 
 **You are Instance 2.** Work independently.
+
+---
+
+## IMMEDIATE NEXT SESSION TASK
+
+**BLOCKING TASK**: Review orchestration research and write Phase 4.3 spec.
+
+### What Happened This Session (Session 39)
+
+1. Read `docs/research/orchestration_research_prompt.md` - guidance for Phase 4.3 research
+2. Previous session had already launched research agents (8 docs in `docs/research/orchestration_*.md`)
+3. This session launched **6 validation agents** to audit module correctness (not just describe how they work)
+4. All 6 agents completed and findings were synthesized into 7 documents
+
+### Documents Created This Session
+
+| File | Content |
+|------|---------|
+| `docs/research/validation_scraping.md` | Scraping module ready for Celery wrapping |
+| `docs/research/validation_resilience.md` | Circuit breaker/rate limiter BROKEN for distributed |
+| `docs/research/validation_data.md` | SQLite race conditions, fix before 10+ workers |
+| `docs/research/validation_proxies.md` | Celery patterns CORRECT, template for 4.3 |
+| `docs/research/validation_orchestrator.md` | One timeout bug, needs site registry |
+| `docs/research/validation_llm.md` | No rate limiting, needs semaphore |
+| `docs/research/validation_synthesis.md` | **READ THIS FIRST** - consolidated findings |
+
+### Critical Issues Found
+
+1. **`orchestrator.py:522`** - timeout not forwarded to `wait_for_refresh_completion()`
+   - Can cause infinite loop in Redis polling fallback
+   - Fix: Add `timeout=timeout` parameter
+
+2. **`data_store_main.py:1316-1320`** - module-level init race condition
+   - 10 workers run `init_db()` simultaneously on import
+   - Fix: Move to explicit startup script with file lock
+
+3. **Read functions unprotected** - all `get_*` functions in data_store_main.py
+   - No `@retry_on_busy()` decorator
+   - Can fail during write contention
+
+### Modules Needing Redis Backing
+
+| Module | Current State | Problem |
+|--------|---------------|---------|
+| Circuit Breaker | In-memory singleton | Worker A blocks domain, Worker B doesn't know |
+| Rate Limiter | In-memory singleton | 4 workers x 10 req/min = 40 req/min |
+| LLM | No rate limiting | 10 workers flood Ollama |
+
+### Next Session TODO
+
+1. **Read `docs/research/validation_synthesis.md`** - has full implementation roadmap
+2. **Review other 6 validation docs** for details
+3. **Write Phase 4.3 spec** based on findings:
+   - Include critical fixes as pre-requisites
+   - Define scraping/tasks.py structure (copy from proxies/tasks.py)
+   - Define Redis backing approach for resilience module
+   - Define LLM rate limiting approach
+4. **Update TASKS.md** Phase 4.3 tasks if needed
+5. **Unblock other tasks** once complete
 
 ---
 
@@ -88,6 +147,36 @@ archive/research/  archive/specs/          (code supersedes)
 
 ## Session History
 
+### 2025-12-28 (Session 39 - Orchestration Validation)
+
+| Task | Status |
+|------|--------|
+| Launch 6 validation agents | Complete |
+| Validate Scraping Module | Complete |
+| Validate Resilience Module | Complete |
+| Validate Data Module | Complete |
+| Validate Proxy/Celery Patterns | Complete |
+| Validate Orchestrator | Complete |
+| Validate LLM Integration | Complete |
+| Synthesize validation findings | Complete |
+
+**Summary**: Launched 6 architect-review agents to validate module correctness (not just describe). Found 3 critical issues and 3 modules needing Redis backing. Created 7 validation documents. Added BLOCKING task to TASKS.md for next session.
+
+**Files Created**:
+- `docs/research/validation_scraping.md`
+- `docs/research/validation_resilience.md`
+- `docs/research/validation_data.md`
+- `docs/research/validation_proxies.md`
+- `docs/research/validation_orchestrator.md`
+- `docs/research/validation_llm.md`
+- `docs/research/validation_synthesis.md`
+
+**Files Modified**:
+- `docs/tasks/TASKS.md` - Added BLOCKING task for research review
+- `docs/tasks/instance_002.md` - Updated for session continuity
+
+---
+
 ### 2025-12-27 (Session 37 - Phase 4.2 Async Implementation)
 
 | Task | Status |
@@ -100,22 +189,6 @@ archive/research/  archive/specs/          (code supersedes)
 | Run Phase Completion Checklist | Complete |
 
 **Summary**: Implemented Phase 4.2 Async Implementation. Fixed fake async patterns, created true async fetcher with httpx.AsyncClient for future Celery integration. 563 tests passing.
-
-**Files Created**:
-- `scraping/__init__.py` - module exports
-- `scraping/async_fetcher.py` - async HTTP fetcher with circuit breaker, rate limiting
-- `tests/test_async_fetcher.py` - 11 tests (100% coverage)
-
-**Files Modified**:
-- `resilience/rate_limiter.py` - added `acquire_async()` method
-- `websites/base_scraper.py` - `async def` → `def` for extract methods
-- `websites/imot_bg/imot_scraper.py` - removed async from extract methods
-- `websites/bazar_bg/bazar_scraper.py` - removed async from extract methods
-- `main.py` - removed asyncio.run(), made scrape functions sync
-- `config/settings.py` - added `ASYNC_FETCHER_MAX_CONCURRENT`
-- `tests/scrapers/test_imot_bg.py` - removed await from tests
-- `tests/scrapers/test_bazar_bg.py` - removed await from tests
-- `tests/test_bazar.py` - removed async pattern
 
 ---
 
@@ -135,21 +208,6 @@ archive/research/  archive/specs/          (code supersedes)
 | Archive spec 113 | Complete |
 
 **Summary**: Implemented Phase 4.1 Scraping Configuration. Created 2-level config system (global defaults + per-site overrides) based on Scrapy/Colly/Crawlee best practices. Integrated into main.py, removed old settings. 37 tests passing.
-
----
-
-### 2025-12-27 (Session 33 - Phase 3.5 Cross-Site Duplicate Detection)
-
-| Task | Status |
-|------|--------|
-| Create spec 106B | Complete |
-| Create `listing_sources` table | Complete |
-| Build `PropertyFingerprinter` class | Complete |
-| Build `PropertyMerger` class | Complete |
-| Track price discrepancies across sites | Complete |
-| Add cross-site comparison dashboard page | Complete |
-
-**Summary**: Implemented Phase 3.5 Cross-Site Duplicate Detection. Created fingerprinting system to identify same property across imot.bg and bazar.bg. Added price discrepancy tracking and dashboard comparison view.
 
 ---
 
