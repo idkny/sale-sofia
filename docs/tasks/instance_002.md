@@ -105,6 +105,34 @@ archive/research/  archive/specs/          (code supersedes)
 
 ## Session History
 
+### 2025-12-28 (Session 41 - Phase 4.3.0.3 + 4.3.1.1 Partial)
+
+| Task | Status |
+|------|--------|
+| 4.3.0.3 Add @retry_on_busy() to read functions | Complete |
+| 4.3.1.1 Create redis_circuit_breaker.py | Partial |
+| Write tests for redis_circuit_breaker | Partial |
+| Fix pytest venv path issues | Blocked |
+
+**Summary**: Completed 4.3.0.3 (added @retry_on_busy() to 12 read functions, 563 tests passing). Started 4.3.1.1 - created `resilience/redis_circuit_breaker.py` and 35 unit tests. Tests pass with venv pytest but hit path resolution issues. Installed fakeredis in venv. Created `tests/conftest.py` and root `conftest.py` for pythonpath setup. Issue: pytest doesn't load conftest.py before test module imports.
+
+**Files Created**:
+- `resilience/redis_circuit_breaker.py` - Redis-backed circuit breaker (326 lines)
+- `tests/test_redis_circuit_breaker.py` - 35 unit tests with fakeredis
+- `tests/conftest.py` - Pytest path configuration
+- `conftest.py` - Root pytest configuration
+
+**Files Modified**:
+- `data/data_store_main.py` - Added @retry_on_busy() to 12 read functions
+- `pytest.ini` - Added `pythonpath = .`
+
+**Next Session TODO**:
+1. Fix pytest path issue - either create `pyproject.toml` with editable install, or fix conftest.py loading order
+2. Run full test suite verification
+3. Complete 4.3.1.2-4.3.1.4 (feature flag, factory function, remaining tests)
+
+---
+
 ### 2025-12-28 (Session 40 - Phase 4.3 Spec + Pre-requisites)
 
 | Task | Status |

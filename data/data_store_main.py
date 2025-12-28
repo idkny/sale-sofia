@@ -326,6 +326,7 @@ def save_listing(
         conn.close()
 
 
+@retry_on_busy()
 def get_listing_by_url(url: str) -> Optional[sqlite3.Row]:
     """Get a listing by URL."""
     conn = get_db_connection()
@@ -367,6 +368,7 @@ def increment_unchanged_counter(url: str) -> bool:
         conn.close()
 
 
+@retry_on_busy()
 def get_listings(
     district: Optional[str] = None,
     min_price: Optional[int] = None,
@@ -407,6 +409,7 @@ def get_listings(
     return rows
 
 
+@retry_on_busy()
 def get_listing_count() -> int:
     """Get total number of active listings."""
     conn = get_db_connection()
@@ -427,6 +430,7 @@ def mark_listing_inactive(url: str):
     conn.close()
 
 
+@retry_on_busy()
 def get_listing_by_id(listing_id: int) -> Optional[sqlite3.Row]:
     """Get a listing by ID."""
     conn = get_db_connection()
@@ -578,6 +582,7 @@ def add_viewing(
         conn.close()
 
 
+@retry_on_busy()
 def get_viewings_for_listing(listing_id: int) -> List[sqlite3.Row]:
     """Get all viewings for a listing."""
     conn = get_db_connection()
@@ -657,6 +662,7 @@ def delete_viewing(viewing_id: int) -> bool:
 # Statistics Functions (for Streamlit dashboard)
 # ============================================================
 
+@retry_on_busy()
 def get_listings_stats() -> Dict[str, Any]:
     """Get aggregate statistics for dashboard."""
     conn = get_db_connection()
@@ -715,6 +721,7 @@ def get_listings_stats() -> Dict[str, Any]:
     return stats
 
 
+@retry_on_busy()
 def get_shortlisted_listings() -> List[sqlite3.Row]:
     """Get all shortlisted listings for comparison."""
     conn = get_db_connection()
@@ -869,6 +876,7 @@ def record_field_change(
         conn.close()
 
 
+@retry_on_busy()
 def get_scrape_history(url: str) -> Optional[sqlite3.Row]:
     """Get scrape history for a URL."""
     conn = get_db_connection()
@@ -878,6 +886,7 @@ def get_scrape_history(url: str) -> Optional[sqlite3.Row]:
     return row
 
 
+@retry_on_busy()
 def get_listing_changes(
     listing_id: int, field: Optional[str] = None
 ) -> List[sqlite3.Row]:
@@ -1037,6 +1046,7 @@ def add_listing_source(
         conn.close()
 
 
+@retry_on_busy()
 def get_sources_by_fingerprint(fingerprint: str) -> List[sqlite3.Row]:
     """
     Get all sources for a property fingerprint.
@@ -1057,6 +1067,7 @@ def get_sources_by_fingerprint(fingerprint: str) -> List[sqlite3.Row]:
     return rows
 
 
+@retry_on_busy()
 def get_sources_by_listing(listing_id: int) -> List[sqlite3.Row]:
     """
     Get all sources for a listing ID.
@@ -1150,6 +1161,7 @@ def set_primary_source(fingerprint: str, source_site: str) -> bool:
 # ============================================================
 
 
+@retry_on_busy()
 def get_properties_with_multiple_sources() -> List[Dict]:
     """
     Get properties that appear on 2+ sites.

@@ -50,7 +50,7 @@
 | Instance | Current Task |
 |----------|--------------|
 | 1 | Available |
-| 2 | 4.3.1.1 Create redis_circuit_breaker.py |
+| 2 | Available |
 | 3 | Available |
 
 **Session 40 (2025-12-28)**: Instance 2 - Phase 4.3 Spec + Pre-requisites. Created Spec 115 (Celery Site Tasks) from validation research. Completed 4.3.0.1 (timeout fix) and 4.3.0.2 (DB init race condition fix). 77 tests verified.
@@ -197,9 +197,10 @@
   - Tests: `tests/test_db_concurrency.py` (17 passed)
 
 ###### Phase 4.3.1: Redis-Backed Circuit Breaker
-- [ ] [Instance 2] 4.3.1.1 Create `resilience/redis_circuit_breaker.py`
+- [ ] 4.3.1.1 Create `resilience/redis_circuit_breaker.py` **(IN PROGRESS - see note)**
   - Impact: New file, no existing code affected
   - Tests: New tests to create
+  - **Note**: Code created, 35 tests written, but pytest path issues with venv. Need to fix `tests/conftest.py` or `pytest.ini` pythonpath for venv pytest to work.
 - [ ] 4.3.1.2 Add `REDIS_CIRCUIT_BREAKER_ENABLED` feature flag
   - Impact: `config/settings.py` only
   - Tests: None (config only)
