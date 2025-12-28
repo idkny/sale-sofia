@@ -15,16 +15,15 @@ updated_at: 2025-12-28
 
 ## IMMEDIATE NEXT SESSION TASK
 
-**Phase 4.3 COMPLETE** - Spec 115 archived.
+**Phase 5.1 COMPLETE** - E2E testing done.
 
-Continue with **Phase 4.4: Integration Testing** (real Celery workers):
-- [ ] 4.4.1 Test parallel scraping with 2+ sites
-- [ ] 4.4.2 Test site-specific config overrides
-- [ ] 4.4.3 Test crash recovery with checkpoints
-- [ ] 4.4.4 Test circuit breaker + Celery interaction
-- [ ] 4.4.5 Run Phase Completion Checklist
+Continue with **Phase 5: Full Pipeline & Monitoring**:
+- [x] 5.1 E2E testing (scrape → store → dashboard) - 32 tests
+- [ ] 5.2 Add Celery Flower (Instance 1 working)
+- [ ] 5.3 Performance benchmarking (parallel vs sequential)
+- [ ] 5.4 Run Phase Completion Checklist
 
-**Note**: 781 tests passing. Code is source of truth.
+**Note**: 894 tests passing. Code is source of truth.
 
 ---
 
@@ -103,6 +102,19 @@ archive/research/  archive/specs/          (code supersedes)
 
 ## Session History
 
+### 2025-12-28 (Session 46 - Phase 5.1 E2E Testing COMPLETE)
+
+| Task | Status |
+|------|--------|
+| 5.1 E2E testing (scrape → store → dashboard) | Complete |
+
+**Summary**: Created comprehensive E2E test suite `tests/test_e2e_pipeline.py` with 32 tests. Tests cover: scrape → store flow (7 tests), store → dashboard flow (7 tests), full pipeline (4 tests), change detection (2 tests), session reports (3 tests), edge cases (6 tests), data integrity (3 tests). 894 tests passing.
+
+**Files Created**:
+- `tests/test_e2e_pipeline.py` - 32 E2E tests
+
+---
+
 ### 2025-12-28 (Session 44 - Phase 4.3.3 + 4.3.4 COMPLETE)
 
 | Task | Status |
@@ -136,16 +148,6 @@ archive/research/  archive/specs/          (code supersedes)
 | 4.3.2.4 Write unit tests | Complete |
 
 **Summary**: Completed Phase 4.3.2: Created `resilience/redis_rate_limiter.py` with Lua script for atomic token acquisition. Added feature flag, updated factory function. 29 new tests, 675 total passing.
-
----
-
-### 2025-12-28 (Session 42 - Phase 4.3.1 Redis Circuit Breaker COMPLETE)
-
-| Task | Status |
-|------|--------|
-| 4.3.1.1-4.3.1.4 Redis Circuit Breaker | Complete |
-
-**Summary**: Fixed pytest path issue, completed Phase 4.3.1. 35 new tests, 646 total passing.
 
 ---
 

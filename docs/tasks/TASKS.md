@@ -49,9 +49,11 @@
 
 | Instance | Current Task |
 |----------|--------------|
-| 1 | Available |
+| 1 | 5.2 Celery Flower (standalone) |
 | 2 | Available |
 | 3 | Available |
+
+**Session 46 (2025-12-28)**: Instance 2 - Phase 5.1 E2E Testing COMPLETE. Created `tests/test_e2e_pipeline.py` with 32 tests covering full pipeline: scrape → store → dashboard. Tests include: data saving, filters, stats, change detection, session reports, edge cases. 894 tests passing.
 
 **Session 44 (2025-12-28)**: Instance 2 - Phase 4.3.3 + 4.3.4 COMPLETE. Completed celery_app.py registration (4.3.3.3). Completed all Phase 4.3.4 Integration tasks: orchestrator methods, main.py PARALLEL_SCRAPING mode, 12 integration tests, consistency checklist. Fixed hardcoded values in scraping/tasks.py. Archived spec 115. 781 tests passing.
 
@@ -275,17 +277,23 @@
 - [x] 4.4.4 Test circuit breaker + Celery interaction (24 tests)
   - Trigger failures, verify circuit opens, task retries
 - [x] 4.4.5 **Run Phase Completion Checklist** (full E2E validation)
-  - Consistency: Test hardcoded values acceptable (lower thresholds for faster tests)
+  - **FIXED**: `delay_seconds` now drives DOMAIN_RATE_LIMITS via `get_domain_rate_limits()`
+  - imot.bg: 1.5s delay → 40 req/min, bazar.bg: 3.0s delay → 20 req/min
+  - Consistency: YAML is single source of truth for rate limiting
   - Alignment: Spec 115 archived, code is source of truth
-  - Tests: 862 passing, 0 failures
+  - Tests: 862 passed, 0 failures
 
 ---
 
 #### Phase 5: Full Pipeline & Monitoring
 > **Depends on**: Phase 4 complete (Celery orchestration working).
 
-- [ ] 5.1 E2E testing (scrape → store → dashboard)
-- [ ] 5.2 Add Celery Flower for task monitoring
+- [x] 5.1 E2E testing (scrape → store → dashboard) - 32 tests
+- [ ] [Instance 1] 5.2 Add Celery Flower for task monitoring (standalone, no Docker)
+  - Add `flower` to `requirements.txt`
+  - Create start script `admin/scripts/start_flower.sh`
+  - Add Flower settings to `config/settings.py` (port, basic auth)
+  - Test: verify task visibility in Flower UI
 - [ ] 5.3 Performance benchmarking (parallel vs sequential)
 - [ ] 5.4 **Run Phase Completion Checklist** (consistency + alignment)
 
