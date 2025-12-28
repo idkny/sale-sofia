@@ -155,14 +155,30 @@ class DomainRateLimiter:
 _rate_limiter = None
 
 
-def get_rate_limiter() -> DomainRateLimiter:
+def get_rate_limiter():
     """
     Get the singleton rate limiter instance.
 
+    Returns Redis-backed or in-memory rate limiter based on config:
+    - REDIS_RATE_LIMITER_ENABLED=True: Redis-backed (shared across workers)
+    - REDIS_RATE_LIMITER_ENABLED=False: In-memory (single process only)
+
     Returns:
-        DomainRateLimiter instance
+        DomainRateLimiter or RedisRateLimiter instance
     """
     global _rate_limiter
     if _rate_limiter is None:
-        _rate_limiter = DomainRateLimiter()
+        try:
+            from config.settings import REDIS_RATE_LIMITER_ENABLED
+        except ImportError:
+            REDIS_RATE_LIMITER_ENABLED = False
+
+        if REDIS_RATE_LIMITER_ENABLED:
+            from resilience.redis_rate_limiter import RedisRateLimiter
+            _rate_limiter = RedisRateLimiter()
+            logger.info("[RATE_LIMITER] Using Redis-backed rate limiter")
+        else:
+            _rate_limiter = DomainRateLimiter()
+            logger.debug("[RATE_LIMITER] Using in-memory rate limiter")
+
     return _rate_limiter

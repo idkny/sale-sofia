@@ -10,7 +10,7 @@ import threading
 from dataclasses import dataclass
 from datetime import datetime
 from enum import Enum
-from typing import Optional
+from typing import Dict, Optional
 from urllib.parse import urlparse
 
 from loguru import logger
@@ -365,14 +365,51 @@ class DomainCircuitBreaker:
                 "total_allowed_requests": self._total_allowed_requests,
             }
 
+    def get_all_states(self) -> Dict[str, Dict]:
+        """Export all circuit breaker states for reporting."""
+        with self._lock:
+            return {
+                domain: {
+                    "state": circuit.state.value,
+                    "failure_count": circuit.failure_count,
+                    "last_failure": (
+                        circuit.last_failure_time.isoformat()
+                        if circuit.last_failure_time
+                        else None
+                    ),
+                    "block_type": circuit.last_block_type,
+                }
+                for domain, circuit in self._circuits.items()
+            }
+
 
 # Module-level singleton
 _circuit_breaker: Optional[DomainCircuitBreaker] = None
 
 
-def get_circuit_breaker() -> DomainCircuitBreaker:
-    """Get the singleton circuit breaker instance."""
+def get_circuit_breaker():
+    """
+    Get the singleton circuit breaker instance.
+
+    Returns either in-memory or Redis-backed circuit breaker based on
+    REDIS_CIRCUIT_BREAKER_ENABLED setting.
+
+    Returns:
+        DomainCircuitBreaker or RedisCircuitBreaker instance
+    """
     global _circuit_breaker
     if _circuit_breaker is None:
-        _circuit_breaker = DomainCircuitBreaker()
+        try:
+            from config.settings import REDIS_CIRCUIT_BREAKER_ENABLED
+        except ImportError:
+            REDIS_CIRCUIT_BREAKER_ENABLED = False
+
+        if REDIS_CIRCUIT_BREAKER_ENABLED:
+            from resilience.redis_circuit_breaker import RedisCircuitBreaker
+
+            _circuit_breaker = RedisCircuitBreaker()
+            logger.info("[CIRCUIT_BREAKER] Using Redis-backed circuit breaker")
+        else:
+            _circuit_breaker = DomainCircuitBreaker()
+            logger.debug("[CIRCUIT_BREAKER] Using in-memory circuit breaker")
     return _circuit_breaker

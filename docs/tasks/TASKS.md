@@ -51,7 +51,11 @@
 |----------|--------------|
 | 1 | Available |
 | 2 | Available |
-| 3 | Available |
+| 3 | 3.1 Create Scraper Health dashboard page |
+
+**Session 43 (2025-12-28)**: Instance 2 - Phase 4.3.2 Redis-Backed Rate Limiter COMPLETE. Created `resilience/redis_rate_limiter.py` with Lua script for atomic token acquisition, added feature flag, updated factory function. 29 new tests, 675 total passing.
+
+**Session 42 (2025-12-28)**: Instance 2 - Phase 4.3.1 Redis Circuit Breaker COMPLETE. Fixed pytest path issue (removed shadowing `tests/resilience/` directory). Completed 4.3.1.1-4.3.1.4: created Redis-backed circuit breaker, feature flag, factory function update. 35 new tests, 646 total passing.
 
 **Session 40 (2025-12-28)**: Instance 2 - Phase 4.3 Spec + Pre-requisites. Created Spec 115 (Celery Site Tasks) from validation research. Completed 4.3.0.1 (timeout fix) and 4.3.0.2 (DB init race condition fix). 77 tests verified.
 
@@ -196,34 +200,33 @@
   - Impact: All `@retry_on_busy()` decorated functions
   - Tests: `tests/test_db_concurrency.py` (17 passed)
 
-###### Phase 4.3.1: Redis-Backed Circuit Breaker
-- [ ] 4.3.1.1 Create `resilience/redis_circuit_breaker.py` **(IN PROGRESS - see note)**
+###### Phase 4.3.1: Redis-Backed Circuit Breaker (COMPLETE)
+- [x] 4.3.1.1 Create `resilience/redis_circuit_breaker.py`
   - Impact: New file, no existing code affected
-  - Tests: New tests to create
-  - **Note**: Code created, 35 tests written, but pytest path issues with venv. Need to fix `tests/conftest.py` or `pytest.ini` pythonpath for venv pytest to work.
-- [ ] 4.3.1.2 Add `REDIS_CIRCUIT_BREAKER_ENABLED` feature flag
+  - Tests: `tests/test_redis_circuit_breaker.py` (35 passed)
+- [x] 4.3.1.2 Add `REDIS_CIRCUIT_BREAKER_ENABLED` feature flag
   - Impact: `config/settings.py` only
   - Tests: None (config only)
-- [ ] 4.3.1.3 Update `resilience/__init__.py` factory function
+- [x] 4.3.1.3 Update `resilience/circuit_breaker.py` factory function
   - Impact: All `get_circuit_breaker()` callers
-  - Tests: `tests/resilience/`
-- [ ] 4.3.1.4 Write unit tests for Redis circuit breaker
+  - Tests: `tests/test_resilience_phase2.py` (42 passed)
+- [x] 4.3.1.4 Write unit tests for Redis circuit breaker
   - Impact: None (test only)
-  - Tests: Self-verifying
+  - Tests: 35 tests in `tests/test_redis_circuit_breaker.py`
 
-###### Phase 4.3.2: Redis-Backed Rate Limiter
-- [ ] 4.3.2.1 Create `resilience/redis_rate_limiter.py` (Lua script for atomicity)
+###### Phase 4.3.2: Redis-Backed Rate Limiter (COMPLETE)
+- [x] 4.3.2.1 Create `resilience/redis_rate_limiter.py` (Lua script for atomicity)
   - Impact: New file, no existing code affected
-  - Tests: New tests to create
-- [ ] 4.3.2.2 Add `REDIS_RATE_LIMITER_ENABLED` feature flag
+  - Tests: `tests/test_redis_rate_limiter.py` (29 passed)
+- [x] 4.3.2.2 Add `REDIS_RATE_LIMITER_ENABLED` feature flag
   - Impact: `config/settings.py` only
   - Tests: None (config only)
-- [ ] 4.3.2.3 Update factory function in `resilience/__init__.py`
+- [x] 4.3.2.3 Update factory function in `resilience/rate_limiter.py`
   - Impact: All `get_rate_limiter()` callers
-  - Tests: `tests/resilience/`
-- [ ] 4.3.2.4 Write unit tests for Redis rate limiter
+  - Tests: `tests/test_redis_rate_limiter.py::TestFactoryFunction` (2 passed)
+- [x] 4.3.2.4 Write unit tests for Redis rate limiter
   - Impact: None (test only)
-  - Tests: Self-verifying
+  - Tests: 29 tests in `tests/test_redis_rate_limiter.py`
 
 ###### Phase 4.3.3: Scraping Celery Tasks
 - [ ] 4.3.3.1 Create `scraping/redis_keys.py` (key patterns)
@@ -293,16 +296,15 @@
 - [x] 1.1 Create `scraping/metrics.py` with MetricsCollector class
 - [x] 1.2 Create `scraping/session_report.py` with SessionReportGenerator
 - [x] 1.3 Add health thresholds to `config/settings.py`
-- [ ] 1.4 Write unit tests for metrics and reports
-  > **NOTE**: `tests/test_scraper_monitoring.py` created (48 tests). Tests pass individually but full suite has import errors. Need to verify full suite passes before marking complete.
+- [x] 1.4 Write unit tests for metrics and reports (48 tests, 646 total passing)
 
 #### Phase 2: Integration
-- [ ] 2.1 Add `get_all_states()` to `resilience/circuit_breaker.py`
-- [ ] 2.2 Add `get_stats()` to `proxies/proxy_scorer.py`
-- [ ] 2.3 Integrate MetricsCollector into `main.py` scraping flow
+- [x] 2.1 Add `get_all_states()` to `resilience/circuit_breaker.py`
+- [x] 2.2 Add `get_stats()` to `proxies/proxy_scorer.py`
+- [x] 2.3 Integrate MetricsCollector into `main.py` scraping flow
 
 #### Phase 3: Dashboard
-- [ ] 3.1 Create `app/pages/5_Scraper_Health.py` with basic layout
+- [ ] [Instance 3] 3.1 Create `app/pages/5_Scraper_Health.py` with basic layout
 - [ ] 3.2 Add trend charts (success rate over time)
 - [ ] 3.3 Add health indicators and run history table
 

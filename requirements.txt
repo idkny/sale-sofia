@@ -13,6 +13,7 @@ psutil==7.0.0
 pytest
 pytest-asyncio
 redis==5.0.7
+fakeredis[lua]>=2.33.0  # For Redis unit tests with Lua script support
 ruff
 scrapling[fetchers]>=0.2.99
 socksio==1.0.0

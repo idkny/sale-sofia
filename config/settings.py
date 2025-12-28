@@ -64,6 +64,16 @@ CIRCUIT_BREAKER_RESET_TIMEOUT = 60  # seconds
 CIRCUIT_BREAKER_HALF_OPEN_CALLS = 2
 CIRCUIT_BREAKER_ENABLED = True
 
+# Redis-backed circuit breaker (for distributed Celery workers)
+# When True: uses Redis for shared state across workers
+# When False: uses in-memory circuit breaker (single-process only)
+REDIS_CIRCUIT_BREAKER_ENABLED = False
+
+# Redis-backed rate limiter (for distributed Celery workers)
+# When True: uses Redis for shared rate limiting across workers
+# When False: uses in-memory rate limiter (single-process only)
+REDIS_RATE_LIMITER_ENABLED = False
+
 # Rate limiting (requests per minute per domain)
 DOMAIN_RATE_LIMITS = {
     "imot.bg": 10,

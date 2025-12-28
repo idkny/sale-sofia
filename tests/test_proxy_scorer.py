@@ -367,18 +367,26 @@ class TestUtilityMethods:
     """Test utility methods."""
 
     def test_get_stats(self, proxy_pool):
-        """Test get_stats method."""
+        """Test get_stats method returns spec-compliant format."""
         stats = proxy_pool.get_stats()
 
-        assert stats["total_proxies"] == 3
-        assert stats["scored_proxies"] == 3
-        assert stats["average_score"] > 0
-        assert stats["proxies_with_failures"] == 0
+        # Verify spec-compliant keys
+        assert stats["total"] == 3
+        assert stats["active"] == 3  # All should be >= MIN_PROXY_SCORE initially
+        assert stats["avg_score"] > 0
+        assert isinstance(stats["top_5"], list)
+        assert isinstance(stats["bottom_5"], list)
 
-        # Record a failure
-        proxy_pool.record_result("1.2.3.4:8080", success=False)
-        stats = proxy_pool.get_stats()
-        assert stats["proxies_with_failures"] == 1
+        # Verify top_5/bottom_5 format
+        assert len(stats["top_5"]) == 3  # Only 3 proxies available
+        assert len(stats["bottom_5"]) == 3
+        for entry in stats["top_5"]:
+            assert "proxy" in entry
+            assert "score" in entry
+
+        # Top 5 should be sorted descending
+        if len(stats["top_5"]) >= 2:
+            assert stats["top_5"][0]["score"] >= stats["top_5"][1]["score"]
 
     def test_reload_proxies(self, proxy_pool, proxies_file):
         """Test reloading proxies from file."""

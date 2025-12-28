@@ -16,6 +16,7 @@ import signal
 import sys
 import time
 from datetime import datetime
+from pathlib import Path
 from typing import Any, Optional
 
 from dotenv import load_dotenv
@@ -50,7 +51,10 @@ from config.settings import (
     PREFLIGHT_MAX_ATTEMPTS_L3,
     PREFLIGHT_RETRY_DELAY,
     PROXY_WAIT_TIMEOUT,
+    SCRAPER_REPORTS_DIR,
 )
+from scraping.metrics import MetricsCollector, RequestStatus
+from scraping.session_report import SessionReportGenerator
 
 
 # Global state for checkpoint signal handler
@@ -359,7 +363,8 @@ def _scrape_listings(
     delay: float,
     proxy: str | None,
     proxy_pool: Optional[ScoredProxyPool],
-    checkpoint: Optional[CheckpointManager] = None
+    checkpoint: Optional[CheckpointManager] = None,
+    metrics: Optional[MetricsCollector] = None
 ) -> dict:
     """
     Phase 2: Scrape individual listings from collected URLs.
@@ -378,8 +383,15 @@ def _scrape_listings(
         logger.info(f"[{i}/{len(urls)}] {url}")
         stats["total_attempts"] += 1
 
+        # Track request for metrics
+        domain = extract_domain(url)
+        if metrics:
+            metrics.record_request(url, domain)
+        start_time = time.time()
+
         try:
             html, proxy_key = _fetch_listing_page(url, proxy, proxy_pool)
+            response_time_ms = (time.time() - start_time) * 1000
 
             # Request succeeded - extract listing data
             listing = scraper.extract_listing(html, url)
@@ -394,9 +406,19 @@ def _scrape_listings(
                             f"  -> Price {direction}: "
                             f"{result['old_price']} -> {result['new_price']} EUR"
                         )
+                    if metrics:
+                        metrics.record_response(
+                            url, RequestStatus.SUCCESS, response_time_ms=response_time_ms
+                        )
+                        metrics.record_listing_saved(url, listing.url)
                 else:
                     stats["unchanged"] += 1
                     logger.debug("  -> Unchanged (skipped)")
+                    if metrics:
+                        metrics.record_response(
+                            url, RequestStatus.SKIPPED, response_time_ms=response_time_ms
+                        )
+                        metrics.record_listing_skipped(url, "unchanged")
                 # Score successful proxy
                 if proxy_pool and proxy_key:
                     proxy_pool.record_result(proxy_key, success=True)
@@ -404,14 +426,51 @@ def _scrape_listings(
                 # Extraction failed but request succeeded
                 stats["failed"] += 1
                 logger.warning("  -> Failed to extract listing data")
+                if metrics:
+                    metrics.record_response(
+                        url, RequestStatus.PARSE_ERROR,
+                        response_time_ms=response_time_ms,
+                        error_type="extraction_failed"
+                    )
                 # Score as failure (page content was unusable)
                 if proxy_pool and proxy_key:
                     proxy_pool.record_result(proxy_key, success=False)
 
+        except BlockedException as e:
+            response_time_ms = (time.time() - start_time) * 1000
+            stats["failed"] += 1
+            logger.error(f"  -> Blocked: {e}")
+            if metrics:
+                metrics.record_response(
+                    url, RequestStatus.BLOCKED,
+                    response_time_ms=response_time_ms,
+                    error_type="blocked",
+                    error_message=str(e)
+                )
+
         except Exception as e:
+            response_time_ms = (time.time() - start_time) * 1000
             # All retries exhausted
             stats["failed"] += 1
-            logger.error(f"  -> All {MAX_PROXY_RETRIES} attempts failed for {url}: {e}")
+            error_msg = str(e).lower()
+            if "timeout" in error_msg:
+                logger.error(f"  -> Timeout: {e}")
+                if metrics:
+                    metrics.record_response(
+                        url, RequestStatus.TIMEOUT,
+                        response_time_ms=response_time_ms,
+                        error_type="timeout",
+                        error_message=str(e)
+                    )
+            else:
+                logger.error(f"  -> All {MAX_PROXY_RETRIES} attempts failed for {url}: {e}")
+                if metrics:
+                    metrics.record_response(
+                        url, RequestStatus.FAILED,
+                        response_time_ms=response_time_ms,
+                        error_type=type(e).__name__,
+                        error_message=str(e)
+                    )
 
         # Update checkpoint state
         _scraped_urls.add(url)
@@ -432,7 +491,8 @@ def scrape_from_start_url(
     delay: float,
     proxy: str | None = None,
     proxy_pool: Optional[ScoredProxyPool] = None,
-    checkpoint: Optional[CheckpointManager] = None
+    checkpoint: Optional[CheckpointManager] = None,
+    metrics: Optional[MetricsCollector] = None
 ) -> dict:
     """
     Scrape all listings from a starting URL with pagination support.
@@ -445,6 +505,7 @@ def scrape_from_start_url(
         proxy: The proxy server URL (e.g., "http://localhost:8089"). Should always be set.
         proxy_pool: Optional ScoredProxyPool for tracking proxy performance.
         checkpoint: Optional CheckpointManager for crash recovery.
+        metrics: Optional MetricsCollector for scraper monitoring.
 
     Returns:
         Dictionary with stats: {scraped: int, failed: int, total_attempts: int}
@@ -460,7 +521,9 @@ def scrape_from_start_url(
     logger.info(f"Collected {len(urls)} listing URLs to scrape")
 
     # Phase 2: Scrape individual listings
-    stats = _scrape_listings(scraper, urls, delay, proxy, proxy_pool, checkpoint)
+    stats = _scrape_listings(
+        scraper, urls, delay, proxy, proxy_pool, checkpoint, metrics
+    )
     logger.info(f"Scraping complete. Saved {stats['scraped']}/{len(urls)} listings.")
 
     return stats
@@ -696,6 +759,9 @@ def _crawl_all_sites(
 
     total_stats = {"scraped": 0, "failed": 0, "total_attempts": 0}
 
+    # Initialize metrics collector for this crawl session
+    metrics = MetricsCollector()
+
     # Check proxy count before starting
     if not _ensure_min_proxies(proxy_pool, orch):
         logger.error("Failed to ensure minimum proxies before crawl")
@@ -736,7 +802,8 @@ def _crawl_all_sites(
                     delay=scraping_config.timing.delay_seconds,
                     proxy=proxy_url,
                     proxy_pool=proxy_pool,
-                    checkpoint=checkpoint
+                    checkpoint=checkpoint,
+                    metrics=metrics
                 )
                 # Aggregate stats
                 total_stats["scraped"] += stats["scraped"]
@@ -757,7 +824,19 @@ def _crawl_all_sites(
         # Check proxy count after each site
         if not _ensure_min_proxies(proxy_pool, orch):
             logger.error("Failed to ensure minimum proxies between sites")
-            return total_stats
+            break
+
+    # Generate and save session report
+    run_metrics = metrics.end_run()
+    report_gen = SessionReportGenerator(Path(SCRAPER_REPORTS_DIR))
+    report = report_gen.generate(
+        metrics=run_metrics,
+        proxy_stats=proxy_pool.get_stats() if proxy_pool else None,
+        circuit_states=get_circuit_breaker().get_all_states()
+    )
+    report_path = report_gen.save(report)
+    logger.info(f"Session report saved: {report_path}")
+    print(f"[INFO] Session report saved: {report_path}")
 
     return total_stats
 

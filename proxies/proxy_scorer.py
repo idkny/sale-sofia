@@ -384,27 +384,31 @@ class ScoredProxyPool:
 
     def get_stats(self) -> dict:
         """
-        Get statistics about the proxy pool.
+        Export proxy statistics for reporting.
 
         Returns:
-            Dictionary with pool statistics
+            Dictionary with pool statistics including top/bottom performers
         """
         with self.lock:
-            total = len(self.proxies)
-            scored = len(self.scores)
-
-            if scored > 0:
-                avg_score = sum(s["score"] for s in self.scores.values()) / scored
-                failed = sum(1 for s in self.scores.values() if s["failures"] > 0)
-            else:
-                avg_score = 0.0
-                failed = 0
+            scores = [s["score"] for s in self.scores.values()]
+            sorted_proxies = sorted(
+                self.scores.items(),
+                key=lambda x: x[1]["score"],
+                reverse=True
+            )
 
             return {
-                "total_proxies": total,
-                "scored_proxies": scored,
-                "average_score": avg_score,
-                "proxies_with_failures": failed,
+                "total": len(scores),
+                "active": len([s for s in scores if s >= MIN_PROXY_SCORE]),
+                "avg_score": sum(scores) / len(scores) if scores else 0,
+                "top_5": [
+                    {"proxy": p, "score": s["score"]}
+                    for p, s in sorted_proxies[:5]
+                ],
+                "bottom_5": [
+                    {"proxy": p, "score": s["score"]}
+                    for p, s in sorted_proxies[-5:]
+                ],
             }
 
     def reload_proxies(self) -> None:
