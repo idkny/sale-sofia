@@ -50,7 +50,7 @@
 | Instance | Current Task |
 |----------|--------------|
 | 1 | Available |
-| 2 | Available |
+| 2 | 4.3.1.1 Create redis_circuit_breaker.py |
 | 3 | Available |
 
 **Session 40 (2025-12-28)**: Instance 2 - Phase 4.3 Spec + Pre-requisites. Created Spec 115 (Celery Site Tasks) from validation research. Completed 4.3.0.1 (timeout fix) and 4.3.0.2 (DB init race condition fix). 77 tests verified.
@@ -189,15 +189,15 @@
 - [x] 4.3.0.2 Move DB init out of module-level in `data_store_main.py`
   - Impact: All imports of `data_store_main`, worker startup
   - Tests: `tests/test_db_concurrency.py`, `tests/test_change_detection.py` (47 passed)
-- [ ] 4.3.0.3 Add `@retry_on_busy()` to read functions in `data_store_main.py`
+- [x] 4.3.0.3 Add `@retry_on_busy()` to read functions in `data_store_main.py`
   - Impact: All `get_*` function callers
-  - Tests: `tests/test_db_concurrency.py`, `tests/data/`
-- [ ] 4.3.0.4 Increase `SQLITE_BUSY_RETRIES` from 3 to 5
+  - Tests: `tests/test_db_concurrency.py`, `tests/test_change_detection.py` (47 passed, 563 total)
+- [x] 4.3.0.4 Increase `SQLITE_BUSY_RETRIES` from 3 to 5
   - Impact: All `@retry_on_busy()` decorated functions
-  - Tests: `tests/test_db_concurrency.py`
+  - Tests: `tests/test_db_concurrency.py` (17 passed)
 
 ###### Phase 4.3.1: Redis-Backed Circuit Breaker
-- [ ] 4.3.1.1 Create `resilience/redis_circuit_breaker.py`
+- [ ] [Instance 2] 4.3.1.1 Create `resilience/redis_circuit_breaker.py`
   - Impact: New file, no existing code affected
   - Tests: New tests to create
 - [ ] 4.3.1.2 Add `REDIS_CIRCUIT_BREAKER_ENABLED` feature flag
@@ -290,9 +290,10 @@
 
 #### Phase 1: Core Metrics
 - [x] 1.1 Create `scraping/metrics.py` with MetricsCollector class
-- [ ] 1.2 Create `scraping/session_report.py` with SessionReportGenerator
-- [ ] 1.3 Add health thresholds to `config/settings.py`
+- [x] 1.2 Create `scraping/session_report.py` with SessionReportGenerator
+- [x] 1.3 Add health thresholds to `config/settings.py`
 - [ ] 1.4 Write unit tests for metrics and reports
+  > **NOTE**: `tests/test_scraper_monitoring.py` created (48 tests). Tests pass individually but full suite has import errors. Need to verify full suite passes before marking complete.
 
 #### Phase 2: Integration
 - [ ] 2.1 Add `get_all_states()` to `resilience/circuit_breaker.py`

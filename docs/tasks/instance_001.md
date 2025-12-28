@@ -79,6 +79,30 @@ archive/research/  archive/specs/          (code supersedes)
 
 ## Session History
 
+### 2025-12-28 (Session 40 - Scraper Monitoring Phase 1)
+
+| Task | Status |
+|------|--------|
+| 1.1 Create `scraping/metrics.py` with MetricsCollector | ✅ Complete |
+| 1.2 Create `scraping/session_report.py` with SessionReportGenerator | ✅ Complete |
+| 1.3 Add health thresholds to `config/settings.py` | ✅ Complete |
+| 1.4 Write unit tests for metrics and reports | ⏳ In Progress |
+
+**Summary**: Implemented Scraper Monitoring Phase 1 (Core Metrics). Created MetricsCollector class for tracking request/response metrics, SessionReportGenerator for persisting JSON reports, and added health thresholds to settings. Test file created (48 tests) but needs verification with full suite due to import errors during concurrent testing with Instance 2.
+
+**Files Created**:
+- `scraping/metrics.py` - MetricsCollector, RequestStatus enum, RunMetrics dataclass
+- `scraping/session_report.py` - SessionReportGenerator, SessionReport dataclass
+- `tests/test_scraper_monitoring.py` - 48 unit tests (pass individually)
+
+**Files Modified**:
+- `scraping/__init__.py` - Added exports
+- `config/settings.py` - Added SCRAPER_HEALTH_THRESHOLDS, SCRAPER_ALERT_THRESHOLDS, SCRAPER_REPORTS_*
+
+**Next Steps**: Run full test suite when Instance 2 completes, verify 48 tests pass, mark 1.4 complete.
+
+---
+
 ### 2025-12-28 (Session 39 - Pre-Production Hardening Implementation)
 
 | Task | Status |
@@ -132,33 +156,7 @@ archive/research/  archive/specs/          (code supersedes)
 
 ---
 
-### 2025-12-27 (Session 35 - Phase 4.0 Database Concurrency)
-
-| Task | Status |
-|------|--------|
-| 4.0.1 Add database settings to config/settings.py | ✅ Complete |
-| 4.0.2 Update get_db_connection() for WAL + timeout | ✅ Complete |
-| 4.0.3 Create data/db_retry.py with retry decorator | ✅ Complete |
-| 4.0.4 Apply @retry_on_busy to 7 write functions | ✅ Complete |
-| 4.0.5 Write concurrent write tests (17 tests) | ✅ Complete |
-| 4.0.6 Run Phase Completion Checklist | ✅ Complete |
-
-**Summary**: Implemented Phase 4.0 Database Concurrency. Created `db_retry.py` with `@retry_on_busy()` decorator following `resilience/retry.py` pattern. Enabled WAL mode and 30s timeout in `get_db_connection()`. Applied decorator to 7 write functions. 17 concurrent write tests passing. 200 total tests passing.
-
-**Files Created**:
-- `data/db_retry.py` - `@retry_on_busy()` decorator with exponential backoff
-- `tests/test_db_concurrency.py` - 17 tests for parallel writes, WAL mode, retry
-
-**Files Modified**:
-- `config/settings.py` - Added SQLITE_TIMEOUT, SQLITE_WAL_MODE, SQLITE_BUSY_* settings
-- `data/data_store_main.py` - WAL mode, timeout, import retry decorator, apply to 7 functions
-- `docs/architecture/DESIGN_PATTERNS.md` - Added pattern 16 (Database Retry)
-- `docs/architecture/FILE_STRUCTURE.md` - Added data/ module files
-- `docs/tasks/TASKS.md` - Marked Phase 4.0 complete
-
----
-
-*(Sessions 35 and earlier archived to `archive/sessions/`)*
+*(Sessions 38 and earlier archived to `archive/sessions/`)*
 
 ---
 

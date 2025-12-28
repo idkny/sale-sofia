@@ -136,7 +136,7 @@ PRICE_DISCREPANCY_HIGH_PCT = 10.0
 SQLITE_TIMEOUT = 30.0
 
 # Retry settings for database write operations
-SQLITE_BUSY_RETRIES = 3       # Number of retry attempts on "database is locked"
+SQLITE_BUSY_RETRIES = 5       # Number of retry attempts on "database is locked"
 SQLITE_BUSY_DELAY = 0.5       # Base delay between retries (seconds)
 SQLITE_BUSY_MAX_DELAY = 5.0   # Maximum delay cap (seconds)
 
@@ -158,3 +158,40 @@ ASYNC_FETCHER_MAX_CONCURRENT = 5
 # - config/scraping_defaults.yaml (global defaults)
 # - config/sites/<site>.yaml (per-site overrides)
 # Use load_scraping_config() from config.scraping_config
+
+# =============================================================================
+# SCRAPER MONITORING SETTINGS
+# =============================================================================
+# Used in: scraping/metrics.py, scraping/session_report.py
+# Spec: 114_SCRAPER_MONITORING.md
+
+# Health status thresholds
+SCRAPER_HEALTH_THRESHOLDS = {
+    "success_rate": {
+        "healthy": 90.0,      # >= 90% is healthy
+        "degraded": 75.0,     # >= 75% is degraded, < 75% is critical
+    },
+    "error_rate": {
+        "healthy": 5.0,       # <= 5% is healthy
+        "degraded": 15.0,     # <= 15% is degraded, > 15% is critical
+    },
+    "block_rate": {
+        "healthy": 2.0,       # <= 2% is healthy
+        "degraded": 5.0,      # <= 5% is degraded, > 5% is critical
+    },
+    "avg_response_ms": {
+        "healthy": 2000,      # <= 2s is healthy
+        "degraded": 5000,     # <= 5s is degraded, > 5s is critical
+    },
+}
+
+# Alert thresholds (for dashboard indicators)
+SCRAPER_ALERT_THRESHOLDS = {
+    "min_proxies": 10,              # Alert if proxy count drops below
+    "max_consecutive_failures": 5,  # Alert after N consecutive failures
+    "baseline_deviation": 20.0,     # Alert if >20% worse than 7-day baseline
+}
+
+# Report retention
+SCRAPER_REPORTS_RETENTION_DAYS = 30
+SCRAPER_REPORTS_DIR = "data/reports"
