@@ -46,7 +46,7 @@
 | Pre-Production Hardening (Phases 1-3) | 10 | Completed |
 | Historical Completed Work | 35+ | Completed |
 
-**Total Tests**: 894 passed, 8 skipped
+**Total Tests**: 902 passed, 8 skipped
 
 ---
 
@@ -58,7 +58,7 @@
 | 2 | Available |
 | 3 | Available |
 
-**Session 47 (2025-12-28)**: Instance 2 - Phase 5 COMPLETE. All tasks archived to `TASKS_COMPLETED_2025-12-28.md`. 894 tests passing.
+**Session 48 (2025-12-28)**: Instance 2 - README update + auto-start dashboard. 902 tests passing.
 
 **Claim**: Add `[Instance N]` next to task before starting
 **Complete**: Add `[x]` and remove `[Instance N]` when done
@@ -76,6 +76,7 @@
 > **Note**: These are ideas for future development. Not prioritized, no timeline.
 
 ### Operations
+- [x] Auto-start dashboard after scraping (launch Streamlit when main.py completes)
 - [ ] Backup strategy (scheduled DB backups, retention policy)
 - [ ] Systemd services (auto-start on server wake/boot)
 
@@ -93,8 +94,8 @@
 > **Pattern**: User provides filtered URL → scraper extracts using selector fallback chains.
 
 #### Phase 1: Core Framework
-- [ ] 1.1 Create `websites/generic/__init__.py`
-- [ ] 1.2 Create `config_loader.py` (YAML loading + validation)
+- [x] 1.1 Create `websites/generic/__init__.py`
+- [x] 1.2 Create `config_loader.py` (YAML loading + validation)
 - [ ] 1.3 Create `selector_chain.py` (fallback extraction engine)
 - [ ] 1.4 Create `config_scraper.py` (generic ConfigScraper class)
 - [ ] 1.5 Write unit tests for config loading and selector chains

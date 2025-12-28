@@ -79,6 +79,38 @@ archive/research/  archive/specs/          (code supersedes)
 
 ## Session History
 
+### 2025-12-28 (Session 49 - Spec 116 Phase 1.1-1.2 Implementation)
+
+| Task | Status |
+|------|--------|
+| 1.1 Create `websites/generic/__init__.py` | ✅ Complete |
+| 1.2 Create `config_loader.py` (YAML loading + validation) | ✅ Complete |
+
+**Summary**:
+Started implementation of Spec 116 (Generic Scraper Template). Completed Phase 1 tasks 1.1 and 1.2.
+
+**Files Created**:
+- `websites/generic/__init__.py` - Module init with docstring, placeholder imports, `__all__` list
+- `websites/generic/config_loader.py` - YAML config loading with validation
+
+**config_loader.py contains**:
+- 8 dataclasses: `SiteInfo`, `UrlPatterns`, `PaginationConfig`, `ListingPageConfig`, `DetailPageConfig`, `ExtractionConfig`, `TimingConfig`, `QuirksConfig`, `GenericScraperConfig`
+- `load_config()` - Load YAML and return structured dataclass
+- `validate_config()` - Validate raw config dict, returns error list
+- `get_config_path()` - Convert site name to config path (olx.bg → config/sites/olx_bg.yaml)
+
+**Patterns followed**:
+- Dataclass structure from `config/scraping_config.py`
+- YAML loading with `yaml.safe_load()`
+- Loguru logging
+
+**Next tasks** (Phase 1 remaining):
+- 1.3 Create `selector_chain.py` (fallback extraction engine)
+- 1.4 Create `config_scraper.py` (generic ConfigScraper class)
+- 1.5 Write unit tests
+
+---
+
 ### 2025-12-28 (Session 48 - Spec 116 Generic Scraper Template)
 
 | Task | Status |
@@ -201,20 +233,7 @@ timing:
 
 ---
 
-### 2025-12-28 (Session 45 - Phase 4.4.2 Site-Specific Config Overrides)
-
-| Task | Status |
-|------|--------|
-| 4.4.2 Test site-specific config overrides | ✅ Complete |
-
-**Summary**: Completed Phase 4.4.2 - tested site-specific configuration overrides. Created 14 tests covering config loading (5), chunk sizing (2), rate limits (2), integration (3), and gap documentation (2). **Key Finding**: `delay_seconds` from YAML config is not wired into Celery path - rate limiter uses `DOMAIN_RATE_LIMITS` from settings.py instead. This gap is documented in tests.
-
-**Files Created**:
-- `tests/test_site_config_overrides.py` - 14 tests
-
-**Test Results**: 810 passed, 8 skipped
-
-*(Sessions 45 and earlier archived to `archive/sessions/`)*
+*(Sessions 46 and earlier archived to `archive/sessions/`)*
 
 ---
 
