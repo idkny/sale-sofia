@@ -17,10 +17,10 @@ Usage:
     listing = await scraper.extract_listing(html, url)
 """
 
-# Placeholder imports - uncomment as modules are implemented
-# from .config_scraper import ConfigScraper
-# from .config_loader import load_config, validate_config
-# from .selector_chain import extract_field
+# Imports
+from .config_scraper import ConfigScraper
+from .config_loader import load_config, validate_config
+from .selector_chain import extract_field
 
 __all__ = [
     "ConfigScraper",

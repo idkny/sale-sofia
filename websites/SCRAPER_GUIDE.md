@@ -2,7 +2,12 @@
 
 ## Overview
 
-This guide explains how to create a new website scraper for the sale-sofia project. Each website lives in its own folder under `websites/` and follows a consistent pattern.
+This guide explains how to create a new website scraper for the sale-sofia project. You have two options:
+
+1. **Generic Scraper (Experimental)** - Config-driven, YAML only, no code
+2. **Custom Scraper (Production-Ready)** - Full Python implementation
+
+Each website lives in its own folder under `websites/` and follows a consistent pattern.
 
 ## Current Architecture
 
@@ -11,6 +16,11 @@ websites/
 ├── __init__.py              # Registry + get_scraper() factory
 ├── base_scraper.py          # BaseSiteScraper ABC + ListingData dataclass
 ├── scrapling_base.py        # ScraplingMixin - fast parsing with encoding support
+├── generic/                 # NEW: Config-driven scraper framework
+│   ├── __init__.py
+│   ├── config_loader.py     # YAML config loading + validation
+│   ├── selector_chain.py    # Fallback extraction engine
+│   └── config_scraper.py    # Generic ConfigScraper class
 ├── http_client.py           # [TODO] Shared HTTP wrapper
 ├── SCRAPER_GUIDE.md         # This file
 └── {site_name}/
@@ -27,6 +37,142 @@ We use **Scrapling** instead of BeautifulSoup for:
 - **Auto-encoding detection** (windows-1251, UTF-8 for Bulgarian sites)
 - **Adaptive selectors** that survive site changes
 - **StealthyFetcher** for anti-bot bypass
+
+---
+
+## Option 1: Generic Scraper (Experimental)
+
+**Status**: Phase 1 complete (148 passing tests), not yet tested in production.
+
+**Best for**: Sites with standard HTML structure and CSS-selectable fields.
+
+### How It Works
+
+1. Create a YAML config file in `config/sites/`
+2. Define CSS selector chains for each field (with fallback order)
+3. `ConfigScraper` loads config and extracts using selector chains
+4. No Python code needed
+
+### Quick Start
+
+**Step 1**: Create `config/sites/example_bg.yaml`
+
+```yaml
+site:
+  name: example.bg
+  domain: www.example.bg
+  encoding: utf-8
+
+urls:
+  listing_pattern: "/listing/"
+  id_pattern: "/listing/([^/]+)"
+
+pagination:
+  type: numbered
+  param: page
+  start: 1
+
+listing_page:
+  container: ".listing-card"
+  link: "a.listing-link"
+
+detail_page:
+  selectors:
+    # Each field has fallback chain - try in order
+    price:
+      - "span.price-main"
+      - ".price-label strong"
+      - "h3.css-price"
+    sqm:
+      - "li:contains('Квадратура') span"
+      - "[data-code='m'] span"
+    rooms:
+      - "li:contains('Стаи') span"
+    floor:
+      - "li:contains('Етаж') span"
+    images:
+      - "img.gallery-image"
+      - "div.swiper-slide img"
+    description:
+      - "[data-cy='ad_description'] div"
+      - ".description-content"
+
+  field_types:
+    price: currency_bgn_eur
+    sqm: number
+    rooms: integer
+    floor: floor_pattern
+    images: list
+```
+
+**Step 2**: Use ConfigScraper
+
+```python
+from websites.generic import ConfigScraper
+
+scraper = ConfigScraper("config/sites/example_bg.yaml")
+
+# Extract listing
+html = fetch_page(url)
+listing = await scraper.extract_listing(html, url)
+
+# Extract search results
+search_html = fetch_page(search_url)
+urls = await scraper.extract_search_results(search_html)
+```
+
+### Supported Field Types
+
+| Type | Example Input | Parsed Output |
+|------|---------------|---------------|
+| `text` | "Студио в центъра" | "Студио в центъра" |
+| `number` | "75.5 кв.м" | 75.5 |
+| `integer` | "3 стаи" | 3 |
+| `currency_bgn_eur` | "150 000 лв." | 76,500.0 (EUR) |
+| `floor_pattern` | "3/6" or "3 от 6" | (3, 6) |
+| `list` | Multiple images | ["url1", "url2"] |
+
+### Fallback Selector Chains
+
+The framework tries selectors in order until one succeeds:
+
+```yaml
+price:
+  - "span.price-main"         # Try first
+  - ".price-label strong"     # If first fails, try this
+  - "h3.css-price"           # Last resort
+```
+
+This makes extraction resilient to site changes - if they change the HTML structure, the fallback selectors take over automatically.
+
+### Advantages
+
+- No Python code required
+- Fast iteration (edit YAML, test immediately)
+- Fallback chains protect against site changes
+- Reuses all existing infrastructure (Scrapling, resilience, Celery)
+
+### Limitations
+
+- Experimental (not production-tested yet)
+- Best for standard HTML structures
+- Complex extraction logic requires custom scraper (Option 2 below)
+
+### Full Documentation
+
+See `docs/specs/116_GENERIC_SCRAPER_TEMPLATE.md` for complete specification including:
+- Pagination types (numbered, next_link, load_more, infinite_scroll)
+- Config validation
+- Integration with existing code
+- Test strategy
+
+---
+
+## Option 2: Custom Scraper (Production-Ready)
+
+**Best for**: Complex sites, special extraction logic, production use.
+
+This is the traditional approach used by imot.bg and bazar.bg scrapers.
 
 ---
 

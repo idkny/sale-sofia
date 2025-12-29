@@ -273,6 +273,7 @@ sale-sofia/
 ├── websites/            # Scraper implementations
 │   ├── base_scraper.py  # Abstract base class
 │   ├── scrapling_base.py# ScraplingMixin for fast parsing
+│   ├── generic/         # NEW: Config-driven scraper framework
 │   ├── imot_bg/         # imot.bg scraper
 │   └── bazar_bg/        # bazar.bg scraper
 │
@@ -301,7 +302,8 @@ sale-sofia/
 ├── config/              # Configuration
 │   ├── start_urls.yaml  # Target URLs per site
 │   ├── settings.py      # All settings
-│   └── scraping/        # Per-site configs
+│   ├── scraping/        # Per-site configs
+│   └── sites/           # NEW: Generic scraper YAML configs
 │
 ├── scraping/            # Scraping infrastructure
 │   ├── metrics.py       # Request metrics collection
@@ -320,6 +322,61 @@ sale-sofia/
 │
 └── archive/             # Historical files
 ```
+
+---
+
+## Generic Scraper Framework (Experimental)
+
+**Status**: Phase 1 Complete - Not Yet Production Ready
+
+A new config-driven scraper framework that allows adding new sites with **YAML only** - no Python code required.
+
+### How It Works
+
+1. Create a YAML config file in `config/sites/` (e.g., `olx_bg.yaml`)
+2. Define CSS selector chains for each field (with fallback order)
+3. Use `ConfigScraper` to extract data using the config
+4. No Python code needed for new sites
+
+### Key Features
+
+- **Fallback selector chains**: Define 3-5 selectors per field - if one breaks, the next takes over
+- **Field type parsing**: Supports text, number, currency, floor patterns, lists
+- **Reuses existing infrastructure**: ScraplingMixin, resilience, Celery integration
+- **Zero code for new sites**: Just add YAML config
+
+### Components
+
+| File | Purpose |
+|------|---------|
+| `websites/generic/config_loader.py` | Load and validate YAML configs |
+| `websites/generic/selector_chain.py` | Fallback extraction engine |
+| `websites/generic/config_scraper.py` | Generic ConfigScraper class |
+| `config/sites/*.yaml` | Site-specific selector configs |
+
+### Example Config
+
+```yaml
+site:
+  name: example.bg
+  domain: www.example.bg
+
+detail_page:
+  selectors:
+    price:
+      - "span.price-main"      # Try first
+      - ".price-label strong"   # Fallback 1
+      - "h3.css-price"         # Fallback 2
+    sqm:
+      - "li:contains('Квадратура') span"
+      - "[data-code='m'] span"
+```
+
+**Important**: This framework is experimental. Phase 1 implementation is complete (148 passing tests), but it has not been tested with real sites in production yet.
+
+For detailed documentation, see:
+- `docs/specs/116_GENERIC_SCRAPER_TEMPLATE.md` - Full specification
+- `websites/SCRAPER_GUIDE.md` - Updated guide with generic scraper section
 
 ---
 

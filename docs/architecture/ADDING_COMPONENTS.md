@@ -6,6 +6,110 @@
 
 ## Adding a New Scraper
 
+You have two options for adding a new website scraper:
+
+1. **Config-driven (Generic Scraper)** - YAML only, no code (experimental)
+2. **Custom Scraper** - Full Python implementation (production-ready)
+
+---
+
+## Option 1: Generic Scraper (Experimental)
+
+**Best for**: Sites with standard HTML structure and stable selectors.
+
+**Status**: Phase 1 complete (148 passing tests), not yet tested in production.
+
+### 1. Create YAML Config
+
+Create `config/sites/{site_name}.yaml`:
+
+```yaml
+site:
+  name: example.bg
+  domain: www.example.bg
+  encoding: utf-8
+
+urls:
+  listing_pattern: "/listing/"
+  id_pattern: "/listing/([^/]+)"
+
+pagination:
+  type: numbered
+  param: page
+  start: 1
+  max_pages: 50
+
+listing_page:
+  container: ".listing-card"
+  link: "a.listing-link"
+
+detail_page:
+  selectors:
+    # Each field has a fallback chain - try in order
+    price:
+      - "span.price-main"
+      - ".price-label strong"
+      - "h3.css-price"
+    sqm:
+      - "li:contains('Квадратура') span"
+      - "[data-code='m'] span"
+    rooms:
+      - "li:contains('Стаи') span"
+    # ... add all needed fields
+
+  field_types:
+    price: currency_bgn_eur
+    sqm: number
+    rooms: integer
+    floor: floor_pattern
+    images: list
+```
+
+### 2. Use ConfigScraper
+
+```python
+from websites.generic import ConfigScraper
+
+# Load scraper from config
+scraper = ConfigScraper("config/sites/example_bg.yaml")
+
+# Extract listing
+html = fetch_page(url)
+listing = await scraper.extract_listing(html, url)
+```
+
+### 3. Supported Field Types
+
+| Type | Example Input | Parsed Output |
+|------|---------------|---------------|
+| `text` | "Студио в центъра" | "Студио в центъра" |
+| `number` | "75.5 кв.м" | 75.5 |
+| `integer` | "3 стаи" | 3 |
+| `currency_bgn_eur` | "150 000 лв." | 76,500.0 (EUR) |
+| `floor_pattern` | "3/6" or "3 от 6" | (3, 6) |
+| `list` | Multiple images | ["url1", "url2"] |
+
+### 4. Advantages
+
+- No Python code required
+- Fallback selector chains (resilient to site changes)
+- Reuses existing infrastructure (Scrapling, resilience, Celery)
+- Fast iteration (edit YAML, test immediately)
+
+### 5. Limitations
+
+- Experimental (not production-tested yet)
+- Best for standard HTML structures
+- Complex extraction logic requires custom scraper
+
+For full documentation, see `docs/specs/116_GENERIC_SCRAPER_TEMPLATE.md`
+
+---
+
+## Option 2: Custom Scraper (Production-Ready)
+
+**Best for**: Complex sites, special extraction logic, production use.
+
 ### 1. Create folder structure
 
 ```

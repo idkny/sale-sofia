@@ -46,7 +46,7 @@
 | Pre-Production Hardening (Phases 1-3) | 10 | Completed |
 | Historical Completed Work | 35+ | Completed |
 
-**Total Tests**: 902 passed, 8 skipped
+**Total Tests**: 1042 passed, 8 skipped
 
 ---
 
@@ -58,7 +58,7 @@
 | 2 | Available |
 | 3 | Available |
 
-**Session 48 (2025-12-28)**: Instance 2 - README update + auto-start dashboard. 902 tests passing.
+**Session 49 (2025-12-28)**: Instance 2 - Debug scraper not saving data. Found proxy system issues. See instance_002.md for details.
 
 **Claim**: Add `[Instance N]` next to task before starting
 **Complete**: Add `[x]` and remove `[Instance N]` when done
@@ -67,7 +67,17 @@
 
 ## Pending Tasks
 
-*No pending tasks. All phases complete. See archives for completed work.*
+### P0: Fix Proxy System (Scraper Not Working)
+
+> **Problem**: Scraper runs but no data saved. Pre-flight check blocks everything.
+> **Details**: See `docs/tasks/instance_002.md` Session 49 for full analysis.
+
+- [x] Fix KeyError in `proxy_scorer.py` (Session 49)
+- [ ] Remove mubeng server from scraping flow (use proxies directly)
+- [ ] Remove blocking pre-flight gate (3-level system)
+- [ ] Add per-request liveness check (test proxy before browser use)
+- [ ] Add background refresh trigger (when count < MIN_PROXIES)
+- [ ] Test full pipeline end-to-end
 
 ---
 
@@ -96,9 +106,9 @@
 #### Phase 1: Core Framework
 - [x] 1.1 Create `websites/generic/__init__.py`
 - [x] 1.2 Create `config_loader.py` (YAML loading + validation)
-- [ ] 1.3 Create `selector_chain.py` (fallback extraction engine)
-- [ ] 1.4 Create `config_scraper.py` (generic ConfigScraper class)
-- [ ] 1.5 Write unit tests for config loading and selector chains
+- [x] 1.3 Create `selector_chain.py` (fallback extraction engine)
+- [x] 1.4 Create `config_scraper.py` (generic ConfigScraper class)
+- [x] 1.5 Write unit tests for config loading and selector chains
 
 #### Phase 2: Field Parsers
 - [ ] 2.1 Create field type parsers (currency, number, floor_pattern)
