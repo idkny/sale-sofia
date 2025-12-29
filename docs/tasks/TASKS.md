@@ -58,7 +58,7 @@
 | 2 | Available |
 | 3 | Available |
 
-**Session 49 (2025-12-28)**: Instance 2 - Debug scraper not saving data. Found proxy system issues. See instance_002.md for details.
+**Session 50 (2025-12-29)**: Instance 2 - Fixed proxy system. Removed mubeng/preflight, implemented direct proxy with liveness check.
 
 **Claim**: Add `[Instance N]` next to task before starting
 **Complete**: Add `[x]` and remove `[Instance N]` when done
@@ -67,17 +67,17 @@
 
 ## Pending Tasks
 
-### P0: Fix Proxy System (Scraper Not Working)
+### P0: Fix Proxy System (Scraper Not Working) - COMPLETE
 
-> **Problem**: Scraper runs but no data saved. Pre-flight check blocks everything.
-> **Details**: See `docs/tasks/instance_002.md` Session 49 for full analysis.
+> **Fixed in Session 50 (2025-12-29)**
 
 - [x] Fix KeyError in `proxy_scorer.py` (Session 49)
-- [ ] Remove mubeng server from scraping flow (use proxies directly)
-- [ ] Remove blocking pre-flight gate (3-level system)
-- [ ] Add per-request liveness check (test proxy before browser use)
-- [ ] Add background refresh trigger (when count < MIN_PROXIES)
-- [ ] Test full pipeline end-to-end
+- [x] Remove mubeng server from scraping flow (use proxies directly)
+- [x] Remove blocking pre-flight gate (3-level system)
+- [x] Add per-request liveness check (test proxy before browser use)
+- [x] Add background refresh trigger (when count < MIN_PROXIES)
+- [x] Consolidated timeout settings (removed PROXY_VALIDATION_TIMEOUT, use PROXY_TIMEOUT_SECONDS everywhere)
+- [ ] Test full pipeline end-to-end (needs fresh proxies)
 
 ---
 

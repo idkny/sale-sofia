@@ -371,9 +371,9 @@ class TestUtilityMethods:
         stats = proxy_pool.get_stats()
 
         # Verify spec-compliant keys
-        assert stats["total"] == 3
+        assert stats["total_proxies"] == 3
         assert stats["active"] == 3  # All should be >= MIN_PROXY_SCORE initially
-        assert stats["avg_score"] > 0
+        assert stats["average_score"] > 0
         assert isinstance(stats["top_5"], list)
         assert isinstance(stats["bottom_5"], list)
 

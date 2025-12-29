@@ -33,9 +33,6 @@ PROXY_TIMEOUT_MUBENG = f"{PROXY_TIMEOUT_SECONDS}s"
 # Milliseconds version (for APIs that use ms like StealthyFetcher)
 PROXY_TIMEOUT_MS = PROXY_TIMEOUT_SECONDS * 1000
 
-# Quick validation timeout (shorter than scraping for fast preflight checks)
-PROXY_VALIDATION_TIMEOUT = 10  # seconds
-
 # =============================================================================
 # PROXY SCORING SETTINGS
 # =============================================================================

@@ -31,7 +31,7 @@ from config.settings import (
     SCORE_FAILURE_MULTIPLIER,
     MAX_PROXY_FAILURES,
     MIN_PROXY_SCORE,
-    PROXY_VALIDATION_TIMEOUT,
+    PROXY_TIMEOUT_SECONDS,
 )
 
 logger = logging.getLogger(__name__)
@@ -51,8 +51,8 @@ TEST_URLS = [
 MAX_FAILURES = MAX_PROXY_FAILURES
 MIN_SCORE = MIN_PROXY_SCORE
 
-# Quick validation timeout (shorter than scraping timeout for fast checks)
-DEFAULT_TIMEOUT = PROXY_VALIDATION_TIMEOUT
+# Default timeout for proxy validation (same as scraping timeout)
+DEFAULT_TIMEOUT = PROXY_TIMEOUT_SECONDS
 
 
 @dataclass

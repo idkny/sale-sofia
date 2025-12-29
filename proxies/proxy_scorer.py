@@ -398,9 +398,9 @@ class ScoredProxyPool:
             )
 
             return {
-                "total": len(scores),
+                "total_proxies": len(scores),
                 "active": len([s for s in scores if s >= MIN_PROXY_SCORE]),
-                "avg_score": sum(scores) / len(scores) if scores else 0,
+                "average_score": sum(scores) / len(scores) if scores else 0,
                 "top_5": [
                     {"proxy": p, "score": s["score"]}
                     for p, s in sorted_proxies[:5]

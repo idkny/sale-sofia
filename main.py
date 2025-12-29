@@ -20,6 +20,8 @@ from datetime import datetime
 from pathlib import Path
 from typing import Any, Optional
 
+import httpx
+
 from dotenv import load_dotenv
 from loguru import logger
 
@@ -34,23 +36,13 @@ from resilience.checkpoint import CheckpointManager
 from data import data_store_main
 from data.change_detector import compute_hash, has_changed, track_price_change
 from paths import LOGS_DIR, PROXIES_DIR
-from proxies.proxies_main import (
-    setup_mubeng_rotator,
-    stop_mubeng_rotator,
-)
 from proxies.proxy_scorer import ScoredProxyPool
-from proxies.proxy_validator import preflight_check
 from utils.log_config import setup_logging
 from config.settings import (
-    MUBENG_PROXY,
     MAX_PROXY_RETRIES,
     MIN_PROXIES_FOR_SCRAPING,
     PROXY_TIMEOUT_SECONDS,
     PROXY_TIMEOUT_MS,
-    PREFLIGHT_MAX_ATTEMPTS_L1,
-    PREFLIGHT_MAX_ATTEMPTS_L2,
-    PREFLIGHT_MAX_ATTEMPTS_L3,
-    PREFLIGHT_RETRY_DELAY,
     PROXY_WAIT_TIMEOUT,
     SCRAPER_REPORTS_DIR,
     PARALLEL_SCRAPING_ENABLED,
@@ -78,6 +70,27 @@ def _setup_signal_handlers():
     """Set up graceful shutdown handlers."""
     signal.signal(signal.SIGTERM, _signal_handler)
     signal.signal(signal.SIGINT, _signal_handler)
+
+
+def quick_liveness_check(proxy_url: str) -> bool:
+    """
+    Quick check if proxy is alive using httpx.
+
+    Tests against imot.bg (actual target) rather than httpbin.
+    Uses PROXY_TIMEOUT_SECONDS (45s) - same as scraping timeout.
+
+    Args:
+        proxy_url: Full proxy URL (e.g., "http://1.2.3.4:8080")
+
+    Returns:
+        True if proxy responds, False otherwise
+    """
+    try:
+        with httpx.Client(proxy=proxy_url, timeout=PROXY_TIMEOUT_SECONDS) as client:
+            response = client.get("https://www.imot.bg")
+            return response.status_code == 200
+    except Exception:
+        return False
 
 
 def _check_and_save_listing(listing) -> dict:
@@ -136,15 +149,18 @@ def _fetch_search_page(
     proxy_pool: Optional[ScoredProxyPool]
 ) -> tuple[str, str | None]:
     """
-    Fetch search page with retry logic, circuit breaker, and rate limiting.
+    Fetch search page with liveness check, circuit breaker, and rate limiting.
 
-    Uses retry_with_backoff decorator for exponential backoff.
-    Selects a new proxy on each retry attempt.
+    Flow:
+    1. Pick proxy from pool
+    2. Quick liveness check - if dead, remove and pick next
+    3. If alive, pass to Fetcher
+    4. On fetch failure, record and retry with new proxy
 
     Args:
         url: The URL to fetch
-        proxy: Base proxy URL (mubeng rotator)
-        proxy_pool: Optional ScoredProxyPool for proxy selection and scoring
+        proxy: Fallback proxy URL (if no pool)
+        proxy_pool: ScoredProxyPool for proxy selection and scoring
 
     Returns:
         (html_content, proxy_key) - proxy_key is the successful proxy or None
@@ -164,50 +180,77 @@ def _fetch_search_page(
     # Acquire rate limiter token (blocks if needed)
     rate_limiter.acquire(domain)
 
-    # Track proxy across retries for scoring
-    proxy_state = {"key": None}
+    # Track successful proxy
+    successful_proxy_key = None
 
-    def on_retry(attempt: int, exc: Exception):
-        # Score the failed proxy before retry
-        if proxy_pool and proxy_state["key"]:
-            proxy_pool.record_result(proxy_state["key"], success=False)
-        # Record failure with circuit breaker
-        circuit_breaker.record_failure(domain)
+    for attempt in range(1, MAX_PROXY_RETRIES + 1):
+        # Select proxy with liveness check
+        effective_proxy = proxy  # fallback
+        proxy_key = None
 
-    @retry_with_backoff(max_attempts=MAX_PROXY_RETRIES, on_retry=on_retry)
-    def fetch():
-        # Select proxy for this attempt (Solution F - X-Proxy-Offset)
-        headers = {}
         if proxy_pool:
-            proxy_dict = proxy_pool.select_proxy()
-            if proxy_dict:
-                proxy_state["key"] = f"{proxy_dict['host']}:{proxy_dict['port']}"
-                index = proxy_pool.get_proxy_index(proxy_state["key"])
-                if index is not None:
-                    headers = {"X-Proxy-Offset": str(index)}
+            # Find a live proxy (check up to pool size times)
+            max_checks = min(proxy_pool.get_stats()['total_proxies'], 10)
+            for _ in range(max_checks):
+                proxy_dict = proxy_pool.select_proxy()
+                if not proxy_dict:
+                    break
 
-        response = Fetcher.get(
-            url=url,
-            proxy=proxy or MUBENG_PROXY,
-            timeout=PROXY_TIMEOUT_SECONDS,
-            headers=headers
-        )
-        return response.html_content
+                proxy_key = f"{proxy_dict['host']}:{proxy_dict['port']}"
+                protocol = proxy_dict.get('protocol', 'http')
+                effective_proxy = f"{protocol}://{proxy_dict['host']}:{proxy_dict['port']}"
 
-    html = fetch()  # May raise after all retries exhausted
+                # Quick liveness check
+                if quick_liveness_check(effective_proxy):
+                    logger.debug(f"Proxy {proxy_key} is alive")
+                    break
+                else:
+                    # Dead proxy - remove immediately
+                    logger.warning(f"Proxy {proxy_key} dead, removing from pool")
+                    proxy_pool.remove_proxy(proxy_key)
+                    proxy_key = None
+                    effective_proxy = proxy
 
-    # Check for soft blocks before recording success
-    is_blocked, block_reason = detect_soft_block(html)
-    if is_blocked:
-        circuit_breaker.record_failure(domain)
-        if proxy_pool and proxy_state["key"]:
-            proxy_pool.record_result(proxy_state["key"], success=False)
-        raise BlockedException(f"Soft block detected: {block_reason}")
+            if not proxy_key and not effective_proxy:
+                raise Exception("No working proxies available")
 
-    # Record success with circuit breaker
-    circuit_breaker.record_success(domain)
+        # Try to fetch with the live proxy
+        try:
+            response = Fetcher.get(
+                url=url,
+                proxy=effective_proxy,
+                timeout=PROXY_TIMEOUT_SECONDS
+            )
+            html = response.html_content
 
-    return html, proxy_state["key"]
+            # Check for soft blocks
+            is_blocked, block_reason = detect_soft_block(html)
+            if is_blocked:
+                circuit_breaker.record_failure(domain)
+                if proxy_pool and proxy_key:
+                    proxy_pool.record_result(proxy_key, success=False)
+                raise BlockedException(f"Soft block detected: {block_reason}")
+
+            # Success!
+            circuit_breaker.record_success(domain)
+            if proxy_pool and proxy_key:
+                proxy_pool.record_result(proxy_key, success=True)
+            successful_proxy_key = proxy_key
+            return html, successful_proxy_key
+
+        except Exception as e:
+            logger.warning(f"Fetch attempt {attempt}/{MAX_PROXY_RETRIES} failed: {e}")
+            circuit_breaker.record_failure(domain)
+            if proxy_pool and proxy_key:
+                proxy_pool.record_result(proxy_key, success=False)
+
+            if attempt == MAX_PROXY_RETRIES:
+                raise
+
+            # Brief delay before retry
+            time.sleep(1)
+
+    raise Exception(f"All {MAX_PROXY_RETRIES} fetch attempts failed")
 
 
 def _collect_listing_urls(
@@ -282,15 +325,19 @@ def _fetch_listing_page(
     proxy_pool: Optional[ScoredProxyPool]
 ) -> tuple[str, str | None]:
     """
-    Fetch listing page with retry logic, circuit breaker, and rate limiting.
+    Fetch listing page with liveness check, circuit breaker, and rate limiting.
 
-    Uses StealthyFetcher with retry_with_backoff decorator.
-    Selects a new proxy on each retry attempt.
+    Uses StealthyFetcher (browser) for JS-rendered pages.
+    Flow:
+    1. Pick proxy from pool
+    2. Quick liveness check - if dead, remove and pick next
+    3. If alive, pass to StealthyFetcher
+    4. On fetch failure, record and retry with new proxy
 
     Args:
         url: The listing URL to fetch
-        proxy: Base proxy URL (mubeng rotator)
-        proxy_pool: Optional ScoredProxyPool for proxy selection and scoring
+        proxy: Fallback proxy URL (if no pool)
+        proxy_pool: ScoredProxyPool for proxy selection and scoring
 
     Returns:
         (html_content, proxy_key) - proxy_key is the successful proxy or None
@@ -310,53 +357,80 @@ def _fetch_listing_page(
     # Acquire rate limiter token (blocks if needed)
     rate_limiter.acquire(domain)
 
-    # Track proxy across retries for scoring
-    proxy_state = {"key": None}
+    # Track successful proxy
+    successful_proxy_key = None
 
-    def on_retry(attempt: int, exc: Exception):
-        # Score the failed proxy before retry
-        if proxy_pool and proxy_state["key"]:
-            proxy_pool.record_result(proxy_state["key"], success=False)
-        # Record failure with circuit breaker
-        circuit_breaker.record_failure(domain)
+    for attempt in range(1, MAX_PROXY_RETRIES + 1):
+        # Select proxy with liveness check
+        effective_proxy = proxy  # fallback
+        proxy_key = None
 
-    @retry_with_backoff(max_attempts=MAX_PROXY_RETRIES, on_retry=on_retry)
-    def fetch():
-        # Select proxy for this attempt (Solution F - X-Proxy-Offset)
-        extra_headers = {}
         if proxy_pool:
-            proxy_dict = proxy_pool.select_proxy()
-            if proxy_dict:
-                proxy_state["key"] = f"{proxy_dict['host']}:{proxy_dict['port']}"
-                index = proxy_pool.get_proxy_index(proxy_state["key"])
-                if index is not None:
-                    extra_headers = {"X-Proxy-Offset": str(index)}
+            # Find a live proxy (check up to pool size times)
+            max_checks = min(proxy_pool.get_stats()['total_proxies'], 10)
+            for _ in range(max_checks):
+                proxy_dict = proxy_pool.select_proxy()
+                if not proxy_dict:
+                    break
 
-        response = StealthyFetcher.fetch(
-            url=url,
-            proxy=proxy or MUBENG_PROXY,
-            extra_headers=extra_headers,
-            humanize=True,
-            block_webrtc=True,
-            network_idle=True,
-            timeout=PROXY_TIMEOUT_MS
-        )
-        return response.html_content
+                proxy_key = f"{proxy_dict['host']}:{proxy_dict['port']}"
+                protocol = proxy_dict.get('protocol', 'http')
+                effective_proxy = f"{protocol}://{proxy_dict['host']}:{proxy_dict['port']}"
 
-    html = fetch()  # May raise after all retries exhausted
+                # Quick liveness check
+                if quick_liveness_check(effective_proxy):
+                    logger.debug(f"Proxy {proxy_key} is alive")
+                    break
+                else:
+                    # Dead proxy - remove immediately
+                    logger.warning(f"Proxy {proxy_key} dead, removing from pool")
+                    proxy_pool.remove_proxy(proxy_key)
+                    proxy_key = None
+                    effective_proxy = proxy
 
-    # Check for soft blocks before recording success
-    is_blocked, block_reason = detect_soft_block(html)
-    if is_blocked:
-        circuit_breaker.record_failure(domain)
-        if proxy_pool and proxy_state["key"]:
-            proxy_pool.record_result(proxy_state["key"], success=False)
-        raise BlockedException(f"Soft block detected: {block_reason}")
+            if not proxy_key and not effective_proxy:
+                raise Exception("No working proxies available")
 
-    # Record success with circuit breaker
-    circuit_breaker.record_success(domain)
+        # Try to fetch with the live proxy
+        try:
+            response = StealthyFetcher.fetch(
+                url=url,
+                proxy=effective_proxy,
+                humanize=True,
+                block_webrtc=True,
+                network_idle=True,
+                timeout=PROXY_TIMEOUT_MS
+            )
+            html = response.html_content
 
-    return html, proxy_state["key"]
+            # Check for soft blocks
+            is_blocked, block_reason = detect_soft_block(html)
+            if is_blocked:
+                circuit_breaker.record_failure(domain)
+                if proxy_pool and proxy_key:
+                    proxy_pool.record_result(proxy_key, success=False)
+                raise BlockedException(f"Soft block detected: {block_reason}")
+
+            # Success!
+            circuit_breaker.record_success(domain)
+            if proxy_pool and proxy_key:
+                proxy_pool.record_result(proxy_key, success=True)
+            successful_proxy_key = proxy_key
+            return html, successful_proxy_key
+
+        except Exception as e:
+            logger.warning(f"Fetch attempt {attempt}/{MAX_PROXY_RETRIES} failed: {e}")
+            circuit_breaker.record_failure(domain)
+            if proxy_pool and proxy_key:
+                proxy_pool.record_result(proxy_key, success=False)
+
+            if attempt == MAX_PROXY_RETRIES:
+                raise
+
+            # Brief delay before retry
+            time.sleep(1)
+
+    raise Exception(f"All {MAX_PROXY_RETRIES} fetch attempts failed")
 
 
 def _scrape_listings(
@@ -515,8 +589,11 @@ def scrape_from_start_url(
     logger.info(f"Starting crawl from: {start_url}")
     logger.info(f"Rate limit: {60/delay:.1f} URLs/min ({delay} sec delay)")
     logger.info(f"Target: {limit} listings")
-    effective_proxy = proxy or MUBENG_PROXY
-    logger.info(f"Using proxy: {effective_proxy}")
+    if proxy_pool:
+        stats = proxy_pool.get_stats()
+        logger.info(f"Using proxy pool: {stats['total_proxies']} proxies available")
+    elif proxy:
+        logger.info(f"Using proxy: {proxy}")
 
     # Phase 1: Collect listing URLs from search pages
     urls = _collect_listing_urls(scraper, start_url, limit, delay, proxy, proxy_pool)
@@ -590,114 +667,6 @@ def _initialize_proxy_pool() -> Optional[ScoredProxyPool]:
         logger.warning(f"Failed to initialize proxy pool: {e}")
         print(f"[WARNING] Proxy scoring disabled: {e}")
         return None
-
-
-def _start_proxy_rotator() -> tuple[str, Any, Any, list[str]]:
-    """Start mubeng proxy rotator. Returns (proxy_url, process, temp_file, ordered_proxy_keys)."""
-    print()
-    print("[INFO] Starting proxy rotator...")
-    proxy_url, mubeng_process, temp_proxy_file, ordered_proxy_keys = setup_mubeng_rotator(
-        port=8089,
-        min_live_proxies=MIN_PROXIES_FOR_SCRAPING,
-    )
-
-    if not mubeng_process:
-        print("[ERROR] Failed to start proxy rotator. Aborting.")
-        return proxy_url, mubeng_process, temp_proxy_file, ordered_proxy_keys
-
-    print(f"[SUCCESS] Proxy rotator running at {proxy_url} with {len(ordered_proxy_keys)} proxies")
-    return proxy_url, mubeng_process, temp_proxy_file, ordered_proxy_keys
-
-
-def _run_preflight_level1(proxy_url: str, max_attempts: int = PREFLIGHT_MAX_ATTEMPTS_L1) -> bool:
-    """
-    Level 1 pre-flight: Try with mubeng auto-rotation.
-    Mubeng rotates on error, so more attempts = more proxies tested.
-    """
-    print("[INFO] Running pre-flight proxy check...")
-    for attempt in range(1, max_attempts + 1):
-        if preflight_check(proxy_url, timeout=PROXY_TIMEOUT_SECONDS):
-            print(f"[SUCCESS] Pre-flight check passed (attempt {attempt})")
-            return True
-        else:
-            print(f"[WARNING] Pre-flight check failed (attempt {attempt}/{max_attempts})")
-            if attempt < max_attempts:
-                time.sleep(PREFLIGHT_RETRY_DELAY)  # Short delay, mubeng auto-rotates
-    return False
-
-
-def _run_preflight_level2(mubeng_process: Any) -> tuple[bool, Any, str, Any, list[str]]:
-    """
-    Level 2 pre-flight: Soft restart - reload mubeng with same proxy file.
-    Returns (success, new_process, new_proxy_url, new_temp_file, ordered_proxy_keys).
-    """
-    print()
-    print("[INFO] Soft restart: Reloading proxy rotator...")
-    stop_mubeng_rotator(mubeng_process, None)  # Don't delete temp file
-
-    proxy_url, new_process, new_temp_file, ordered_proxy_keys = setup_mubeng_rotator(
-        port=8089,
-        min_live_proxies=MIN_PROXIES_FOR_SCRAPING,
-    )
-    if not new_process:
-        return False, new_process, proxy_url, new_temp_file, ordered_proxy_keys
-
-    print(f"[SUCCESS] Proxy rotator restarted at {proxy_url}")
-    for attempt in range(1, PREFLIGHT_MAX_ATTEMPTS_L2 + 1):
-        if preflight_check(proxy_url, timeout=PROXY_TIMEOUT_SECONDS):
-            print(f"[SUCCESS] Pre-flight check passed after soft restart (attempt {attempt})")
-            return True, new_process, proxy_url, new_temp_file, ordered_proxy_keys
-        else:
-            print(f"[WARNING] Pre-flight still failing (attempt {attempt}/{PREFLIGHT_MAX_ATTEMPTS_L2})")
-            if attempt < PREFLIGHT_MAX_ATTEMPTS_L2:
-                time.sleep(PREFLIGHT_RETRY_DELAY)
-
-    return False, new_process, proxy_url, new_temp_file, ordered_proxy_keys
-
-
-def _run_preflight_level3(orch, proxy_pool: Optional[ScoredProxyPool]) -> tuple[bool, Any, str, Any, list[str]]:
-    """
-    Level 3 pre-flight: Full refresh - scrape new proxies (5-10 min).
-    Returns (success, new_process, new_proxy_url, new_temp_file, ordered_proxy_keys).
-    """
-    print()
-    print("[INFO] Full refresh: Fetching new proxies (this takes 5-10 min)...")
-
-    mtime_before, task_id = orch.trigger_proxy_refresh()
-    if not orch.wait_for_refresh_completion(mtime_before, min_count=MIN_PROXIES_FOR_SCRAPING, task_id=task_id):
-        print("[ERROR] Proxy refresh timed out or failed. Aborting.", flush=True)
-        return False, None, "", None, []
-
-    print("[DEBUG] wait_for_refresh_completion returned True, continuing...", flush=True)
-
-    # Reload proxy pool after refresh
-    if proxy_pool:
-        print("[INFO] Reloading proxy pool after refresh...", flush=True)
-        proxy_pool.reload_proxies()
-        stats = proxy_pool.get_stats()
-        print(f"[SUCCESS] Proxy pool reloaded: {stats['total_proxies']} proxies")
-
-    print("[INFO] Restarting proxy rotator with fresh proxies...")
-    proxy_url, new_process, new_temp_file, ordered_proxy_keys = setup_mubeng_rotator(
-        port=8089,
-        min_live_proxies=MIN_PROXIES_FOR_SCRAPING,
-    )
-    if not new_process:
-        print("[ERROR] Failed to restart proxy rotator. Aborting.")
-        return False, new_process, proxy_url, new_temp_file, ordered_proxy_keys
-    print(f"[SUCCESS] Proxy rotator restarted at {proxy_url}")
-
-    # Final pre-flight check
-    for attempt in range(1, PREFLIGHT_MAX_ATTEMPTS_L3 + 1):
-        if preflight_check(proxy_url, timeout=PROXY_TIMEOUT_SECONDS):
-            print(f"[SUCCESS] Pre-flight check passed after refresh (attempt {attempt})")
-            return True, new_process, proxy_url, new_temp_file, ordered_proxy_keys
-        else:
-            print(f"[WARNING] Pre-flight still failing (attempt {attempt}/{PREFLIGHT_MAX_ATTEMPTS_L3})")
-            if attempt < PREFLIGHT_MAX_ATTEMPTS_L3:
-                time.sleep(PREFLIGHT_RETRY_DELAY)
-
-    return False, new_process, proxy_url, new_temp_file, ordered_proxy_keys
 
 
 def _ensure_min_proxies(
@@ -929,61 +898,42 @@ def run_auto_mode() -> None:
             return
 
         proxy_pool = _initialize_proxy_pool()
-        proxy_url, mubeng_process, temp_proxy_file, ordered_proxy_keys = _start_proxy_rotator()
-        if not mubeng_process:
+        if not proxy_pool:
+            print("[ERROR] Failed to initialize proxy pool. Aborting.")
             return
 
-        # Set proxy order in pool for X-Proxy-Offset mapping (Solution F)
-        if proxy_pool and ordered_proxy_keys:
-            proxy_pool.set_proxy_order(ordered_proxy_keys)
-            if temp_proxy_file:
-                proxy_pool.set_mubeng_proxy_file(temp_proxy_file)
+        # Check we have enough proxies before starting
+        stats = proxy_pool.get_stats()
+        if stats['total_proxies'] < MIN_PROXIES_FOR_SCRAPING:
+            print(f"[WARNING] Only {stats['total_proxies']} proxies available, need {MIN_PROXIES_FOR_SCRAPING}")
+            print("[INFO] Triggering proxy refresh...")
+            mtime_before, task_id = orch.trigger_proxy_refresh()
+            if not orch.wait_for_refresh_completion(mtime_before, min_count=MIN_PROXIES_FOR_SCRAPING, task_id=task_id):
+                print("[ERROR] Proxy refresh failed. Aborting.")
+                return
+            proxy_pool.reload_proxies()
+            stats = proxy_pool.get_stats()
+            print(f"[SUCCESS] Proxy pool reloaded: {stats['total_proxies']} proxies")
 
-        # Pre-flight with 3-level recovery
-        preflight_passed = _run_preflight_level1(proxy_url)
+        print(f"[INFO] Using direct proxy connections ({stats['total_proxies']} proxies available)")
 
-        if not preflight_passed:
-            preflight_passed, mubeng_process, proxy_url, temp_proxy_file, ordered_proxy_keys = _run_preflight_level2(mubeng_process)
-            if proxy_pool and ordered_proxy_keys:
-                proxy_pool.set_proxy_order(ordered_proxy_keys)
-                if temp_proxy_file:
-                    proxy_pool.set_mubeng_proxy_file(temp_proxy_file)
-
-        if not preflight_passed:
-            result = _run_preflight_level3(orch, proxy_pool)
-            preflight_passed, mubeng_process, proxy_url, temp_proxy_file, ordered_proxy_keys = result
-            if proxy_pool and ordered_proxy_keys:
-                proxy_pool.set_proxy_order(ordered_proxy_keys)
-                if temp_proxy_file:
-                    proxy_pool.set_mubeng_proxy_file(temp_proxy_file)
-
-        if not preflight_passed:
-            print("[ERROR] Pre-flight failed after all recovery attempts.")
-            stop_mubeng_rotator(mubeng_process, temp_proxy_file)
-            return
-
-        try:
-            if PARALLEL_SCRAPING_ENABLED:
-                # Parallel scraping via Celery
-                print()
-                print("[INFO] PARALLEL_SCRAPING mode enabled")
-                print("[INFO] Dispatching all sites to Celery workers...")
-
-                # Convert start_urls dict format for Celery task
-                # start_urls is {site: [url1, url2, ...]}
-                result = orch.start_all_sites_scraping(start_urls)
-                print(f"[SUCCESS] Dispatched group: {result['group_id']}")
-
-                stats = _wait_for_parallel_scraping(orch, result['group_id'])
-            else:
-                # Sequential scraping (current behavior)
-                stats = _crawl_all_sites(start_urls, proxy_url, proxy_pool, orch)
-
-            _print_summary(stats, proxy_pool)
-        finally:
+        if PARALLEL_SCRAPING_ENABLED:
+            # Parallel scraping via Celery
             print()
-            print("[INFO] Stopping proxy rotator...")
-            stop_mubeng_rotator(mubeng_process, temp_proxy_file)
+            print("[INFO] PARALLEL_SCRAPING mode enabled")
+            print("[INFO] Dispatching all sites to Celery workers...")
+
+            # Convert start_urls dict format for Celery task
+            # start_urls is {site: [url1, url2, ...]}
+            result = orch.start_all_sites_scraping(start_urls)
+            print(f"[SUCCESS] Dispatched group: {result['group_id']}")
+
+            stats = _wait_for_parallel_scraping(orch, result['group_id'])
+        else:
+            # Sequential scraping - proxies selected directly from pool
+            stats = _crawl_all_sites(start_urls, None, proxy_pool, orch)
+
+        _print_summary(stats, proxy_pool)
 
     print("[INFO] All processes stopped.")
 
