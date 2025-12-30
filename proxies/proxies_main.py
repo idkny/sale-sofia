@@ -21,30 +21,6 @@ from .tasks import check_scraped_proxies_task, scrape_new_proxies_task
 logger = logging.getLogger(__name__)
 
 
-def scrape_proxies():
-    """Facade to trigger the proxy scraping Celery task."""
-    logger.info("Triggering proxy scraping task via facade...")
-    try:
-        scrape_new_proxies_task.delay()
-        print("[INFO] Proxy scraping task has been sent to the background worker.")
-    except Exception as e:
-        logger.error(f"Failed to trigger proxy scraping task: {e}", exc_info=True)
-        print("[ERROR] Could not trigger proxy scraping task. Is the message broker running?")
-        raise
-
-
-def check_proxies():
-    """Facade to trigger the proxy checking Celery task."""
-    logger.info("Triggering proxy checking task via facade...")
-    try:
-        check_scraped_proxies_task.delay()
-        print("[INFO] Proxy checking task has been sent to the background worker.")
-    except Exception as e:
-        logger.error(f"Failed to trigger proxy checking task: {e}", exc_info=True)
-        print("[ERROR] Could not trigger proxy checking task. Is the message broker running?")
-        raise
-
-
 def get_and_filter_proxies(
     min_live_proxies: int = MIN_PROXIES_TO_START,
 ) -> Tuple[Optional[Path], List[str]]:

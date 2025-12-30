@@ -75,6 +75,32 @@
 
 ## Pending Tasks
 
+### Proxy System Dead Code Cleanup
+
+> **Research**: [PROXY_SYSTEM_REVIEW.md](../research/PROXY_SYSTEM_REVIEW.md)
+> **Created**: Session 55 (2025-12-30)
+> **Estimated**: ~150-200 lines of dead code
+
+#### Phase 1: Low Risk Cleanup (P1)
+- [ ] 1.1 Delete Solution F code from `proxy_scorer.py` (~100 lines)
+  - `_proxy_order`, `_index_map`, `_mubeng_proxy_file` attributes
+  - `set_proxy_order()`, `get_proxy_index()`, `set_mubeng_proxy_file()`
+  - `_rebuild_index_map()`, `_save_proxy_file()`
+- [ ] 1.2 Delete unused facades from `proxies_main.py` (~25 lines)
+  - `scrape_proxies()`, `check_proxies()`
+- [ ] 1.3 Update stale docstrings (~10 lines)
+  - proxy_scorer.py: Remove "weighted proxy selection" references
+- [ ] 1.4 Run pytest to verify no regressions
+
+#### Phase 2: Medium Risk Cleanup (P2) - Needs Discussion
+- [ ] 2.1 Decision: Keep or remove PARALLEL_SCRAPING mode?
+- [ ] 2.2 If removing: Delete `scraping/tasks.py`, `async_fetcher.py`
+- [ ] 2.3 If keeping: Fix async_fetcher to use proxy pool instead of MUBENG_PROXY
+- [ ] 2.4 Clean up `mubeng_manager.py` (keep/remove based on P2.1)
+- [ ] 2.5 Remove/update MUBENG_PROXY from settings.py
+
+---
+
 ### P0: Fix Proxy System (Scraper Not Working) - COMPLETE
 
 > **Fixed in Session 50 (2025-12-29)**
@@ -226,4 +252,4 @@
 
 ---
 
-**Last Updated**: 2025-12-30 (Session 54 - Dead code cleanup)
+**Last Updated**: 2025-12-30 (Session 55 - Proxy system architecture review)

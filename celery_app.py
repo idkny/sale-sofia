@@ -56,21 +56,9 @@ celery_app.conf.update(
     worker_concurrency=8,  # Number of worker processes (handles 16 chunk tasks)
 )
 
-# Celery Beat schedule for automatic proxy maintenance
-# Ensures we ALWAYS have fresh, validated proxies available
-celery_app.conf.beat_schedule = {
-    # Scrape + validate proxies every 6 hours using a proper chain
-    # The chain ensures check ALWAYS runs after scrape completes
-    # REMOVED: Separate check-proxies-every-2h (caused stale data issues)
-    "refresh-proxies-every-6h": {
-        "task": "proxies.tasks.scrape_and_check_chain_task",
-        "schedule": 21600.0,  # Every 6 hours (6 * 60 * 60)
-        "options": {"queue": "sale_sofia"},
-    },
-}
-
-# To start Celery Beat (scheduler), run:
-# celery -A celery_app beat --loglevel=info
+# To start Celery worker:
+# celery -A celery_app worker --loglevel=info
 #
-# Or run worker + beat together:
-# celery -A celery_app worker --beat --loglevel=info
+# To refresh proxies manually, use:
+# from proxies.tasks import scrape_and_check_chain_task
+# scrape_and_check_chain_task.delay()

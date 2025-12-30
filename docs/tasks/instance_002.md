@@ -4,7 +4,7 @@ type: session_file
 project: sale-sofia
 instance: 2
 created_at: 2025-12-24
-updated_at: 2025-12-30 (Session 54)
+updated_at: 2025-12-30 (Session 56)
 ---
 
 # Instance 2 Session
@@ -15,40 +15,68 @@ updated_at: 2025-12-30 (Session 54)
 
 ## IMMEDIATE NEXT SESSION TASK
 
-**Comprehensive Proxy System Review**
+**Continue Proxy System Improvements - Phase 2**
 
-Review the entire proxy system including Celery, Redis, and all tools/processes.
-Use sequential thinking for analysis. Output architecture in this format:
+Phase 1 cleanup complete. Continue based on `docs/research/PROXY_SYSTEM_REVIEW.md`:
 
-```
-┌──────────────────────────────────────────────────────────────────────────────┐
-│                         SECTION TITLE                                        │
-├──────────────────────────────────────────────────────────────────────────────┤
-│                                                                              │
-│  Layer N: NAME                                                               │
-│  ├── component → description                                                 │
-│  │   └── Sub-detail: path/to/file.py                                        │
-│  └── component → description                                                 │
-│                                                                              │
-└──────────────────────────────────────────────────────────────────────────────┘
-```
+1. **Decision needed**: Keep or remove PARALLEL_SCRAPING mode?
+   - If removing: delete `scraping/tasks.py`, `async_fetcher.py`, `MUBENG_PROXY`
+   - If keeping: fix `async_fetcher.py` to use proxy pool instead of `MUBENG_PROXY`
 
-**Include sections for:**
-1. PROXY SYSTEM ARCHITECTURE (5 layers)
-2. KEY SETTINGS (table format)
-3. DATA FLOW (step-by-step with arrows)
-4. FILE STRUCTURE (tree with descriptions)
-5. CELERY TASKS (task names, what they do, dependencies)
-6. REDIS USAGE (keys, what they store, TTL)
+2. **P2 Cleanup** (if decided to keep parallel mode):
+   - Clean up `mubeng_manager.py` dead functions (~40 lines)
+   - Remove/update `MUBENG_PROXY` from settings.py
 
-**After review, identify:**
-- Any remaining dead code
-- Inconsistencies between docs and code
-- Potential simplifications
+3. **Consistency**: Unify fetcher usage (ScraplingMixin vs direct Fetcher)
 
 ---
 
 ## Session History
+
+### 2025-12-30 (Session 56 - Phase 1 Cleanup Complete)
+
+| Task | Status |
+|------|--------|
+| Delete Solution F code from proxy_scorer.py | Complete |
+| Delete unused facades from proxies_main.py | Complete |
+| Update stale docstrings | Complete |
+| Remove 6-hour Beat schedule | Complete |
+| Update research file | Complete |
+| Run pytest (1036 passed) | Complete |
+
+**Summary**: Completed Phase 1 dead code cleanup. Removed ~159 lines total: Solution F code (~122 lines), unused facades (~25 lines), and 6-hour Celery Beat schedule (~12 lines). Proxy refresh is now on-demand only via `scrape_and_check_chain_task.delay()`.
+
+**Files Modified**:
+- `proxies/proxy_scorer.py` - Removed Solution F code, updated docstrings (351→229 lines)
+- `proxies/proxies_main.py` - Removed unused facades (217→192 lines)
+- `celery_app.py` - Removed Beat schedule
+
+**Research Updated**: `docs/research/PROXY_SYSTEM_REVIEW.md` - Marked P1 complete, updated architecture diagrams
+
+---
+
+### 2025-12-30 (Session 55 - Proxy System Architecture Review)
+
+| Task | Status |
+|------|--------|
+| Review proxy system architecture | Complete |
+| Document 5-layer architecture | Complete |
+| Document key settings table | Complete |
+| Document data flow diagrams | Complete |
+| Document file structure | Complete |
+| Document Celery tasks | Complete |
+| Document Redis usage | Complete |
+| Identify dead code (~150-200 lines) | Complete |
+| Create research file | Complete |
+| Add cleanup tasks to TASKS.md | Complete |
+
+**Summary**: Comprehensive proxy system review completed. Created detailed architecture documentation covering all 5 layers, Celery tasks, Redis keys, and data flows. Identified ~150-200 lines of dead code including Solution F code in proxy_scorer.py and unused facades in proxies_main.py.
+
+**Research Output**: `docs/research/PROXY_SYSTEM_REVIEW.md`
+
+**Key Finding**: Mubeng server is NOT used in default sequential scraping mode. Proxies are selected directly from ScoredProxyPool with per-request httpx liveness checks.
+
+---
 
 ### 2025-12-30 (Session 54 - Dead Code Cleanup)
 
@@ -121,29 +149,6 @@ Use sequential thinking for analysis. Output architecture in this format:
 4. On fetch fail → record_result(success=False), retry
 5. _ensure_min_proxies checks count after each site
 ```
-
----
-
-### 2025-12-28 (Session 49 - Debug Scraper Not Saving Data)
-
-| Task | Status |
-|------|--------|
-| Debug why scraper produces no data | Complete (found issues) |
-| Fix KeyError in proxy_scorer.py | Complete |
-| Document proxy system issues | Complete |
-
-**Summary**: Found root cause - pre-flight blocking gate aborts entire pipeline. Documented fix plan.
-
----
-
-### 2025-12-28 (Session 48 - README Update + Auto-Start Dashboard)
-
-| Task | Status |
-|------|--------|
-| Update README.md | Complete |
-| Auto-start dashboard | Complete |
-
-**Summary**: Updated README, added auto-launch Streamlit after scraping.
 
 ---
 

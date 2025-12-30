@@ -58,7 +58,7 @@ def scrape_new_proxies_task(_previous_result=None):
     Note:
         This task does NOT auto-trigger check. Use chains instead:
         - Orchestrator: chain(scrape.s(), check.s())
-        - Beat: Uses scrape_and_check_chain_task
+        - Manual: scrape_and_check_chain_task
     """
     logger.info("Starting proxy scraping task...")
     try:
@@ -420,8 +420,7 @@ def scrape_and_check_chain_task():
     """
     Meta-task that triggers the full scrape+check chain.
 
-    Used by Celery beat to ensure scrape and check always run together.
-    This avoids the fire-and-forget problem of separate beat tasks.
+    Can be called manually to refresh proxies on-demand.
     """
     from celery import chain
 
