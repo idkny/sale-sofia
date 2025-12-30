@@ -37,13 +37,8 @@ PROXY_TIMEOUT_MS = PROXY_TIMEOUT_SECONDS * 1000
 # PROXY SCORING SETTINGS
 # =============================================================================
 
-# Score multipliers for success/failure
-SCORE_SUCCESS_MULTIPLIER = 1.1  # +10% reward on success
-SCORE_FAILURE_MULTIPLIER = 0.5  # -50% penalty on failure
-
 # Thresholds for auto-removal
-MAX_PROXY_FAILURES = 3   # Auto-remove after this many consecutive failures
-MIN_PROXY_SCORE = 0.01   # Auto-remove if score drops below this
+MAX_CONSECUTIVE_PROXY_FAILURES = 3   # Auto-remove after this many consecutive failures
 
 # =============================================================================
 # RESILIENCE SETTINGS
@@ -116,9 +111,6 @@ PREFLIGHT_MAX_ATTEMPTS_L1 = 6   # Level 1: Auto-rotation attempts
 PREFLIGHT_MAX_ATTEMPTS_L2 = 3   # Level 2: Soft restart attempts
 PREFLIGHT_MAX_ATTEMPTS_L3 = 3   # Level 3: Full refresh attempts
 PREFLIGHT_RETRY_DELAY = 1       # Seconds between preflight retries
-
-# Timeout waiting for proxies to be available (seconds)
-PROXY_WAIT_TIMEOUT = 600
 
 # =============================================================================
 # SOFT BLOCK DETECTION SETTINGS

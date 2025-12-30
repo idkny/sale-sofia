@@ -58,6 +58,8 @@
 | 2 | Available |
 | 3 | Available |
 
+**Session 53 (2025-12-30)**: Instance 2 - Proxy cleanup x2: (1) Simplified proxy scoring - removed weighted selection, score multipliers, persistence. (2) Removed PROXY_WAIT_TIMEOUT dead code.
+
 **Session 52 (2025-12-30)**: Instance 1 - Proxy settings cleanup. Renamed MAX_PROXY_RETRIES → MAX_URL_RETRIES. Added 3 new tasks: Failed URL Tracking, Simplify Proxy Scoring, Cleanup PROXY_WAIT_TIMEOUT.
 
 **Session 51 (2025-12-30)**: Instance 1 - OLX.bg live test + enhanced parsers. Added `:contains()` selector, `label_value/number/floor` parsers.
@@ -145,58 +147,35 @@
 - [ ] 6.2 Validate against existing scraper output
 - [ ] 6.3 Deprecate old scraper code
 
-### Simplify Proxy Scoring System
+### Simplify Proxy Scoring System - COMPLETE (Session 53)
 
-> **Goal**: Remove complex scoring math, keep simple failure tracking.
-> **Why**: Current system has 3 overlapping mechanisms (liveness check, scoring, URL retries) doing similar things. The weighted selection adds complexity but marginal value since proxies are refreshed frequently anyway.
+> **Completed 2025-12-30**: Removed complex scoring, now uses simple consecutive failure tracking.
 
-**Current (Complex):**
-- `SCORE_SUCCESS_MULTIPLIER = 1.1` - multiply score on success
-- `SCORE_FAILURE_MULTIPLIER = 0.5` - multiply score on failure
-- `MIN_PROXY_SCORE = 0.01` - remove if score drops below
-- `MAX_PROXY_FAILURES = 3` - remove after 3 consecutive fails
-- Weighted random selection (prefer high-score proxies)
-- Persistence to `proxy_scores.json`
+#### Completed Tasks
+- [x] 1. Remove `SCORE_SUCCESS_MULTIPLIER`, `SCORE_FAILURE_MULTIPLIER`, `MIN_PROXY_SCORE` from settings
+- [x] 2. Rename `MAX_PROXY_FAILURES` → `MAX_CONSECUTIVE_PROXY_FAILURES`
+- [x] 3. Simplify `proxy_scorer.py` - remove score math, keep failure counter only
+- [x] 4. Remove weighted selection - use random.choice()
+- [x] 5. Remove `proxy_scores.json` persistence
+- [x] 6. Update `proxy_validator.py` to use simplified system
+- [x] 7. Update/remove related tests (deleted 6, modified 4)
+- [x] 8. Delete unused code (~120 lines removed)
 
-**Proposed (Simple):**
-- Just track consecutive failures per proxy
-- Remove after N consecutive failures
-- Random selection (no weighting)
-- No persistence needed
+**Files Modified**: config/settings.py, proxies/proxy_scorer.py, proxies/proxy_validator.py, main.py, tests/test_proxy_scorer.py
+**Tests**: 1036 passed, 8 skipped
 
-#### Tasks
-- [ ] 1. Remove `SCORE_SUCCESS_MULTIPLIER`, `SCORE_FAILURE_MULTIPLIER`, `MIN_PROXY_SCORE` from settings
-- [ ] 2. Rename `MAX_PROXY_FAILURES` → `MAX_CONSECUTIVE_PROXY_FAILURES` for clarity
-- [ ] 3. Simplify `proxy_scorer.py` - remove score math, keep failure counter only
-- [ ] 4. Remove weighted selection - use random choice
-- [ ] 5. Remove `proxy_scores.json` persistence
-- [ ] 6. Update `proxy_validator.py` to use simplified system
-- [ ] 7. Update/remove related tests
-- [ ] 8. Delete unused code (~200 lines estimated)
+### Cleanup PROXY_WAIT_TIMEOUT (Dead Code) - COMPLETE (Session 53)
 
-### Cleanup PROXY_WAIT_TIMEOUT (Dead Code)
+> **Completed 2025-12-30**: Removed misleading timeout setting.
 
-> **Goal**: Remove misleading timeout setting - primary mechanism is now Celery chord signals.
-> **Why**: We implemented event-based waiting (Celery task completion) but left the old timeout setting. It's now just a safety net, not the primary wait mechanism.
+#### Completed Tasks
+- [x] 1. Remove `PROXY_WAIT_TIMEOUT` from `config/settings.py`
+- [x] 2. Remove `PROXY_WAIT_TIMEOUT` import from `main.py`
+- [x] 3. Update `main.py:650` to not pass timeout (use orchestrator default)
+- [x] 4. Add comment in `orchestrator.py` explaining timeout is safety net only
 
-**Current (Confusing):**
-- `config/settings.py`: `PROXY_WAIT_TIMEOUT = 600` (10 min)
-- `orchestrator.py`: default `timeout = 2400` (40 min)
-- `main.py`: imports and uses `PROXY_WAIT_TIMEOUT`
-- Actual wait: Celery chord completion signal (event-based)
-
-**Proposed (Clean):**
-- Remove `PROXY_WAIT_TIMEOUT` from `config/settings.py`
-- Remove import from `main.py`
-- Keep orchestrator's hardcoded 2400s (40 min) as safety net
-- Add comment explaining it's a fallback only
-
-#### Tasks
-- [ ] 1. Remove `PROXY_WAIT_TIMEOUT` from `config/settings.py`
-- [ ] 2. Remove `PROXY_WAIT_TIMEOUT` import from `main.py`
-- [ ] 3. Update `main.py:650` to not pass timeout (use orchestrator default)
-- [ ] 4. Add comment in `orchestrator.py` explaining timeout is safety net only
-- [ ] 5. Update any docs referencing `PROXY_WAIT_TIMEOUT`
+**Files Modified**: config/settings.py, main.py, orchestrator.py
+**Tests**: 1036 passed, 8 skipped
 
 ### Failed URL Tracking & Retry System
 

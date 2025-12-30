@@ -19,13 +19,8 @@ from pathlib import Path
 
 import pytest
 
-from proxies.proxy_scorer import (
-    MAX_FAILURES,
-    MIN_SCORE,
-    SCORE_FAILURE_MULTIPLIER,
-    SCORE_SUCCESS_MULTIPLIER,
-    ScoredProxyPool,
-)
+from proxies.proxy_scorer import ScoredProxyPool
+from config.settings import MAX_CONSECUTIVE_PROXY_FAILURES
 
 
 @pytest.fixture
@@ -83,20 +78,6 @@ class TestProxyPoolInitialization:
         assert len(proxy_pool.proxies) == len(sample_proxies)
         assert proxy_pool.proxies[0]["host"] == "1.2.3.4"
 
-    def test_initialize_scores(self, proxy_pool):
-        """Test that scores are initialized for all proxies."""
-        assert len(proxy_pool.scores) == 3
-
-        # Check score initialization based on response time
-        # Fast proxy (0.5s) should have higher initial score than slow (2.0s)
-        fast_score = proxy_pool.scores["1.2.3.4:8080"]["score"]
-        slow_score = proxy_pool.scores["5.6.7.8:3128"]["score"]
-        assert fast_score > slow_score
-
-        # Score should be 1.0 / timeout
-        assert fast_score == pytest.approx(1.0 / 0.5, rel=0.01)
-        assert slow_score == pytest.approx(1.0 / 2.0, rel=0.01)
-
     def test_load_nonexistent_file(self, temp_dir):
         """Test handling of non-existent proxies file."""
         pool = ScoredProxyPool(temp_dir / "nonexistent.json")
@@ -123,25 +104,6 @@ class TestProxySelection:
         assert "host" in proxy
         assert "port" in proxy
 
-    def test_select_proxy_weighted(self, proxy_pool):
-        """Test that selection is weighted by score."""
-        # Give one proxy a much higher score
-        proxy_pool.scores["1.2.3.4:8080"]["score"] = 10.0
-        proxy_pool.scores["5.6.7.8:3128"]["score"] = 0.1
-        proxy_pool.scores["9.10.11.12:1080"]["score"] = 0.1
-
-        # Select many times and count
-        selections = {"1.2.3.4:8080": 0, "5.6.7.8:3128": 0, "9.10.11.12:1080": 0}
-
-        for _ in range(100):
-            proxy = proxy_pool.select_proxy()
-            key = proxy_pool._get_proxy_key(proxy)
-            selections[key] += 1
-
-        # High-score proxy should be selected much more often
-        assert selections["1.2.3.4:8080"] > selections["5.6.7.8:3128"]
-        assert selections["1.2.3.4:8080"] > selections["9.10.11.12:1080"]
-
     def test_select_proxy_updates_last_used(self, proxy_pool):
         """Test that selection updates last_used timestamp."""
         before = time.time()
@@ -166,25 +128,20 @@ class TestScoreUpdates:
     """Test success/failure score updates."""
 
     def test_record_success(self, proxy_pool):
-        """Test that success increases score and resets failures."""
+        """Test that success resets failures."""
         key = "1.2.3.4:8080"
-        initial_score = proxy_pool.scores[key]["score"]
+        proxy_pool.scores[key]["failures"] = 2
 
         proxy_pool.record_result(key, success=True)
 
-        new_score = proxy_pool.scores[key]["score"]
-        assert new_score == pytest.approx(initial_score * SCORE_SUCCESS_MULTIPLIER)
         assert proxy_pool.scores[key]["failures"] == 0
 
     def test_record_failure(self, proxy_pool):
-        """Test that failure decreases score and increments failures."""
+        """Test that failure increments failures counter."""
         key = "1.2.3.4:8080"
-        initial_score = proxy_pool.scores[key]["score"]
 
         proxy_pool.record_result(key, success=False)
 
-        new_score = proxy_pool.scores[key]["score"]
-        assert new_score == pytest.approx(initial_score * SCORE_FAILURE_MULTIPLIER)
         assert proxy_pool.scores[key]["failures"] == 1
 
     def test_success_resets_failures(self, proxy_pool):
@@ -215,29 +172,13 @@ class TestAutoPruning:
     """Test automatic proxy removal."""
 
     def test_auto_prune_on_max_failures(self, proxy_pool):
-        """Test that proxy is removed after MAX_FAILURES."""
+        """Test that proxy is removed after MAX_CONSECUTIVE_PROXY_FAILURES."""
         key = "1.2.3.4:8080"
         initial_count = len(proxy_pool.proxies)
 
         # Record failures up to threshold
-        for _ in range(MAX_FAILURES):
+        for _ in range(MAX_CONSECUTIVE_PROXY_FAILURES):
             proxy_pool.record_result(key, success=False)
-
-        # Proxy should be removed
-        assert len(proxy_pool.proxies) == initial_count - 1
-        assert key not in proxy_pool.scores
-
-    def test_auto_prune_on_low_score(self, proxy_pool):
-        """Test that proxy is removed when score drops below MIN_SCORE."""
-        key = "1.2.3.4:8080"
-        initial_count = len(proxy_pool.proxies)
-
-        # Set score low enough that after failure multiplier (0.5), it drops BELOW MIN_SCORE
-        # 0.019 * 0.5 = 0.0095 < 0.01 (MIN_SCORE)
-        proxy_pool.scores[key]["score"] = MIN_SCORE * 1.9
-
-        # One more failure should trigger removal (score drops below MIN_SCORE)
-        proxy_pool.record_result(key, success=False)
 
         # Proxy should be removed
         assert len(proxy_pool.proxies) == initial_count - 1
@@ -271,52 +212,6 @@ class TestAutoPruning:
 
         assert removed is True
         assert len(proxy_pool.proxies) == initial_count - 1
-
-
-class TestScorePersistence:
-    """Test score saving and loading."""
-
-    def test_save_scores(self, proxy_pool):
-        """Test that scores are saved to file."""
-        proxy_pool.save_scores()
-
-        # Check that file was created
-        assert proxy_pool.scores_file.exists()
-
-        # Load and verify
-        with open(proxy_pool.scores_file, "r") as f:
-            saved_scores = json.load(f)
-
-        assert len(saved_scores) == len(proxy_pool.scores)
-        assert "1.2.3.4:8080" in saved_scores
-
-    def test_load_scores(self, proxies_file):
-        """Test that scores are loaded from file."""
-        # Create a pool and modify scores
-        pool1 = ScoredProxyPool(proxies_file)
-        pool1.scores["1.2.3.4:8080"]["score"] = 5.5
-        pool1.scores["1.2.3.4:8080"]["failures"] = 2
-        pool1.save_scores()
-
-        # Create new pool - should load saved scores
-        pool2 = ScoredProxyPool(proxies_file)
-
-        assert pool2.scores["1.2.3.4:8080"]["score"] == pytest.approx(5.5)
-        assert pool2.scores["1.2.3.4:8080"]["failures"] == 2
-
-    def test_scores_persist_across_updates(self, proxy_pool):
-        """Test that score updates are persisted."""
-        key = "1.2.3.4:8080"
-
-        # Record success
-        proxy_pool.record_result(key, success=True)
-        new_score = proxy_pool.scores[key]["score"]
-
-        # Load scores from file
-        with open(proxy_pool.scores_file, "r") as f:
-            saved_scores = json.load(f)
-
-        assert saved_scores[key]["score"] == pytest.approx(new_score)
 
 
 class TestThreadSafety:
@@ -357,36 +252,21 @@ class TestThreadSafety:
         for t in threads:
             t.join()
 
-        # All proxies should still exist with valid scores
+        # All proxies should still exist with valid failure counts
         for key in keys:
             if key in proxy_pool.scores:
-                assert proxy_pool.scores[key]["score"] >= 0
+                assert proxy_pool.scores[key]["failures"] >= 0
 
 
 class TestUtilityMethods:
     """Test utility methods."""
 
     def test_get_stats(self, proxy_pool):
-        """Test get_stats method returns spec-compliant format."""
+        """Test get_stats method returns simplified format."""
         stats = proxy_pool.get_stats()
 
-        # Verify spec-compliant keys
         assert stats["total_proxies"] == 3
-        assert stats["active"] == 3  # All should be >= MIN_PROXY_SCORE initially
-        assert stats["average_score"] > 0
-        assert isinstance(stats["top_5"], list)
-        assert isinstance(stats["bottom_5"], list)
-
-        # Verify top_5/bottom_5 format
-        assert len(stats["top_5"]) == 3  # Only 3 proxies available
-        assert len(stats["bottom_5"]) == 3
-        for entry in stats["top_5"]:
-            assert "proxy" in entry
-            assert "score" in entry
-
-        # Top 5 should be sorted descending
-        if len(stats["top_5"]) >= 2:
-            assert stats["top_5"][0]["score"] >= stats["top_5"][1]["score"]
+        assert "proxies_with_failures" in stats
 
     def test_reload_proxies(self, proxy_pool, proxies_file):
         """Test reloading proxies from file."""
@@ -460,8 +340,7 @@ class TestEdgeCases:
 
         pool = ScoredProxyPool(file_path)
 
-        # Should default to score of 1.0
-        assert pool.scores["1.2.3.4:8080"]["score"] == 1.0
+        assert pool.scores["1.2.3.4:8080"]["failures"] == 0
 
     def test_record_result_unknown_proxy(self, proxy_pool):
         """Test recording result for unknown proxy."""

@@ -27,10 +27,7 @@ import requests
 
 from paths import PROXIES_DIR
 from config.settings import (
-    SCORE_SUCCESS_MULTIPLIER,
-    SCORE_FAILURE_MULTIPLIER,
-    MAX_PROXY_FAILURES,
-    MIN_PROXY_SCORE,
+    MAX_CONSECUTIVE_PROXY_FAILURES,
     PROXY_TIMEOUT_SECONDS,
 )
 
@@ -46,10 +43,6 @@ TEST_URLS = [
     ("https://ident.me", "text"),  # Plain text IP
     ("https://api.ipify.org", "text"),  # Plain text IP
 ]
-
-# Aliases for backward compatibility
-MAX_FAILURES = MAX_PROXY_FAILURES
-MIN_SCORE = MIN_PROXY_SCORE
 
 # Default timeout for proxy validation (same as scraping timeout)
 DEFAULT_TIMEOUT = PROXY_TIMEOUT_SECONDS
@@ -301,7 +294,6 @@ class ProxyValidator:
             )
 
         score = self.scores[key]
-        score.score = min(score.score * SCORE_SUCCESS_MULTIPLIER, 10.0)  # Cap at 10
         score.failures = 0  # Reset consecutive failures
         score.successes += 1
         score.last_check = time.time()
@@ -320,17 +312,13 @@ class ProxyValidator:
             )
 
         score = self.scores[key]
-        score.score *= SCORE_FAILURE_MULTIPLIER
         score.failures += 1
         score.last_check = time.time()
 
         # Check if proxy should be removed
-        should_remove = score.failures >= MAX_FAILURES or score.score < MIN_SCORE
-
-        if should_remove:
+        if score.failures >= MAX_CONSECUTIVE_PROXY_FAILURES:
             logger.warning(
-                f"Proxy {proxy_url} marked for removal: "
-                f"failures={score.failures}, score={score.score:.4f}"
+                f"Proxy {proxy_url} marked for removal: failures={score.failures}"
             )
             # Mark as dead but keep in scores for reference
             score.score = 0.0
@@ -344,7 +332,7 @@ class ProxyValidator:
             return True  # Unknown proxy, assume usable
 
         score = self.scores[key]
-        return score.score >= MIN_SCORE and score.failures < MAX_FAILURES
+        return score.failures < MAX_CONSECUTIVE_PROXY_FAILURES
 
     def get_proxy_stats(self, proxy_url: str) -> Optional[dict]:
         """Get statistics for a specific proxy."""
@@ -357,14 +345,14 @@ class ProxyValidator:
         """Get statistics for all tracked proxies."""
         return {
             "total_tracked": len(self.scores),
-            "usable": sum(1 for s in self.scores.values() if s.score >= MIN_SCORE),
-            "dead": sum(1 for s in self.scores.values() if s.score < MIN_SCORE),
+            "usable": sum(1 for s in self.scores.values() if s.failures < MAX_CONSECUTIVE_PROXY_FAILURES),
+            "dead": sum(1 for s in self.scores.values() if s.failures >= MAX_CONSECUTIVE_PROXY_FAILURES),
             "proxies": {k: v.to_dict() for k, v in self.scores.items()},
         }
 
     def cleanup_dead_proxies(self) -> int:
         """Remove dead proxies from the scores file. Returns count removed."""
-        dead_keys = [k for k, v in self.scores.items() if v.score < MIN_SCORE]
+        dead_keys = [k for k, v in self.scores.items() if v.failures >= MAX_CONSECUTIVE_PROXY_FAILURES]
         for key in dead_keys:
             del self.scores[key]
         self._save_scores()

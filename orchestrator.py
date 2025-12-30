@@ -525,7 +525,8 @@ class Orchestrator:
 
         Args:
             min_count: Minimum number of usable proxies required.
-            timeout: Maximum seconds to wait (default 40 minutes).
+            timeout: Timeout is a safety net fallback only (default 40 minutes).
+                     Primary wait mechanism is Celery chord completion signal.
 
         Returns:
             True if usable proxies available, False if timeout.

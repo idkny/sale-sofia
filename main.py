@@ -43,7 +43,6 @@ from config.settings import (
     MIN_PROXIES_FOR_SCRAPING,
     PROXY_TIMEOUT_SECONDS,
     PROXY_TIMEOUT_MS,
-    PROXY_WAIT_TIMEOUT,
     SCRAPER_REPORTS_DIR,
     PARALLEL_SCRAPING_ENABLED,
 )
@@ -647,7 +646,7 @@ def _setup_infrastructure(orch) -> bool:
     # 3. Wait for proxies
     print()
     print("[INFO] Checking proxy availability...")
-    if not orch.wait_for_proxies(min_count=MIN_PROXIES_FOR_SCRAPING, timeout=PROXY_WAIT_TIMEOUT):
+    if not orch.wait_for_proxies(min_count=MIN_PROXIES_FOR_SCRAPING):
         print("[ERROR] Could not get proxies. Aborting.")
         return False
 
@@ -660,8 +659,7 @@ def _initialize_proxy_pool() -> Optional[ScoredProxyPool]:
     try:
         proxy_pool = ScoredProxyPool(PROXIES_DIR / "live_proxies.json")
         stats = proxy_pool.get_stats()
-        print(f"[SUCCESS] Proxy pool initialized: {stats['total_proxies']} proxies, "
-              f"avg score: {stats['average_score']:.2f}")
+        print(f"[SUCCESS] Proxy pool initialized: {stats['total_proxies']} proxies")
         return proxy_pool
     except Exception as e:
         logger.warning(f"Failed to initialize proxy pool: {e}")
@@ -849,7 +847,7 @@ def _wait_for_parallel_scraping(orch, group_id: str, poll_interval: float = 5.0)
 
 
 def _print_summary(stats: dict, proxy_pool: Optional[ScoredProxyPool]) -> None:
-    """Print final crawl summary and save proxy scores."""
+    """Print final crawl summary."""
     print()
     print("=" * 60)
     print("CRAWL COMPLETE")
@@ -859,13 +857,11 @@ def _print_summary(stats: dict, proxy_pool: Optional[ScoredProxyPool]) -> None:
           f"Failed: {stats['failed']}, "
           f"Success rate: {stats['scraped'] / max(stats['total_attempts'], 1) * 100:.1f}%")
 
-    # Save final proxy scores
+    # Show final proxy stats
     if proxy_pool:
-        print("\n[INFO] Saving final proxy scores...")
-        proxy_pool.save_scores()
         stats_pool = proxy_pool.get_stats()
-        print(f"[SUCCESS] Final proxy stats: {stats_pool['total_proxies']} proxies, "
-              f"avg score: {stats_pool['average_score']:.2f}")
+        print(f"\n[INFO] Final proxy stats: {stats_pool['total_proxies']} proxies, "
+              f"{stats_pool['proxies_with_failures']} with failures")
 
 
 def run_auto_mode() -> None:

@@ -4,7 +4,7 @@ type: session_file
 project: sale-sofia
 instance: 2
 created_at: 2025-12-24
-updated_at: 2025-12-29 (Session 50)
+updated_at: 2025-12-30 (Session 53)
 ---
 
 # Instance 2 Session
@@ -17,7 +17,7 @@ updated_at: 2025-12-29 (Session 50)
 
 **Test Full Pipeline with Fresh Proxies**
 
-The proxy system fix is complete. Need to:
+The proxy system is now fully simplified. Need to:
 1. Refresh proxies (current ones are stale/dead)
 2. Run `python main.py` to verify end-to-end
 
@@ -29,6 +29,26 @@ rm proxies/live_proxies.json && python main.py
 ---
 
 ## Session History
+
+### 2025-12-30 (Session 53 - Proxy Cleanup x2)
+
+| Task | Status |
+|------|--------|
+| Simplify Proxy Scoring System | Complete |
+| Cleanup PROXY_WAIT_TIMEOUT | Complete |
+| Run pytest (1036 passed) | Complete |
+
+**Summary**: Completed two proxy cleanup tasks. (1) Simplified proxy scoring - removed weighted selection, score multipliers, persistence; now uses consecutive failure tracking with random selection. (2) Removed PROXY_WAIT_TIMEOUT dead code - primary mechanism is now Celery chord completion signals.
+
+**Files Modified**:
+- `config/settings.py` - Removed 4 constants, renamed 1
+- `proxies/proxy_scorer.py` - Simplified class (~120 lines removed)
+- `proxies/proxy_validator.py` - Simplified scoring logic
+- `main.py` - Removed save_scores(), average_score prints, PROXY_WAIT_TIMEOUT
+- `orchestrator.py` - Added clarifying comment about timeout safety net
+- `tests/test_proxy_scorer.py` - Deleted 6 tests, modified 4 tests
+
+---
 
 ### 2025-12-29 (Session 50 - Fix Proxy System COMPLETE)
 

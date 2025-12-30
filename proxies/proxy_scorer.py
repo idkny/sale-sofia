@@ -29,18 +29,9 @@ from pathlib import Path
 from typing import Optional
 
 from proxies import proxy_to_url
-from config.settings import (
-    SCORE_SUCCESS_MULTIPLIER,
-    SCORE_FAILURE_MULTIPLIER,
-    MAX_PROXY_FAILURES,
-    MIN_PROXY_SCORE,
-)
+from config.settings import MAX_CONSECUTIVE_PROXY_FAILURES
 
 logger = logging.getLogger(__name__)
-
-# Aliases for backward compatibility with tests
-MAX_FAILURES = MAX_PROXY_FAILURES
-MIN_SCORE = MIN_PROXY_SCORE
 
 
 class ScoredProxyPool:
@@ -67,7 +58,6 @@ class ScoredProxyPool:
             proxies_file: Path to live_proxies.json file
         """
         self.proxies_file = Path(proxies_file)
-        self.scores_file = self.proxies_file.parent / "proxy_scores.json"
         self.proxies: list[dict] = []
         self.scores: dict[str, dict] = {}
         self.lock = threading.RLock()  # Use RLock to allow reentrant locking (record_result -> remove_proxy)
@@ -77,11 +67,8 @@ class ScoredProxyPool:
         self._index_map: dict[str, int] = {}  # proxy_key -> index for O(1) lookup
         self._mubeng_proxy_file: Optional[Path] = None  # Path to mubeng's proxy file for --watch
 
-        # Load proxies and scores
+        # Load proxies and initialize failure tracking
         self._load_proxies()
-        self.load_scores()
-
-        # Initialize scores for any new proxies
         self._initialize_scores()
 
     def _load_proxies(self) -> None:
@@ -99,72 +86,16 @@ class ScoredProxyPool:
             logger.error(f"Failed to load proxies: {e}")
             self.proxies = []
 
-    def load_scores(self) -> None:
-        """
-        Load proxy scores from disk.
-
-        Scores are stored in proxy_scores.json in the format:
-        {
-            "host:port": {
-                "score": 1.0,
-                "failures": 0,
-                "last_used": timestamp
-            }
-        }
-        """
-        if not self.scores_file.exists():
-            logger.info(f"No existing scores file at {self.scores_file}")
-            self.scores = {}
-            return
-
-        try:
-            with open(self.scores_file, "r") as f:
-                self.scores = json.load(f)
-            logger.info(f"Loaded scores for {len(self.scores)} proxies from {self.scores_file}")
-        except (json.JSONDecodeError, IOError) as e:
-            logger.error(f"Failed to load scores: {e}")
-            self.scores = {}
-
-    def save_scores(self) -> None:
-        """
-        Persist proxy scores to disk.
-
-        Thread-safe: acquires lock before saving.
-        """
-        with self.lock:
-            try:
-                with open(self.scores_file, "w") as f:
-                    json.dump(self.scores, f, indent=2)
-                logger.debug(f"Saved scores for {len(self.scores)} proxies to {self.scores_file}")
-            except IOError as e:
-                logger.error(f"Failed to save scores: {e}")
-
     def _initialize_scores(self) -> None:
-        """
-        Initialize scores for new proxies that don't have scores yet.
-
-        Initial score is based on response time from validation:
-        - score = 1.0 / response_time (faster proxies get higher initial scores)
-        - If no timeout data, default to 1.0
-        """
+        """Initialize failure tracking for all proxies."""
         with self.lock:
             for proxy in self.proxies:
                 proxy_key = self._get_proxy_key(proxy)
-
                 if proxy_key not in self.scores:
-                    # Calculate initial score from response time
-                    timeout = proxy.get("timeout")
-                    if timeout and timeout > 0:
-                        initial_score = 1.0 / timeout
-                    else:
-                        initial_score = 1.0
-
                     self.scores[proxy_key] = {
-                        "score": initial_score,
                         "failures": 0,
                         "last_used": None,
                     }
-                    logger.debug(f"Initialized score for {proxy_key}: {initial_score:.3f}")
 
     def _get_proxy_key(self, proxy: dict) -> str:
         """
@@ -193,87 +124,23 @@ class ScoredProxyPool:
         port = proxy["port"]
         return proxy_to_url(host, port, protocol)
 
-    def _calculate_selection_weights(self) -> tuple[list[dict], list[float]]:
-        """
-        Calculate selection weights for all valid proxies.
-
-        Returns:
-            Tuple of (valid_proxies, weights) where weights are normalized probabilities.
-            Returns empty lists if no valid proxies available.
-        """
-        scores = []
-        valid_proxies = []
-
-        for proxy in self.proxies:
-            proxy_key = self._get_proxy_key(proxy)
-            if proxy_key in self.scores:
-                score = self.scores[proxy_key]["score"]
-                if score > 0:
-                    scores.append(score)
-                    valid_proxies.append(proxy)
-
-        if not valid_proxies:
-            return [], []
-
-        total_score = sum(scores)
-        if total_score <= 0:
-            # Uniform weights if all scores are 0
-            weights = [1.0 / len(valid_proxies)] * len(valid_proxies)
-        else:
-            weights = [s / total_score for s in scores]
-
-        return valid_proxies, weights
-
     def select_proxy(self) -> Optional[dict]:
-        """
-        Select a proxy using weighted random choice based on scores.
-
-        Higher-scored proxies are more likely to be selected.
-        Thread-safe: acquires lock during selection.
-
-        Returns:
-            Selected proxy dictionary, or None if no proxies available
-        """
+        """Select a random proxy from the pool."""
         with self.lock:
             if not self.proxies:
                 logger.warning("No proxies available for selection")
                 return None
 
-            valid_proxies, weights = self._calculate_selection_weights()
-            if not valid_proxies:
-                logger.warning("No valid proxies with positive scores")
-                return None
-
-            selected = random.choices(valid_proxies, weights=weights, k=1)[0]
-
-            # Update last_used timestamp
+            selected = random.choice(self.proxies)
             proxy_key = self._get_proxy_key(selected)
-            self.scores[proxy_key]["last_used"] = time.time()
-
-            logger.debug(
-                f"Selected proxy {proxy_key} with score "
-                f"{self.scores[proxy_key]['score']:.3f}"
-            )
-
+            if proxy_key in self.scores:
+                self.scores[proxy_key]["last_used"] = time.time()
+            logger.debug(f"Selected proxy {proxy_key}")
             return selected
 
     def record_result(self, proxy_key: str, success: bool) -> None:
-        """
-        Update proxy score based on success/failure.
-
-        Success: score *= 1.1, reset failures counter
-        Failure: score *= 0.5, increment failures counter
-        Auto-prune: Remove if failures >= 3 OR score < 0.01
-
-        Thread-safe: acquires lock during update.
-
-        Args:
-            proxy_key: Proxy key in format "host:port" or full URL
-            success: True if request succeeded, False otherwise
-        """
-        # Handle both "host:port" and full URL formats
+        """Update proxy failure count based on success/failure."""
         if "://" in proxy_key:
-            # Extract host:port from URL like "http://1.2.3.4:8080"
             proxy_key = proxy_key.split("://")[1]
 
         with self.lock:
@@ -284,34 +151,15 @@ class ScoredProxyPool:
             score_data = self.scores[proxy_key]
 
             if success:
-                # Reward success: +10% score, reset failures
-                score_data["score"] *= SCORE_SUCCESS_MULTIPLIER
                 score_data["failures"] = 0
-                logger.debug(
-                    f"Proxy {proxy_key} success - new score: {score_data['score']:.3f}"
-                )
+                logger.debug(f"Proxy {proxy_key} success - failures reset")
             else:
-                # Penalize failure: -50% score, increment failures
-                score_data["score"] *= SCORE_FAILURE_MULTIPLIER
                 score_data["failures"] += 1
-                logger.debug(
-                    f"Proxy {proxy_key} failure - new score: {score_data['score']:.3f}, "
-                    f"failures: {score_data['failures']}"
-                )
+                logger.debug(f"Proxy {proxy_key} failure - failures: {score_data['failures']}")
 
-                # Check if proxy should be removed
-                if (score_data["failures"] >= MAX_FAILURES or
-                    score_data["score"] < MIN_SCORE):
-                    logger.warning(
-                        f"Auto-removing proxy {proxy_key}: "
-                        f"failures={score_data['failures']}, "
-                        f"score={score_data['score']:.4f}"
-                    )
+                if score_data["failures"] >= MAX_CONSECUTIVE_PROXY_FAILURES:
+                    logger.warning(f"Auto-removing proxy {proxy_key}: failures={score_data['failures']}")
                     self.remove_proxy(proxy_key)
-                    return
-
-        # Save updated scores (outside lock to avoid holding during I/O)
-        self.save_scores()
 
     def remove_proxy(self, proxy_key: str) -> bool:
         """
@@ -363,9 +211,6 @@ class ScoredProxyPool:
                     # Give mubeng time to detect file change and reload
                     time.sleep(0.2)
 
-        # Save updated scores (outside lock to avoid holding during I/O)
-        self.save_scores()
-
         return removed
 
     def get_proxy_url(self) -> Optional[str]:
@@ -383,32 +228,14 @@ class ScoredProxyPool:
         return None
 
     def get_stats(self) -> dict:
-        """
-        Export proxy statistics for reporting.
-
-        Returns:
-            Dictionary with pool statistics including top/bottom performers
-        """
+        """Export proxy statistics for reporting."""
         with self.lock:
-            scores = [s["score"] for s in self.scores.values()]
-            sorted_proxies = sorted(
-                self.scores.items(),
-                key=lambda x: x[1]["score"],
-                reverse=True
-            )
+            total = len(self.proxies)
+            with_failures = sum(1 for s in self.scores.values() if s.get("failures", 0) > 0)
 
             return {
-                "total_proxies": len(scores),
-                "active": len([s for s in scores if s >= MIN_PROXY_SCORE]),
-                "average_score": sum(scores) / len(scores) if scores else 0,
-                "top_5": [
-                    {"proxy": p, "score": s["score"]}
-                    for p, s in sorted_proxies[:5]
-                ],
-                "bottom_5": [
-                    {"proxy": p, "score": s["score"]}
-                    for p, s in sorted_proxies[-5:]
-                ],
+                "total_proxies": total,
+                "proxies_with_failures": with_failures,
             }
 
     def reload_proxies(self) -> None:
