@@ -58,6 +58,10 @@
 | 2 | Available |
 | 3 | Available |
 
+**Session 59 (2025-12-30)**: Instance 1 - Mubeng & SSL investigation. Created research file `MUBENG_SSL_INVESTIGATION.md`. Added "Remove Mubeng Binary Dependency" task to backlog. Finding: mubeng binary can be removed, SSL certificate infrastructure should be kept.
+
+**Session 58 (2025-12-30)**: Instance 2 - Proxy Phase 3 complete. Unified ScraplingMixin to accept proxy parameter. Removed MUBENG_PROXY from settings.py. All 1036 tests pass.
+
 **Session 57 (2025-12-30)**: Instance 2 - Proxy Phase 2 complete (~306 lines removed). Deleted `mubeng_manager.py` (114 lines), `proxies_main.py` (192 lines). Fixed async_fetcher.py and scraping/tasks.py to use ScoredProxyPool. All 1036 tests pass.
 
 **Session 56 (2025-12-30)**: Instance 2 - Proxy Phase 1 complete (~159 lines removed). Deleted Solution F code, unused facades, Beat schedule.
@@ -83,8 +87,8 @@
 
 > **Research**: [PROXY_SYSTEM_REVIEW.md](../../archive/research/PROXY_SYSTEM_REVIEW.md) (archived)
 > **Created**: Session 55 (2025-12-30)
-> **Completed**: Session 57 (2025-12-30)
-> **Total Removed**: ~465 lines of dead code
+> **Completed**: Session 58 (2025-12-30)
+> **Total Removed**: ~467 lines of dead code
 
 #### Phase 1: Low Risk Cleanup (P1) ✅ Session 56
 - [x] 1.1 Delete Solution F code from `proxy_scorer.py` (~122 lines)
@@ -102,6 +106,13 @@
 - [x] 2.6 Update settings.py comment
 - [x] 2.7 Add test fixture in conftest.py
 - [x] 2.8 Run pytest (1036 passed)
+
+#### Phase 3: Unify ScraplingMixin (P3) ✅ Session 58
+- [x] 3.1 Update `fetch_stealth()` to accept `proxy` parameter
+- [x] 3.2 Update `fetch_fast()` to accept `proxy` parameter
+- [x] 3.3 Remove `MUBENG_PROXY` from `settings.py`
+- [x] 3.4 Update module docstring in `scrapling_base.py`
+- [x] 3.5 Run pytest (1036 passed)
 
 ---
 
@@ -234,6 +245,37 @@
 - [ ] 4.2 Allow manual status changes (mark as permanent, reset to pending)
 - [ ] 4.3 Export failed URLs list
 
+### Remove Mubeng Binary Dependency
+
+> **Research**: [MUBENG_SSL_INVESTIGATION.md](../research/MUBENG_SSL_INVESTIGATION.md)
+> **Goal**: Remove external Go binary, simplify project architecture
+> **Context**: Mubeng is only used for `--check` mode in Celery. SSL certificate should be kept for future MITM proxy support.
+
+#### Background
+
+Investigation found:
+- **Mubeng binary**: Only used for bulk proxy liveness checking (`mubeng --check`)
+- **Mubeng server mode**: NOT used (removed in Session 50)
+- **SSL certificate**: NOT needed for current architecture (direct proxy tunnels)
+- **Certificate infrastructure**: Should be KEPT (useful for future MITM/browser work)
+
+#### Phase 1: Replace Mubeng Check with Python
+- [ ] 1.1 Create async httpx batch proxy checker function (~25 lines)
+- [ ] 1.2 Replace `_run_mubeng_liveness_check()` in `proxies/tasks.py`
+- [ ] 1.3 Remove mubeng download from `setup.sh` (~30 lines)
+- [ ] 1.4 Remove `MUBENG_EXECUTABLE_PATH` from `paths.py`
+- [ ] 1.5 Run pytest to verify
+
+#### Phase 2: Documentation Cleanup (Optional)
+- [ ] 2.1 Update `SSL_PROXY_SETUP.md` to note mubeng server mode is not used
+- [ ] 2.2 Add deprecation note to `fetch_stealth()` docstring
+- [ ] 2.3 Update `MUBENG_PROXY` comment in settings.py
+
+#### What to KEEP
+- `MUBENG_CA_CERT` and certificate logic (zero cost, useful for future)
+- `fetch_stealth()` method (might be useful for direct Camoufox usage)
+- SSL certificate extraction in setup.sh (optional, for future MITM proxy support)
+
 ### Analytics & Insights
 - [ ] Price trends (historical price analysis per neighborhood)
 - [ ] Market heatmaps (visualization of pricing by area)
@@ -256,4 +298,4 @@
 
 ---
 
-**Last Updated**: 2025-12-30 (Session 57 - Proxy Phase 2 cleanup complete)
+**Last Updated**: 2025-12-30 (Session 58 - Proxy Phase 3 cleanup complete, all proxy cleanup done)

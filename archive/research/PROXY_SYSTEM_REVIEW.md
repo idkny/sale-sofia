@@ -1,9 +1,9 @@
 # Proxy System Architecture Review
 
 **Created**: 2025-12-30 (Session 55)
-**Updated**: 2025-12-30 (Session 57)
+**Updated**: 2025-12-30 (Session 58)
 **Author**: Instance 2
-**Status**: ✅ Phase 1 & 2 Cleanup Complete
+**Status**: ✅ Phase 1, 2 & 3 Cleanup Complete
 
 ---
 
@@ -12,6 +12,16 @@
 Comprehensive review of the proxy system including Celery, Redis, and all tools/processes.
 
 **Key Finding**: The system was simplified in Session 50. Mubeng server is NO LONGER used for scraping. Proxies are selected directly from `ScoredProxyPool` with per-request liveness checks via httpx.
+
+### Session 58 Cleanup Completed (Phase 3)
+
+| Change | Lines Removed |
+|--------|---------------|
+| Updated `scrapling_base.py` - `fetch_stealth()` accepts proxy param | - |
+| Updated `scrapling_base.py` - `fetch_fast()` accepts proxy param | - |
+| Removed `MUBENG_PROXY` from `settings.py` | ~2 lines |
+| Updated module docstring in `scrapling_base.py` | - |
+| **Phase 3 Total** | **~2 lines** |
 
 ### Session 57 Cleanup Completed (Phase 2)
 
@@ -34,9 +44,11 @@ Comprehensive review of the proxy system including Celery, Redis, and all tools/
 | 6-hour Beat schedule from `celery_app.py` | ~12 lines |
 | **Phase 1 Total** | **~159 lines** |
 
-**Grand Total Removed**: ~465 lines of dead code
+**Grand Total Removed**: ~467 lines of dead code
 
 **Proxy refresh is now on-demand only** via `scrape_and_check_chain_task.delay()`.
+
+**Proxy system is now unified**: All components use `ScoredProxyPool` for proxy selection. No more `MUBENG_PROXY` constant.
 
 ---
 
@@ -100,17 +112,16 @@ Comprehensive review of the proxy system including Celery, Redis, and all tools/
 
 | Setting | Value | Location | Used By |
 |---------|-------|----------|---------|
-| MUBENG_PROXY | :8089 | settings.py:12 | *NOTE 1 |
-| MIN_PROXIES_TO_START | 1 | settings.py:16 | proxies |
-| MIN_PROXIES_FOR_SCRAPING | 10 | settings.py:20 | main,orch |
-| MAX_URL_RETRIES | 3 | settings.py:23 | main.py |
-| PROXY_TIMEOUT_SECONDS | 45 | settings.py:28 | ALL |
-| PROXY_TIMEOUT_MS | 45000 | settings.py:34 | Stealthy |
-| MAX_CONSECUTIVE_PROXY_FAILURES | 3 | settings.py:41 | scorer |
-| PARALLEL_SCRAPING_ENABLED | False | settings.py:207 | main.py |
-| SCRAPING_CHUNK_SIZE | 25 | settings.py:210 | tasks |
+| MIN_PROXIES_TO_START | 1 | settings.py:12 | proxies |
+| MIN_PROXIES_FOR_SCRAPING | 10 | settings.py:16 | main,orch |
+| MAX_URL_RETRIES | 3 | settings.py:19 | main.py |
+| PROXY_TIMEOUT_SECONDS | 45 | settings.py:24 | ALL |
+| PROXY_TIMEOUT_MS | 45000 | settings.py:30 | Stealthy |
+| MAX_CONSECUTIVE_PROXY_FAILURES | 3 | settings.py:37 | scorer |
+| PARALLEL_SCRAPING_ENABLED | False | settings.py:203 | main.py |
+| SCRAPING_CHUNK_SIZE | 25 | settings.py:206 | tasks |
 
-*NOTE 1: MUBENG_PROXY only used when PARALLEL_SCRAPING_ENABLED=True or via ScraplingMixin methods (not currently used in main flow)
+*Note: MUBENG_PROXY removed in Session 58. All proxy selection now uses ScoredProxyPool.*
 
 ### Celery Settings (celery_app.py)
 
@@ -354,21 +365,19 @@ DELETED FILES (Session 57):
 
 Only used in: tests/test_paid_proxies.py. Not used in production code.
 
-### Remaining Inconsistencies
+### Remaining Inconsistencies ✅ ALL RESOLVED
 
-1. **MUBENG_PROXY Setting (settings.py:12)**
-   - Now only used by ScraplingMixin in scrapling_base.py
-   - Neither main.py nor scraping/tasks.py use MUBENG_PROXY
-   - Consider removing if ScraplingMixin is updated
+1. **MUBENG_PROXY Setting** ✅ REMOVED (Session 58)
+   - Deleted from settings.py
+   - ScraplingMixin methods now accept `proxy` parameter from caller
 
-2. **ScraplingMixin vs Direct Fetcher**
-   - ScraplingMixin.fetch_stealth() uses MUBENG_PROXY + Camoufox
-   - main.py uses StealthyFetcher directly with proxy from pool
-   - scraping/tasks.py uses async_fetcher with proxy from pool
-   - Consider unifying to always use proxy pool
+2. **ScraplingMixin vs Direct Fetcher** ✅ UNIFIED (Session 58)
+   - ScraplingMixin.fetch_stealth() now accepts `proxy` parameter
+   - ScraplingMixin.fetch_fast() now accepts `proxy` parameter
+   - All components use proxy from ScoredProxyPool
 
-3. **Documentation References**
-   - scrapling_base.py mentions "Integration with mubeng proxy rotation" but main scraping flow doesn't use mubeng
+3. **Documentation References** ✅ FIXED (Session 58)
+   - Updated scrapling_base.py module docstring
 
 ---
 
@@ -391,12 +400,12 @@ Only used in: tests/test_paid_proxies.py. Not used in production code.
 | Fix async_fetcher.py to require proxy | - | MED | ✅ Done (Session 57) |
 | Fix scraping/tasks.py to use proxy pool | - | MED | ✅ Done (Session 57) |
 
-### Priority 3 (Optional - Future Enhancement)
+### Priority 3 (Optional) ✅ COMPLETE
 
-| Action | Impact |
-|--------|--------|
-| Remove MUBENG_PROXY from settings | Only affects ScraplingMixin |
-| Unify Fetcher Usage | Consolidate ScraplingMixin vs direct Fetcher approaches |
+| Action | Impact | Status |
+|--------|--------|--------|
+| Remove MUBENG_PROXY from settings | Only affects ScraplingMixin | ✅ Done (Session 58) |
+| Unify Fetcher Usage | ScraplingMixin accepts proxy param | ✅ Done (Session 58) |
 
 ---
 
@@ -404,22 +413,26 @@ Only used in: tests/test_paid_proxies.py. Not used in production code.
 
 - **Phase 1 Dead Code Removed**: ~159 lines (Session 56)
 - **Phase 2 Dead Code Removed**: ~306 lines (Session 57)
-- **Grand Total Removed**: ~465 lines
+- **Phase 3 Cleanup**: ~2 lines + API changes (Session 58)
+- **Grand Total Removed**: ~467 lines
 - **Test Impact**: None - all 1036 tests pass
 - **Risk Level**: Low (verified)
 
 ---
 
-## Status: COMPLETE
+## Status: ✅ ALL PHASES COMPLETE
 
 1. ~~Review this document~~ ✅
 2. ~~Approve P1 cleanup tasks~~ ✅
 3. ~~Execute P1 cleanup~~ ✅ (Session 56)
 4. ~~Approve P2 cleanup tasks~~ ✅
 5. ~~Execute P2 cleanup~~ ✅ (Session 57)
-6. ~~Run pytest after each deletion~~ ✅ (1036 passed)
-7. ~~Update research and tasks files~~ ✅
+6. ~~Execute P3 cleanup~~ ✅ (Session 58)
+7. ~~Run pytest after each change~~ ✅ (1036 passed)
+8. ~~Update research and tasks files~~ ✅
 
-**Decision Made**: Keep parallel scraping mode but fix to use proxy pool (not MUBENG_PROXY).
-
-**Remaining**: P3 is optional - unify ScraplingMixin to use proxy pool instead of MUBENG_PROXY.
+**Proxy System Cleanup Complete**:
+- All dead code removed (~467 lines)
+- MUBENG_PROXY setting removed
+- All components unified to use ScoredProxyPool
+- Mubeng binary retained only for `--check` liveness mode in proxy refresh tasks

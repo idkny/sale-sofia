@@ -4,8 +4,7 @@ Scrapling-based scraper with adaptive element tracking.
 Provides:
 - Faster parsing than BeautifulSoup (774x in benchmarks)
 - Adaptive selectors that survive site changes
-- StealthyFetcher for anti-bot bypass
-- Integration with mubeng proxy rotation
+- StealthyFetcher for anti-bot bypass (Camoufox)
 - Auto-encoding detection (windows-1251, UTF-8, etc.)
 
 Usage:
@@ -25,7 +24,7 @@ from loguru import logger
 from scrapling import Adaptor
 from scrapling.fetchers import Fetcher, StealthyFetcher
 
-from config.settings import MUBENG_PROXY, PROXY_TIMEOUT_MS, PROXY_TIMEOUT_SECONDS
+from config.settings import PROXY_TIMEOUT_MS, PROXY_TIMEOUT_SECONDS
 
 # Storage for adaptive selectors
 SELECTOR_STORAGE = Path(__file__).parent.parent / "data" / "scrapling_selectors"
@@ -428,9 +427,9 @@ class ScraplingMixin:
     def fetch_stealth(
         self,
         url: str,
+        proxy: Optional[str] = None,
         humanize: bool = True,
         timeout: int = PROXY_TIMEOUT_MS,
-        skip_proxy: bool = False,
     ) -> Adaptor:
         """
         Fetch page with Camoufox (anti-bot bypass).
@@ -439,13 +438,12 @@ class ScraplingMixin:
         - Fingerprint spoofing
         - WebRTC leak protection
         - Human-like behavior simulation
-        - Mubeng proxy rotation with SSL certificate (default)
 
         Args:
             url: Target URL
+            proxy: Proxy URL (e.g., "http://host:port"). None for direct connection.
             humanize: Simulate human mouse movement
             timeout: Request timeout in ms
-            skip_proxy: Set True to skip mubeng proxy
 
         Returns:
             Scrapling Adaptor with page content
@@ -453,18 +451,16 @@ class ScraplingMixin:
         from camoufox.sync_api import Camoufox
 
         try:
-            # Build Camoufox config with SSL certificate
-            # The certificatePaths option tells Camoufox to trust mubeng's CA,
-            # allowing HTTPS traffic to flow through the MITM proxy without
-            # SEC_ERROR_UNKNOWN_ISSUER errors. See: docs/architecture/SSL_PROXY_SETUP.md
+            # Build Camoufox config with SSL certificate for HTTPS proxy support
+            # See: docs/architecture/SSL_PROXY_SETUP.md
             config = {}
             if MUBENG_CA_CERT.exists():
                 config["certificatePaths"] = [str(MUBENG_CA_CERT)]
 
             # Build proxy config
             proxy_config = None
-            if not skip_proxy:
-                proxy_config = {"server": MUBENG_PROXY}
+            if proxy:
+                proxy_config = {"server": proxy}
 
             with Camoufox(
                 headless=True,
@@ -487,8 +483,8 @@ class ScraplingMixin:
     def fetch_fast(
         self,
         url: str,
+        proxy: Optional[str] = None,
         timeout: int = PROXY_TIMEOUT_MS // 3,
-        skip_proxy: bool = False,
     ) -> Adaptor:
         """
         Fast HTTP fetch without browser (no JS execution).
@@ -500,8 +496,8 @@ class ScraplingMixin:
 
         Args:
             url: Target URL
+            proxy: Proxy URL (e.g., "http://host:port"). None for direct connection.
             timeout: Request timeout in ms
-            skip_proxy: Set True to skip mubeng proxy
 
         Returns:
             Scrapling Adaptor with page content
@@ -511,8 +507,8 @@ class ScraplingMixin:
                 "url": url,
                 "timeout": timeout,
             }
-            if not skip_proxy:
-                fetch_kwargs["proxy"] = MUBENG_PROXY
+            if proxy:
+                fetch_kwargs["proxy"] = proxy
 
             page = Fetcher.fetch(**fetch_kwargs)
             logger.debug(f"Fetcher: {url} - success")

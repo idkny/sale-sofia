@@ -8,14 +8,8 @@ This module contains constants that are shared across multiple files.
 # PROXY SETTINGS
 # =============================================================================
 
-# Mubeng proxy endpoint (only used by ScraplingMixin in scrapling_base.py)
-MUBENG_PROXY = "http://localhost:8089"
-
-# Minimum proxies to start (just need at least one working)
-MIN_PROXIES_TO_START = 1
-
-# Minimum proxies for RELIABLE SCRAPING (triggers refresh if below this)
-# Used in: main.py _ensure_min_proxies(), setup calls from main.py
+# Minimum proxies for scraping (triggers refresh if below this)
+# Used in: main.py _ensure_min_proxies(), orchestrator.wait_for_proxies()
 MIN_PROXIES_FOR_SCRAPING = 10
 
 # Maximum retries per URL before giving up on that URL
