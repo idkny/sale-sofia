@@ -39,7 +39,7 @@ from paths import LOGS_DIR, PROXIES_DIR
 from proxies.proxy_scorer import ScoredProxyPool
 from utils.log_config import setup_logging
 from config.settings import (
-    MAX_PROXY_RETRIES,
+    MAX_URL_RETRIES,
     MIN_PROXIES_FOR_SCRAPING,
     PROXY_TIMEOUT_SECONDS,
     PROXY_TIMEOUT_MS,
@@ -167,7 +167,7 @@ def _fetch_search_page(
 
     Raises:
         CircuitOpenException if circuit breaker is open for domain
-        Exception if all retries fail (after MAX_PROXY_RETRIES attempts)
+        Exception if all retries fail (after MAX_URL_RETRIES attempts)
     """
     circuit_breaker = get_circuit_breaker()
     rate_limiter = get_rate_limiter()
@@ -183,7 +183,7 @@ def _fetch_search_page(
     # Track successful proxy
     successful_proxy_key = None
 
-    for attempt in range(1, MAX_PROXY_RETRIES + 1):
+    for attempt in range(1, MAX_URL_RETRIES + 1):
         # Select proxy with liveness check
         effective_proxy = proxy  # fallback
         proxy_key = None
@@ -239,18 +239,18 @@ def _fetch_search_page(
             return html, successful_proxy_key
 
         except Exception as e:
-            logger.warning(f"Fetch attempt {attempt}/{MAX_PROXY_RETRIES} failed: {e}")
+            logger.warning(f"Fetch attempt {attempt}/{MAX_URL_RETRIES} failed: {e}")
             circuit_breaker.record_failure(domain)
             if proxy_pool and proxy_key:
                 proxy_pool.record_result(proxy_key, success=False)
 
-            if attempt == MAX_PROXY_RETRIES:
+            if attempt == MAX_URL_RETRIES:
                 raise
 
             # Brief delay before retry
             time.sleep(1)
 
-    raise Exception(f"All {MAX_PROXY_RETRIES} fetch attempts failed")
+    raise Exception(f"All {MAX_URL_RETRIES} fetch attempts failed")
 
 
 def _collect_listing_urls(
@@ -282,7 +282,7 @@ def _collect_listing_urls(
             if proxy_pool and proxy_key:
                 proxy_pool.record_result(proxy_key, success=True)
         except Exception as e:
-            logger.error(f"All {MAX_PROXY_RETRIES} attempts failed for page {current_page}: {e}")
+            logger.error(f"All {MAX_URL_RETRIES} attempts failed for page {current_page}: {e}")
             break  # Stop pagination on failure
 
         # Check if this is the last page
@@ -344,7 +344,7 @@ def _fetch_listing_page(
 
     Raises:
         CircuitOpenException if circuit breaker is open for domain
-        Exception if all retries fail (after MAX_PROXY_RETRIES attempts)
+        Exception if all retries fail (after MAX_URL_RETRIES attempts)
     """
     circuit_breaker = get_circuit_breaker()
     rate_limiter = get_rate_limiter()
@@ -360,7 +360,7 @@ def _fetch_listing_page(
     # Track successful proxy
     successful_proxy_key = None
 
-    for attempt in range(1, MAX_PROXY_RETRIES + 1):
+    for attempt in range(1, MAX_URL_RETRIES + 1):
         # Select proxy with liveness check
         effective_proxy = proxy  # fallback
         proxy_key = None
@@ -419,18 +419,18 @@ def _fetch_listing_page(
             return html, successful_proxy_key
 
         except Exception as e:
-            logger.warning(f"Fetch attempt {attempt}/{MAX_PROXY_RETRIES} failed: {e}")
+            logger.warning(f"Fetch attempt {attempt}/{MAX_URL_RETRIES} failed: {e}")
             circuit_breaker.record_failure(domain)
             if proxy_pool and proxy_key:
                 proxy_pool.record_result(proxy_key, success=False)
 
-            if attempt == MAX_PROXY_RETRIES:
+            if attempt == MAX_URL_RETRIES:
                 raise
 
             # Brief delay before retry
             time.sleep(1)
 
-    raise Exception(f"All {MAX_PROXY_RETRIES} fetch attempts failed")
+    raise Exception(f"All {MAX_URL_RETRIES} fetch attempts failed")
 
 
 def _scrape_listings(
@@ -539,7 +539,7 @@ def _scrape_listings(
                         error_message=str(e)
                     )
             else:
-                logger.error(f"  -> All {MAX_PROXY_RETRIES} attempts failed for {url}: {e}")
+                logger.error(f"  -> All {MAX_URL_RETRIES} attempts failed for {url}: {e}")
                 if metrics:
                     metrics.record_response(
                         url, RequestStatus.FAILED,

@@ -3,7 +3,7 @@
 Test Phase 5: Retry logic for proxy failures.
 
 Verifies that:
-1. MAX_PROXY_RETRIES constant exists
+1. MAX_URL_RETRIES constant exists
 2. Retry loop selects different proxy each attempt
 3. Network errors trigger retry, extraction failures don't
 4. Stats are updated correctly
@@ -17,13 +17,13 @@ sys.path.insert(0, str(Path(__file__).parent.parent.parent))
 
 
 def test_max_proxy_retries_constant():
-    """Test that MAX_PROXY_RETRIES is defined."""
+    """Test that MAX_URL_RETRIES is defined."""
     import main
 
-    assert hasattr(main, 'MAX_PROXY_RETRIES'), "MAX_PROXY_RETRIES not found in main.py"
-    assert main.MAX_PROXY_RETRIES == 3, f"Expected 3, got {main.MAX_PROXY_RETRIES}"
-    print("✅ MAX_PROXY_RETRIES constant: PASSED")
-    print(f"   - Value: {main.MAX_PROXY_RETRIES}")
+    assert hasattr(main, 'MAX_URL_RETRIES'), "MAX_URL_RETRIES not found in main.py"
+    assert main.MAX_URL_RETRIES == 3, f"Expected 3, got {main.MAX_URL_RETRIES}"
+    print("✅ MAX_URL_RETRIES constant: PASSED")
+    print(f"   - Value: {main.MAX_URL_RETRIES}")
 
 
 def test_retry_loop_in_scrape_listings():
@@ -32,11 +32,11 @@ def test_retry_loop_in_scrape_listings():
     content = main_py.read_text()
 
     # Check for retry loop pattern
-    assert "for attempt in range(MAX_PROXY_RETRIES)" in content, \
+    assert "for attempt in range(MAX_URL_RETRIES)" in content, \
         "Retry loop not found in main.py"
 
     # Check for attempt logging
-    assert "Attempt {attempt + 1}/{MAX_PROXY_RETRIES}" in content or \
+    assert "Attempt {attempt + 1}/{MAX_URL_RETRIES}" in content or \
            "attempt + 1}" in content, \
         "Attempt logging not found"
 
@@ -47,7 +47,7 @@ def test_retry_loop_in_scrape_listings():
     found_proxy_selection_in_loop = False
 
     for line in lines:
-        if "for attempt in range(MAX_PROXY_RETRIES)" in line:
+        if "for attempt in range(MAX_URL_RETRIES)" in line:
             in_retry_loop = True
         if in_retry_loop and "proxy_pool.select_proxy()" in line:
             found_proxy_selection_in_loop = True
@@ -77,7 +77,7 @@ def test_retry_loop_in_collect_listing_urls():
         "Break on success not found"
 
     # Check for all attempts failed message
-    assert "All {MAX_PROXY_RETRIES} attempts failed" in content or \
+    assert "All {MAX_URL_RETRIES} attempts failed" in content or \
            "All" in content and "attempts failed" in content, \
         "All attempts failed message not found"
 

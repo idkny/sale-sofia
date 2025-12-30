@@ -58,6 +58,8 @@
 | 2 | Available |
 | 3 | Available |
 
+**Session 52 (2025-12-30)**: Instance 1 - Proxy settings cleanup. Renamed MAX_PROXY_RETRIES → MAX_URL_RETRIES. Added 3 new tasks: Failed URL Tracking, Simplify Proxy Scoring, Cleanup PROXY_WAIT_TIMEOUT.
+
 **Session 51 (2025-12-30)**: Instance 1 - OLX.bg live test + enhanced parsers. Added `:contains()` selector, `label_value/number/floor` parsers.
 
 **Session 50 (2025-12-29)**: Instance 2 - Fixed proxy system. Removed mubeng/preflight, implemented direct proxy with liveness check.

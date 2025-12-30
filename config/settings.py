@@ -19,8 +19,8 @@ MIN_PROXIES_TO_START = 1
 # Used in: main.py _ensure_min_proxies(), setup calls from main.py
 MIN_PROXIES_FOR_SCRAPING = 10
 
-# Maximum retries per URL when proxy fails
-MAX_PROXY_RETRIES = 3
+# Maximum retries per URL before giving up on that URL
+MAX_URL_RETRIES = 3
 
 # Proxy response timeout in seconds
 # Used for: preflight checks, Fetcher requests, StealthyFetcher, mubeng, quality checks
