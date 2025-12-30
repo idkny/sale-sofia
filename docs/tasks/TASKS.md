@@ -58,6 +58,8 @@
 | 2 | Available |
 | 3 | Available |
 
+**Session 51 (2025-12-30)**: Instance 1 - OLX.bg live test + enhanced parsers. Added `:contains()` selector, `label_value/number/floor` parsers.
+
 **Session 50 (2025-12-29)**: Instance 2 - Fixed proxy system. Removed mubeng/preflight, implemented direct proxy with liveness check.
 
 **Claim**: Add `[Instance N]` next to task before starting
@@ -111,9 +113,11 @@
 - [x] 1.5 Write unit tests for config loading and selector chains
 
 #### Phase 2: Field Parsers
-- [ ] 2.1 Create field type parsers (currency, number, floor_pattern)
-- [ ] 2.2 Support Bulgarian patterns (BGN/EUR, кв.м, етаж X от Y)
-- [ ] 2.3 Write unit tests for all parsers
+- [x] 2.1 Create field type parsers (currency, number, floor_pattern) - Session 50
+- [x] 2.2 Support Bulgarian patterns (BGN/EUR, кв.м, етаж X от Y) - Session 50
+- [x] 2.3 Write unit tests for all parsers - Session 50
+
+> **Session 51 Addition**: Added `:contains()` selector, `label_value`, `label_number`, `label_floor` parsers
 
 #### Phase 3: Pagination Support
 - [ ] 3.1 Implement numbered pagination
@@ -123,11 +127,11 @@
 - [ ] 3.5 Write pagination tests
 
 #### Phase 4: OLX.bg Pilot
-- [ ] 4.1 Research OLX.bg HTML structure
-- [ ] 4.2 Create `config/sites/olx_bg.yaml`
-- [ ] 4.3 Test extraction with sample pages
+- [x] 4.1 Research OLX.bg HTML structure - Session 51
+- [x] 4.2 Create `config/sites/olx_bg.yaml` - Session 51
+- [x] 4.3 Test extraction with sample pages - Session 51 (offline test passed)
 - [ ] 4.4 Verify pagination works
-- [ ] 4.5 Integration test: full scrape
+- [ ] 4.5 Integration test: full scrape (needs proxy rotation - mubeng)
 
 #### Phase 5: Homes.bg
 - [ ] 5.1 Research homes.bg HTML structure
@@ -138,6 +142,84 @@
 - [ ] 6.1 Create YAML configs for imot.bg/bazar.bg
 - [ ] 6.2 Validate against existing scraper output
 - [ ] 6.3 Deprecate old scraper code
+
+### Simplify Proxy Scoring System
+
+> **Goal**: Remove complex scoring math, keep simple failure tracking.
+> **Why**: Current system has 3 overlapping mechanisms (liveness check, scoring, URL retries) doing similar things. The weighted selection adds complexity but marginal value since proxies are refreshed frequently anyway.
+
+**Current (Complex):**
+- `SCORE_SUCCESS_MULTIPLIER = 1.1` - multiply score on success
+- `SCORE_FAILURE_MULTIPLIER = 0.5` - multiply score on failure
+- `MIN_PROXY_SCORE = 0.01` - remove if score drops below
+- `MAX_PROXY_FAILURES = 3` - remove after 3 consecutive fails
+- Weighted random selection (prefer high-score proxies)
+- Persistence to `proxy_scores.json`
+
+**Proposed (Simple):**
+- Just track consecutive failures per proxy
+- Remove after N consecutive failures
+- Random selection (no weighting)
+- No persistence needed
+
+#### Tasks
+- [ ] 1. Remove `SCORE_SUCCESS_MULTIPLIER`, `SCORE_FAILURE_MULTIPLIER`, `MIN_PROXY_SCORE` from settings
+- [ ] 2. Rename `MAX_PROXY_FAILURES` → `MAX_CONSECUTIVE_PROXY_FAILURES` for clarity
+- [ ] 3. Simplify `proxy_scorer.py` - remove score math, keep failure counter only
+- [ ] 4. Remove weighted selection - use random choice
+- [ ] 5. Remove `proxy_scores.json` persistence
+- [ ] 6. Update `proxy_validator.py` to use simplified system
+- [ ] 7. Update/remove related tests
+- [ ] 8. Delete unused code (~200 lines estimated)
+
+### Cleanup PROXY_WAIT_TIMEOUT (Dead Code)
+
+> **Goal**: Remove misleading timeout setting - primary mechanism is now Celery chord signals.
+> **Why**: We implemented event-based waiting (Celery task completion) but left the old timeout setting. It's now just a safety net, not the primary wait mechanism.
+
+**Current (Confusing):**
+- `config/settings.py`: `PROXY_WAIT_TIMEOUT = 600` (10 min)
+- `orchestrator.py`: default `timeout = 2400` (40 min)
+- `main.py`: imports and uses `PROXY_WAIT_TIMEOUT`
+- Actual wait: Celery chord completion signal (event-based)
+
+**Proposed (Clean):**
+- Remove `PROXY_WAIT_TIMEOUT` from `config/settings.py`
+- Remove import from `main.py`
+- Keep orchestrator's hardcoded 2400s (40 min) as safety net
+- Add comment explaining it's a fallback only
+
+#### Tasks
+- [ ] 1. Remove `PROXY_WAIT_TIMEOUT` from `config/settings.py`
+- [ ] 2. Remove `PROXY_WAIT_TIMEOUT` import from `main.py`
+- [ ] 3. Update `main.py:650` to not pass timeout (use orchestrator default)
+- [ ] 4. Add comment in `orchestrator.py` explaining timeout is safety net only
+- [ ] 5. Update any docs referencing `PROXY_WAIT_TIMEOUT`
+
+### Failed URL Tracking & Retry System
+
+> **Goal**: Persist failed URLs to database for retry with different strategies (captcha solving, different proxy, etc.)
+> **Problem**: Currently failed URLs are only logged - no way to retry later or analyze failure patterns.
+
+#### Phase 1: Database Schema
+- [ ] 1.1 Create `failed_urls` table (url, site, failure_count, error_type, error_message, status)
+- [ ] 1.2 Add status enum: `pending`, `captcha_needed`, `permanent`, `resolved`
+- [ ] 1.3 Add `retry_after` timestamp for rate-limited retries
+
+#### Phase 2: Integration
+- [ ] 2.1 Update `main.py` `_scrape_listings()` to save failed URLs on `MAX_URL_RETRIES` exhausted
+- [ ] 2.2 Classify errors: timeout → pending, blocked → captcha_needed, 404 → permanent
+- [ ] 2.3 Skip URLs already marked as `permanent` in future runs
+
+#### Phase 3: Retry Logic
+- [ ] 3.1 Add CLI command to retry `pending` URLs
+- [ ] 3.2 Add CLI command to retry `captcha_needed` URLs (with captcha solver)
+- [ ] 3.3 Auto-resolve URLs that succeed on retry
+
+#### Phase 4: Dashboard Integration
+- [ ] 4.1 Show failed URL stats in dashboard
+- [ ] 4.2 Allow manual status changes (mark as permanent, reset to pending)
+- [ ] 4.3 Export failed URLs list
 
 ### Analytics & Insights
 - [ ] Price trends (historical price analysis per neighborhood)

@@ -1,0 +1,108 @@
+# OLX.bg Real Estate Scraper Config
+# Created: 2025-12-29
+# Tested against: /tmp/olx_samples/olx_search.html, olx_detail.html
+
+site:
+  name: olx.bg
+  domain: www.olx.bg
+  encoding: utf-8
+
+urls:
+  # Pattern to identify listing URLs in search results
+  listing_pattern: "/d/ad/"
+  # Regex to extract listing ID from URL (group 1)
+  # Example: /d/ad/...-CID368-ID9UaU4.html -> 9UaU4
+  id_pattern: "-ID([a-zA-Z0-9]+)\\.html"
+
+pagination:
+  type: numbered
+  param: page
+  start: 1
+  max_pages: 50
+  # Alternative: next_link selector
+  next_selector: "[data-testid='pagination-forward']"
+
+listing_page:
+  # CSS selector for each listing card
+  container: "[data-cy='l-card']"
+  # CSS selector for link to detail page (within container)
+  link: "a[href*='/d/ad/']"
+  # Quick fields extracted from search results (faster, fewer requests)
+  quick_fields:
+    title: "[data-cy='ad-card-title'] h4"
+
+detail_page:
+  # Fallback selector chains - try in order until one works
+  selectors:
+    title:
+      - "[data-cy='offer_title'] h4"
+      - "[data-cy='offer_title'] h3"
+      - "[data-testid='offer_title'] h4"
+      - "h1"
+
+    price:
+      - "[data-testid='ad-price-container'] h3"
+      - "[data-cy='ad-price'] h3"
+      - "[data-testid='ad-price'] h3"
+
+    description:
+      - "[data-cy='ad_description'] div"
+      - "[data-testid='ad_description'] div"
+      - "[data-cy='ad_description']"
+
+    images:
+      # parse_list() auto-extracts src attribute - no ::attr needed
+      - "[data-testid='ad-photo'] img"
+      - "[data-cy='adPhotos-swiperSlide'] img"
+
+    # Location from breadcrumbs
+    # Index 5 = "Апартаменти - София" (city/district)
+    # Index 6 = "Апартаменти - 7-ми 11-ти километър" (neighborhood)
+    district:
+      - "[data-testid='breadcrumbs'] a:nth-child(6)"
+      - "[data-testid='breadcrumbs'] li:nth-child(6) a"
+
+    neighborhood:
+      - "[data-testid='breadcrumbs'] a:nth-child(7)"
+      - "[data-testid='breadcrumbs'] li:nth-child(7) a"
+
+    # Parameters using :contains() selector + label_value parser
+    sqm:
+      - "[data-testid='ad-parameters-container'] p:contains(Квадратура)"
+      - "[data-testid='ad-parameters-container'] p:contains(кв.м)"
+
+    rooms:
+      - "[data-testid='ad-parameters-container'] p:contains(Тип апартамент)"
+      - "[data-testid='ad-parameters-container'] p:contains(стаен)"
+
+    floor:
+      - "[data-testid='ad-parameters-container'] p:contains(Етаж:)"
+
+    floor_total:
+      - "[data-testid='ad-parameters-container'] p:contains(Брой етажи)"
+
+    building_type:
+      - "[data-testid='ad-parameters-container'] p:contains(Строителство)"
+
+    features:
+      - "[data-testid='ad-parameters-container'] p:contains(Особености)"
+
+  field_types:
+    price: currency_bgn_eur
+    # Composite parsers: extract label:value, then parse as number/floor
+    sqm: label_number
+    rooms: label_value
+    floor: label_floor
+    floor_total: label_integer
+    building_type: label_value
+    features: label_value
+    images: list
+
+timing:
+  delay_seconds: 3.0    # OLX has rate limiting
+  max_per_domain: 1     # Conservative for anti-bot
+
+quirks:
+  requires_js: true     # Need browser for full content
+  has_lazy_images: true
+  encoding_fallback: utf-8

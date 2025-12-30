@@ -175,6 +175,95 @@ def parse_currency_bgn_eur(value: str) -> Optional[float]:
     return parse_number(cleaned)
 
 
+def parse_label_value(value: str) -> Optional[str]:
+    """
+    Parse "Label: value" format and extract the value part.
+
+    Handles formats like:
+    - "Квадратура: 64 кв.м" -> "64 кв.м"
+    - "Етаж: 6-ти" -> "6-ти"
+    - "Тип апартамент: 2 - стаен" -> "2 - стаен"
+    - "Брой етажи на сградата: 7" -> "7"
+
+    Args:
+        value: String in "Label: value" format
+
+    Returns:
+        Value part after colon, stripped, or None
+    """
+    if not value:
+        return None
+
+    if ":" not in value:
+        return value.strip()
+
+    parts = value.split(":", 1)
+    if len(parts) >= 2:
+        return parts[1].strip()
+
+    return None
+
+
+def parse_label_number(value: str) -> Optional[float]:
+    """
+    Parse "Label: value" and extract number from value.
+
+    Examples:
+    - "Квадратура: 64 кв.м" -> 64.0
+    - "Брой етажи: 7" -> 7.0
+
+    Args:
+        value: String in "Label: value" format
+
+    Returns:
+        Extracted number or None
+    """
+    label_val = parse_label_value(value)
+    if label_val:
+        return parse_number(label_val)
+    return None
+
+
+def parse_label_integer(value: str) -> Optional[int]:
+    """
+    Parse "Label: value" and extract integer from value.
+
+    Examples:
+    - "Стаи: 3" -> 3
+    - "Брой етажи: 7" -> 7
+
+    Args:
+        value: String in "Label: value" format
+
+    Returns:
+        Extracted integer or None
+    """
+    label_val = parse_label_value(value)
+    if label_val:
+        return parse_integer(label_val)
+    return None
+
+
+def parse_label_floor(value: str) -> Optional[str]:
+    """
+    Parse "Label: value" and extract floor pattern from value.
+
+    Examples:
+    - "Етаж: 6-ти" -> "6"
+    - "Етаж: 3 от 6" -> "3/6"
+
+    Args:
+        value: String in "Label: value" format
+
+    Returns:
+        Floor pattern string or None
+    """
+    label_val = parse_label_value(value)
+    if label_val:
+        return parse_floor_pattern(label_val)
+    return None
+
+
 def parse_floor_pattern(value: str) -> Optional[str]:
     """
     Parse floor information from various formats.
@@ -186,6 +275,7 @@ def parse_floor_pattern(value: str) -> Optional[str]:
     - "3-ти етаж от 6" -> "3/6"
     - "партер" -> "0"
     - "сутерен" -> "-1"
+    - "6-ти" -> "6" (ordinal format)
 
     Args:
         value: Floor description string
@@ -225,6 +315,33 @@ def parse_floor_pattern(value: str) -> Optional[str]:
     match = re.search(r"(\d+)", text)
     if match:
         return match.group(1)
+
+    return None
+
+
+def find_element_containing(page: Adaptor, base_selector: str, text_match: str):
+    """
+    Find element matching base_selector that contains specific text.
+
+    Used for selectors like: p:contains(Квадратура)
+
+    Args:
+        page: Scrapling Adaptor
+        base_selector: CSS selector (e.g., "p", "div.params p")
+        text_match: Text to search for (case-insensitive)
+
+    Returns:
+        First matching element or None
+    """
+    try:
+        elements = page.css(base_selector)
+        text_lower = text_match.lower()
+        for el in elements:
+            el_text = el.text or ""
+            if text_lower in el_text.lower():
+                return el
+    except Exception as e:
+        logger.debug(f"find_element_containing failed: {base_selector} / {text_match} - {e}")
 
     return None
 
@@ -278,6 +395,10 @@ def parse_field(value: str, field_type: str) -> Optional[Union[str, int, float]]
         "integer": parse_integer,
         "currency_bgn_eur": parse_currency_bgn_eur,
         "floor_pattern": parse_floor_pattern,
+        "label_value": parse_label_value,
+        "label_number": parse_label_number,
+        "label_integer": parse_label_integer,
+        "label_floor": parse_label_floor,
     }
 
     parser = parsers.get(field_type, parse_text)
@@ -296,10 +417,15 @@ def extract_field(
         page: Scrapling Adaptor
         selectors: List of CSS selectors to try in order
         field_type: How to parse the result (text, number, integer,
-                   currency_bgn_eur, floor_pattern, list)
+                   currency_bgn_eur, floor_pattern, label_value, list)
 
     Returns:
         Extracted and parsed value, or None if all selectors fail
+
+    Selector Syntax:
+        - Standard CSS: "div.price", "[data-cy='title']"
+        - Attribute extraction: "img::attr(src)", "a::attr(href)"
+        - Contains text: "p:contains(Квадратура)" - find p with "Квадратура"
 
     Example:
         # Try multiple selectors for price
@@ -307,6 +433,13 @@ def extract_field(
             page,
             [".price-main", ".listing-price", "[data-price]"],
             "currency_bgn_eur"
+        )
+
+        # Find element containing text and extract label:value
+        sqm = extract_field(
+            page,
+            ["[data-testid='params'] p:contains(Квадратура)"],
+            "label_value"  # Extracts "64 кв.м" from "Квадратура: 64 кв.м"
         )
     """
     if not selectors:
@@ -325,14 +458,26 @@ def extract_field(
     # Standard single-value extraction
     for selector in selectors:
         try:
+            element = None
+            raw_value = None
+
             # Check for attribute extraction syntax: "selector::attr(name)"
             attr_match = re.match(r"(.+?)::attr\(([^)]+)\)$", selector)
+
+            # Check for :contains() pseudo-selector: "selector:contains(text)"
+            contains_match = re.match(r"(.+?):contains\(([^)]+)\)$", selector)
 
             if attr_match:
                 css_selector = attr_match.group(1)
                 attr_name = attr_match.group(2)
                 element = page.css_first(css_selector)
                 raw_value = get_attr(element, attr_name)
+            elif contains_match:
+                # Find element containing specific text
+                base_selector = contains_match.group(1)
+                text_match = contains_match.group(2)
+                element = find_element_containing(page, base_selector, text_match)
+                raw_value = get_text(element)
             else:
                 element = page.css_first(selector)
                 raw_value = get_text(element)

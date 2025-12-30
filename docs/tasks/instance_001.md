@@ -79,6 +79,43 @@ archive/research/  archive/specs/          (code supersedes)
 
 ## Session History
 
+### 2025-12-30 (Session 51 - OLX.bg Live Test + Enhanced Parsers)
+
+| Task | Status |
+|------|--------|
+| Fetch OLX.bg search results page | ✅ Complete (Camoufox) |
+| Fetch OLX.bg listing detail page | ✅ Complete (Camoufox) |
+| Create `config/sites/olx_bg.yaml` | ✅ Complete |
+| Test offline extraction | ✅ Complete |
+| Add `:contains()` selector | ✅ Complete |
+| Add `label_value/number/floor` parsers | ✅ Complete |
+| Test live fetch | ⚠️ Blocked by captcha (needs proxy) |
+
+**Summary**:
+First REAL WEBSITE test of Generic Scraper Framework on OLX.bg. Offline extraction works: title, description, images, sqm, floor, floor_total all extracted. Enhanced `selector_chain.py` with `:contains()` pseudo-selector and `label_*` composite parsers. Live fetch blocked by OLX.bg captcha - needs mubeng proxy rotation.
+
+#### Files Created
+| File | Purpose |
+|------|---------|
+| `config/sites/olx_bg.yaml` | Full OLX.bg scraper config |
+| `tests/debug/fetch_olx.py` | Fetch search page with Camoufox |
+| `tests/debug/fetch_olx_detail.py` | Fetch detail page with Camoufox |
+| `tests/debug/test_olx_real.py` | Offline extraction test |
+| `tests/debug/test_olx_live.py` | Live fetch test (captcha blocked) |
+
+#### Files Modified
+| File | Changes |
+|------|---------|
+| `websites/generic/selector_chain.py` | +`:contains()` selector, +`label_value/number/floor` parsers |
+| `websites/generic/config_scraper.py` | +explicit `floor_total` handling |
+
+#### Test Results
+- 148 generic scraper tests PASSED
+- OLX.bg offline extraction: ✅ PASS (sqm=64, floor=6/7, 16 images)
+- OLX.bg live fetch: ❌ Captcha (needs proxy rotation)
+
+---
+
 ### 2025-12-28 (Session 50 - Spec 116 Phase 1 COMPLETE)
 
 | Task | Status |

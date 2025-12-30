@@ -95,6 +95,10 @@ class ConfigScraper(ScraplingMixin, BaseSiteScraper):
         if "floor" in extracted:
             floor_number, floor_total = self._parse_floor_string(str(extracted["floor"]))
 
+        # Use explicit floor_total if provided separately (e.g., from OLX.bg)
+        if "floor_total" in extracted and extracted["floor_total"] is not None:
+            floor_total = self._to_int(extracted["floor_total"])
+
         # Build ListingData
         listing = ListingData(
             external_id=external_id,
