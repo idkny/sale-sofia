@@ -54,7 +54,7 @@
 
 | Instance | Current Task |
 |----------|--------------|
-| 1 | Available |
+| 1 | Investigate PSC Anonymity Output |
 | 2 | Available |
 | 3 | Available |
 
@@ -276,6 +276,30 @@ Investigation found:
 - `fetch_stealth()` method (might be useful for direct Camoufox usage)
 - SSL certificate extraction in setup.sh (optional, for future MITM proxy support)
 
+### Fix PSC Timeout Bug ✅ COMPLETE (Session 60)
+
+> **Problem**: `proxies/tasks.py` line 78 has `timeout=300` (5 min), but PSC actually takes 20-40 minutes.
+> **Impact**: PSC gets killed before finishing, incomplete proxy lists.
+> **Research**: [PROXY_SYSTEM_CURRENT_STATE.md](../research/PROXY_SYSTEM_CURRENT_STATE.md)
+
+#### Tasks
+- [x] 1.1 Add `PSC_TIMEOUT_SECONDS = 3000` (50 min) to `config/settings.py`
+- [x] 1.2 Update `proxies/tasks.py` to use `PSC_TIMEOUT_SECONDS` instead of hardcoded 300
+- [x] 1.3 Run pytest to verify (1036 passed)
+
+### Investigate PSC Anonymity Output
+
+> **Question**: Does PSC already output anonymity level in `proxies_pretty.json`?
+> **Goal**: If yes, remove duplicate anonymity checking from pipeline to simplify code.
+> **Note**: Liveness check duplication is OK - PSC returns many proxies that pass basic check but are too slow for real website requests. Mubeng provides more resilient validation.
+
+#### Tasks
+- [ ] 1.1 Run PSC manually and inspect `proxies_pretty.json` output format
+- [ ] 1.2 Check if anonymity field exists in PSC output
+- [ ] 1.3 If yes: Remove `_enrich_with_anonymity()` call from `check_proxy_chunk_task()`
+- [ ] 1.4 If yes: Map PSC anonymity values to our Transparent/Anonymous/Elite format
+- [ ] 1.5 Run pytest to verify
+
 ### Analytics & Insights
 - [ ] Price trends (historical price analysis per neighborhood)
 - [ ] Market heatmaps (visualization of pricing by area)
@@ -298,4 +322,4 @@ Investigation found:
 
 ---
 
-**Last Updated**: 2025-12-30 (Session 59 - Mubeng & SSL investigation complete)
+**Last Updated**: 2025-12-30 (Session 60 - Added PSC timeout fix + anonymity investigation tasks)

@@ -26,6 +26,10 @@ PROXY_TIMEOUT_MUBENG = f"{PROXY_TIMEOUT_SECONDS}s"
 # Milliseconds version (for APIs that use ms like StealthyFetcher)
 PROXY_TIMEOUT_MS = PROXY_TIMEOUT_SECONDS * 1000
 
+# PSC (proxy-scraper-checker) timeout in seconds
+# PSC scrapes 70+ sources and checks thousands of proxies - takes 20-40 minutes
+PSC_TIMEOUT_SECONDS = 3000  # 50 minutes
+
 # =============================================================================
 # PROXY SCORING SETTINGS
 # =============================================================================

@@ -13,7 +13,7 @@ import redis
 from celery import group
 
 from celery_app import celery_app
-from config.settings import PROXY_TIMEOUT_SECONDS
+from config.settings import PROXY_TIMEOUT_SECONDS, PSC_TIMEOUT_SECONDS
 from paths import MUBENG_EXECUTABLE_PATH, PROXIES_DIR, PROXY_CHECKER_DIR, PSC_EXECUTABLE_PATH
 from proxies import proxy_to_url
 from proxies.anonymity_checker import enrich_proxy_with_anonymity, get_real_ip
@@ -75,7 +75,7 @@ def scrape_new_proxies_task(_previous_result=None):
             check=True,
             capture_output=True,
             text=True,
-            timeout=300,  # 5 min timeout for scraping
+            timeout=PSC_TIMEOUT_SECONDS,
         )
         with open(psc_output_file, "r") as f:
             proxies_found = len(json.load(f))
@@ -83,7 +83,7 @@ def scrape_new_proxies_task(_previous_result=None):
 
         return f"Scraped {proxies_found} potential proxies."
     except subprocess.TimeoutExpired:
-        logger.error("Proxy scraping task timed out after 5 minutes")
+        logger.error(f"Proxy scraping task timed out after {PSC_TIMEOUT_SECONDS}s")
         raise
     except (subprocess.CalledProcessError, FileNotFoundError, json.JSONDecodeError) as e:
         logger.error(f"Proxy scraping task failed: {e}", exc_info=True)
