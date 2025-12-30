@@ -36,17 +36,15 @@ logger = logging.getLogger(__name__)
 
 class ScoredProxyPool:
     """
-    Thread-safe proxy pool with runtime scoring and weighted selection.
+    Thread-safe proxy pool with random selection and failure tracking.
 
-    Proxies are selected using weighted random choice based on their scores.
-    Scores are updated based on success/failure and persisted to disk.
-    Proxies with excessive failures or very low scores are automatically removed.
+    Proxies are selected using random choice. Consecutive failures are
+    tracked and proxies are auto-removed after MAX_CONSECUTIVE_PROXY_FAILURES.
 
     Attributes:
         proxies_file: Path to live_proxies.json
-        scores_file: Path to proxy_scores.json (persisted scores)
         proxies: List of proxy dictionaries from live_proxies.json
-        scores: Dict mapping proxy URLs to score metadata
+        scores: Dict mapping proxy keys to failure tracking metadata
         lock: Thread lock for safe concurrent access
     """
 

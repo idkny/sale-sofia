@@ -346,73 +346,6 @@ def test_proxy_file_updated_on_removal():
         print("\n✓ Test PASSED: Mubeng proxy file updated on removal")
 
 
-def test_score_updates():
-    """
-    Test that record_result updates scores correctly.
-
-    - Test success: score increases, failures reset
-    - Test failure: score decreases, failures increment
-    - Test score persistence
-    """
-    print("\n" + "="*70)
-    print("TEST: Score Updates")
-    print("="*70)
-
-    with tempfile.TemporaryDirectory() as temp_dir:
-        temp_path = Path(temp_dir)
-
-        # Create 3 test proxies
-        proxies = create_test_proxies(3)
-        proxy_file = create_test_proxy_file(proxies, temp_path)
-
-        # Initialize pool
-        pool = ScoredProxyPool(proxy_file)
-
-        proxy_key = "192.168.0.100:8080"
-
-        # Get initial score
-        initial_score = pool.scores[proxy_key]["score"]
-        print(f"\nInitial score for {proxy_key}: {initial_score:.3f}")
-
-        # Test success
-        print("\nRecording SUCCESS...")
-        pool.record_result(proxy_key, success=True)
-        success_score = pool.scores[proxy_key]["score"]
-        success_failures = pool.scores[proxy_key]["failures"]
-
-        print(f"After success: score={success_score:.3f}, failures={success_failures}")
-
-        assert success_score > initial_score, "Score should increase on success"
-        assert success_failures == 0, "Failures should be 0 after success"
-
-        # Test failure
-        print("\nRecording FAILURE...")
-        pool.record_result(proxy_key, success=False)
-        failure_score = pool.scores[proxy_key]["score"]
-        failure_count = pool.scores[proxy_key]["failures"]
-
-        print(f"After failure: score={failure_score:.3f}, failures={failure_count}")
-
-        assert failure_score < success_score, "Score should decrease on failure"
-        assert failure_count == 1, "Failures should increment"
-
-        # Test persistence
-        print("\nTesting score persistence...")
-        pool.save_scores()
-
-        # Create new pool from same files
-        pool2 = ScoredProxyPool(proxy_file)
-        persisted_score = pool2.scores[proxy_key]["score"]
-        persisted_failures = pool2.scores[proxy_key]["failures"]
-
-        print(f"Persisted: score={persisted_score:.3f}, failures={persisted_failures}")
-
-        assert abs(persisted_score - failure_score) < 0.001, "Score should persist"
-        assert persisted_failures == failure_count, "Failures should persist"
-
-        print("\n✓ Test PASSED: Score updates working correctly")
-
-
 def test_get_proxy_index_with_url():
     """
     Test that get_proxy_index handles both "host:port" and full URL formats.
@@ -462,7 +395,6 @@ def main():
         ("6.3: Persistence Across Sessions", test_persistence_across_sessions),
         ("6.4: Index Synchronization", test_index_synchronization),
         ("Proxy File Update", test_proxy_file_updated_on_removal),
-        ("Score Updates", test_score_updates),
         ("Get Proxy Index with URL", test_get_proxy_index_with_url),
     ]
 

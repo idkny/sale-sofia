@@ -23,7 +23,7 @@ MIN_PROXIES_FOR_SCRAPING = 10
 MAX_URL_RETRIES = 3
 
 # Proxy response timeout in seconds
-# Used for: preflight checks, Fetcher requests, StealthyFetcher, mubeng, quality checks
+# Used for: liveness checks, Fetcher requests, mubeng, quality checks
 # Free proxies are slow - 45 seconds is the minimum acceptable response time
 PROXY_TIMEOUT_SECONDS = 45
 
@@ -101,16 +101,6 @@ ERROR_RETRY_PROXY = 5         # Proxy-related errors
 
 # Default retry-after for rate limit exceptions (seconds)
 RATE_LIMIT_DEFAULT_RETRY_AFTER = 60
-
-# =============================================================================
-# PREFLIGHT CHECK SETTINGS
-# =============================================================================
-# Used in: main.py preflight check functions
-
-PREFLIGHT_MAX_ATTEMPTS_L1 = 6   # Level 1: Auto-rotation attempts
-PREFLIGHT_MAX_ATTEMPTS_L2 = 3   # Level 2: Soft restart attempts
-PREFLIGHT_MAX_ATTEMPTS_L3 = 3   # Level 3: Full refresh attempts
-PREFLIGHT_RETRY_DELAY = 1       # Seconds between preflight retries
 
 # =============================================================================
 # SOFT BLOCK DETECTION SETTINGS

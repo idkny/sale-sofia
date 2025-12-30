@@ -46,7 +46,7 @@
 | Pre-Production Hardening (Phases 1-3) | 10 | Completed |
 | Historical Completed Work | 35+ | Completed |
 
-**Total Tests**: 1042 passed, 8 skipped
+**Total Tests**: 1036 passed, 8 skipped
 
 ---
 
@@ -57,6 +57,8 @@
 | 1 | Available |
 | 2 | Available |
 | 3 | Available |
+
+**Session 54 (2025-12-30)**: Instance 2 - Dead code cleanup (~483 lines). Deleted `proxy_validator.py` (408 lines, never imported), removed PREFLIGHT_* settings, fixed stale docstrings.
 
 **Session 53 (2025-12-30)**: Instance 2 - Proxy cleanup x2: (1) Simplified proxy scoring - removed weighted selection, score multipliers, persistence. (2) Removed PROXY_WAIT_TIMEOUT dead code.
 
@@ -157,11 +159,11 @@
 - [x] 3. Simplify `proxy_scorer.py` - remove score math, keep failure counter only
 - [x] 4. Remove weighted selection - use random.choice()
 - [x] 5. Remove `proxy_scores.json` persistence
-- [x] 6. Update `proxy_validator.py` to use simplified system
+- [x] 6. ~~Update `proxy_validator.py`~~ (DELETED in Session 54 - was dead code)
 - [x] 7. Update/remove related tests (deleted 6, modified 4)
 - [x] 8. Delete unused code (~120 lines removed)
 
-**Files Modified**: config/settings.py, proxies/proxy_scorer.py, proxies/proxy_validator.py, main.py, tests/test_proxy_scorer.py
+**Files Modified**: config/settings.py, proxies/proxy_scorer.py, main.py, tests/test_proxy_scorer.py
 **Tests**: 1036 passed, 8 skipped
 
 ### Cleanup PROXY_WAIT_TIMEOUT (Dead Code) - COMPLETE (Session 53)
@@ -224,4 +226,4 @@
 
 ---
 
-**Last Updated**: 2025-12-28 (Spec 116 Generic Scraper Template added)
+**Last Updated**: 2025-12-30 (Session 54 - Dead code cleanup)
