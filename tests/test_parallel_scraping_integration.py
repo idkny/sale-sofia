@@ -170,6 +170,7 @@ class TestConcurrentExecution:
         # The actual concurrency is tested by verifying group() was called
         assert all(t > 0 for t in start_times), "All jobs should have valid start timestamps"
 
+    @patch("scraping.tasks.get_working_proxy")
     @patch("scraping.tasks.asyncio.run")
     @patch("websites.get_scraper")
     @patch("config.scraping_config.load_scraping_config")
@@ -177,10 +178,12 @@ class TestConcurrentExecution:
     @patch("scraping.tasks.time.time")
     def test_sites_have_overlapping_execution_time(
         self, mock_time, mock_redis, mock_config, mock_get_scraper, mock_asyncio,
+        mock_get_working_proxy,
         fake_redis, celery_eager_mode, mock_scraper_imot, mock_scraper_bazar
     ):
         """Sites should have overlapping execution time showing concurrent processing."""
         mock_redis.return_value = fake_redis
+        mock_get_working_proxy.return_value = "http://test-proxy:8080"
 
         # Mock time to ensure start and end are different
         time_counter = [1000000000]  # Use list to allow modification in nested function
@@ -348,6 +351,8 @@ class TestRateLimitingPerDomain:
         assert limiter._get_rate("bazar.bg") == DOMAIN_RATE_LIMITS["bazar.bg"]
         assert limiter._get_rate("unknown.site") == DOMAIN_RATE_LIMITS["default"]
 
+    @patch("scraping.tasks.get_working_proxy")
+    @patch("scraping.tasks.get_proxy_pool")
     @patch("scraping.tasks.asyncio.run")
     @patch("websites.get_scraper")
     @patch("resilience.get_circuit_breaker")
@@ -356,11 +361,15 @@ class TestRateLimitingPerDomain:
     @patch("scraping.tasks.get_redis_client")
     def test_rate_limiter_acquire_called_during_scraping(
         self, mock_redis, mock_get_limiter, mock_extract_domain, mock_get_cb,
-        mock_get_scraper, mock_asyncio, fake_redis, celery_eager_mode, redis_rate_limiter
+        mock_get_scraper, mock_asyncio, mock_get_pool, mock_get_working_proxy,
+        fake_redis, celery_eager_mode, redis_rate_limiter
     ):
         """Rate limiter acquire() should be called during chunk scraping."""
         mock_redis.return_value = fake_redis
         mock_get_limiter.return_value = redis_rate_limiter
+        mock_get_working_proxy.return_value = "http://test-proxy:8080"
+        mock_pool = MagicMock()
+        mock_get_pool.return_value = mock_pool
 
         # Setup circuit breaker
         mock_circuit_breaker = MagicMock()
@@ -398,16 +407,18 @@ class TestRateLimitingPerDomain:
 class TestProgressTracking:
     """Test Redis progress tracking for multiple sites."""
 
+    @patch("scraping.tasks.get_working_proxy")
     @patch("scraping.tasks.asyncio.run")
     @patch("websites.get_scraper")
     @patch("config.scraping_config.load_scraping_config")
     @patch("scraping.tasks.get_redis_client")
     def test_each_site_has_independent_progress_keys(
-        self, mock_redis, mock_config, mock_get_scraper, mock_asyncio,
+        self, mock_redis, mock_config, mock_get_scraper, mock_asyncio, mock_get_working_proxy,
         fake_redis, celery_eager_mode, mock_scraper_imot, mock_scraper_bazar
     ):
         """Each site should have independent Redis progress keys."""
         mock_redis.return_value = fake_redis
+        mock_get_working_proxy.return_value = "http://test-proxy:8080"
 
         # Setup scrapers
         def get_scraper_side_effect(site_name):
@@ -444,16 +455,18 @@ class TestProgressTracking:
         assert "imot.bg" in job_id1
         assert "bazar.bg" in job_id2
 
+    @patch("scraping.tasks.get_working_proxy")
     @patch("scraping.tasks.asyncio.run")
     @patch("websites.get_scraper")
     @patch("config.scraping_config.load_scraping_config")
     @patch("scraping.tasks.get_redis_client")
     def test_completed_chunks_tracked_per_site(
-        self, mock_redis, mock_config, mock_get_scraper, mock_asyncio,
+        self, mock_redis, mock_config, mock_get_scraper, mock_asyncio, mock_get_working_proxy,
         fake_redis, celery_eager_mode, mock_scraper_imot, mock_scraper_bazar
     ):
         """Completed chunks should be tracked independently per site."""
         mock_redis.return_value = fake_redis
+        mock_get_working_proxy.return_value = "http://test-proxy:8080"
 
         # Setup scrapers with multiple URLs to create chunks
         mock_scraper_imot.extract_search_results.return_value = [
@@ -503,16 +516,18 @@ class TestProgressTracking:
         assert completed_chunks1 == total_chunks1
         assert completed_chunks2 == total_chunks2
 
+    @patch("scraping.tasks.get_working_proxy")
     @patch("scraping.tasks.asyncio.run")
     @patch("websites.get_scraper")
     @patch("config.scraping_config.load_scraping_config")
     @patch("scraping.tasks.get_redis_client")
     def test_status_transitions_independent_per_site(
-        self, mock_redis, mock_config, mock_get_scraper, mock_asyncio,
+        self, mock_redis, mock_config, mock_get_scraper, mock_asyncio, mock_get_working_proxy,
         fake_redis, celery_eager_mode, mock_scraper_imot, mock_scraper_bazar
     ):
         """Status transitions should occur independently for each site."""
         mock_redis.return_value = fake_redis
+        mock_get_working_proxy.return_value = "http://test-proxy:8080"
 
         # Setup scrapers
         def get_scraper_side_effect(site_name):

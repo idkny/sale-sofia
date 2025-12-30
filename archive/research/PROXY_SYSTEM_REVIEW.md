@@ -1,9 +1,9 @@
 # Proxy System Architecture Review
 
 **Created**: 2025-12-30 (Session 55)
-**Updated**: 2025-12-30 (Session 56)
+**Updated**: 2025-12-30 (Session 57)
 **Author**: Instance 2
-**Status**: Phase 1 Cleanup Complete
+**Status**: ✅ Phase 1 & 2 Cleanup Complete
 
 ---
 
@@ -11,17 +11,30 @@
 
 Comprehensive review of the proxy system including Celery, Redis, and all tools/processes.
 
-**Key Finding**: The system was simplified in Session 50. Mubeng server is NO LONGER used for scraping in the default sequential mode. Proxies are selected directly from `ScoredProxyPool` with per-request liveness checks via httpx.
+**Key Finding**: The system was simplified in Session 50. Mubeng server is NO LONGER used for scraping. Proxies are selected directly from `ScoredProxyPool` with per-request liveness checks via httpx.
 
-### Session 56 Cleanup Completed
+### Session 57 Cleanup Completed (Phase 2)
+
+| Change | Lines Removed |
+|--------|---------------|
+| Deleted `proxies/mubeng_manager.py` | ~114 lines |
+| Deleted `proxies/proxies_main.py` | ~192 lines |
+| Fixed `async_fetcher.py` - proxy now required | - |
+| Fixed `scraping/tasks.py` - uses ScoredProxyPool | - |
+| Updated settings.py comment | - |
+| Added test fixture in conftest.py | - |
+| **Phase 2 Total** | **~306 lines** |
+
+### Session 56 Cleanup Completed (Phase 1)
 
 | Change | Lines Removed |
 |--------|---------------|
 | Solution F code from `proxy_scorer.py` | ~122 lines |
 | Unused facades from `proxies_main.py` | ~25 lines |
 | 6-hour Beat schedule from `celery_app.py` | ~12 lines |
-| Updated stale docstrings | - |
-| **Total** | **~159 lines** |
+| **Phase 1 Total** | **~159 lines** |
+
+**Grand Total Removed**: ~465 lines of dead code
 
 **Proxy refresh is now on-demand only** via `scrape_and_check_chain_task.delay()`.
 
@@ -57,9 +70,11 @@ Comprehensive review of the proxy system including Celery, Redis, and all tools/
 │  │   ├── select_proxy() → Random selection                                   │
 │  │   ├── record_result() → Track consecutive failures                        │
 │  │   └── remove_proxy() → Auto-prune after MAX_CONSECUTIVE_PROXY_FAILURES    │
-│  │   └── proxies/proxy_scorer.py:37-351                                      │
-│  └── proxies_main.py → Facades (mostly dead code, see findings)              │
-│      └── proxies/proxies_main.py                                             │
+│  │   └── proxies/proxy_scorer.py                                             │
+│  └── scraping/tasks.py → Parallel scraping with proxy pool integration       │
+│      ├── get_proxy_pool() → Singleton proxy pool per worker                  │
+│      ├── get_working_proxy() → Get proxy with liveness check                 │
+│      └── quick_liveness_check() → httpx ping before use                      │
 │                                                                              │
 │  Layer 2: SCRAPING INTEGRATION LAYER                                         │
 │  ├── quick_liveness_check() → httpx ping before each request                 │
@@ -204,8 +219,6 @@ proxies/
 │   └── scrape_and_check_chain_task
 ├── redis_keys.py            → Key patterns: proxy_refresh:{job_id}:*
 ├── proxy_scorer.py          → ScoredProxyPool class (runtime selection)
-├── proxies_main.py          → Facades (mostly DEAD - see findings)
-├── mubeng_manager.py        → Mubeng process control (rarely used)
 ├── anonymity_checker.py     → IP leak detection service
 ├── quality_checker.py       → Target site reachability tests
 ├── get_free_proxies.py      → Only used in tests
@@ -214,7 +227,21 @@ proxies/
 ├── live_proxies.txt         → OUTPUT: Same as JSON, one URL per line
 └── external/
     ├── psc/                 → proxy-scraper-checker binary
-    └── mubeng/              → mubeng binary
+    └── mubeng/              → mubeng binary (used for --check liveness only)
+
+scraping/
+├── tasks.py                 → Celery tasks for parallel scraping
+│   ├── dispatch_site_scraping → Collect URLs, dispatch workers
+│   ├── scrape_chunk → Fetch URLs with proxy pool
+│   ├── aggregate_results → Save to database
+│   ├── get_proxy_pool() → Singleton proxy pool per worker
+│   └── get_working_proxy() → Get proxy with liveness check
+├── async_fetcher.py         → Async HTTP fetching (proxy required)
+└── redis_keys.py            → Key patterns: scraping:{job_id}:*
+
+DELETED FILES (Session 57):
+├── proxies/proxies_main.py  → Was facades (all dead code)
+└── proxies/mubeng_manager.py → Was mubeng server control (dead)
 ```
 
 ---
@@ -293,32 +320,33 @@ proxies/
 | `_rebuild_index_map()` | ✅ Deleted |
 | `_save_proxy_file()` | ✅ Deleted |
 
-#### 2. proxies_main.py - Mubeng Functions (~80 lines)
+#### 2. proxies_main.py - ENTIRE FILE DELETED ✅
 
-**Location**: proxies/proxies_main.py:141-205
-
-| Function | Status |
-|----------|--------|
-| `setup_mubeng_rotator()` | Only if PARALLEL_SCRAPING=True |
-| `stop_mubeng_rotator()` | Only if PARALLEL_SCRAPING=True |
-
-**Reason**: PARALLEL_SCRAPING_ENABLED=False by default. Sequential mode doesn't use mubeng.
-
-#### 3. proxies_main.py - Unused Facades (~25 lines) ✅ DELETED
-
-**Location**: proxies/proxies_main.py:24-45 (was)
-**Status**: Deleted in Session 56
+**Location**: proxies/proxies_main.py (was ~192 lines)
+**Status**: Deleted in Session 57
 
 | Function | Status |
 |----------|--------|
-| `scrape_proxies()` | ✅ Deleted |
-| `check_proxies()` | ✅ Deleted |
+| `setup_mubeng_rotator()` | ✅ Deleted |
+| `stop_mubeng_rotator()` | ✅ Deleted |
+| `get_and_filter_proxies()` | ✅ Deleted |
+| `_check_and_refresh_proxies()` | ✅ Deleted |
+| `validate_proxy()` | ✅ Deleted |
 
-#### 4. mubeng_manager.py - Potentially Dead (~114 lines)
+**Reason**: All functions were dead code - only called by deleted code or not used anywhere.
 
-**Location**: proxies/mubeng_manager.py
+#### 3. mubeng_manager.py - ENTIRE FILE DELETED ✅
 
-Only imported by proxies_main.py which has dead mubeng functions. Still used by check_proxy_chunk_task for --check mode (liveness). BUT: start_mubeng_rotator_server/stop_mubeng_rotator_server are dead.
+**Location**: proxies/mubeng_manager.py (was ~114 lines)
+**Status**: Deleted in Session 57
+
+| Function | Status |
+|----------|--------|
+| `start_mubeng_rotator_server()` | ✅ Deleted |
+| `stop_mubeng_rotator_server()` | ✅ Deleted |
+| `find_free_port()` | ✅ Deleted |
+
+**Reason**: Only imported by proxies_main.py (deleted). Mubeng binary is still used for `--check` mode in proxies/tasks.py but doesn't need these functions.
 
 #### 5. get_free_proxies.py & get_paid_proxies.py
 
@@ -326,25 +354,20 @@ Only imported by proxies_main.py which has dead mubeng functions. Still used by 
 
 Only used in: tests/test_paid_proxies.py. Not used in production code.
 
-### Inconsistencies
+### Remaining Inconsistencies
 
 1. **MUBENG_PROXY Setting (settings.py:12)**
-   - Defined but only used if PARALLEL_SCRAPING_ENABLED=True or via ScraplingMixin
-   - main.py sequential mode doesn't use MUBENG_PROXY at all
-   - Creates confusion about architecture
+   - Now only used by ScraplingMixin in scrapling_base.py
+   - Neither main.py nor scraping/tasks.py use MUBENG_PROXY
+   - Consider removing if ScraplingMixin is updated
 
-2. **proxies_main.py Return Values**
-   - setup_mubeng_rotator() returns (proxy_url, process, file, keys)
-   - main.py passes proxy_url=None to _crawl_all_sites()
-   - The function exists but its output isn't used
-
-3. **ScraplingMixin vs Direct Fetcher**
+2. **ScraplingMixin vs Direct Fetcher**
    - ScraplingMixin.fetch_stealth() uses MUBENG_PROXY + Camoufox
    - main.py uses StealthyFetcher directly with proxy from pool
-   - Two different approaches in codebase
+   - scraping/tasks.py uses async_fetcher with proxy from pool
+   - Consider unifying to always use proxy pool
 
-4. **Documentation References**
-   - proxy_scorer.py docstring still mentions "weighted proxy selection" but weights were removed in Session 53
+3. **Documentation References**
    - scrapling_base.py mentions "Integration with mubeng proxy rotation" but main scraping flow doesn't use mubeng
 
 ---
@@ -359,35 +382,44 @@ Only used in: tests/test_paid_proxies.py. Not used in production code.
 | Delete unused facades from proxies_main.py | ~25 | LOW | ✅ Done (Session 56) |
 | Remove 6-hour Beat schedule | ~12 | LOW | ✅ Done (Session 56) |
 
-### Priority 2 (Medium Risk)
+### Priority 2 (Medium Risk) ✅ COMPLETE
 
-| Action | Lines | Risk | Notes |
-|--------|-------|------|-------|
-| Clean up mubeng_manager.py | ~40 | MED | Keep find_free_port() if used |
-| Remove MUBENG_PROXY from settings | varies | MED | Affects async_fetcher.py |
+| Action | Lines | Risk | Status |
+|--------|-------|------|--------|
+| Delete mubeng_manager.py | ~114 | MED | ✅ Done (Session 57) |
+| Delete proxies_main.py | ~192 | MED | ✅ Done (Session 57) |
+| Fix async_fetcher.py to require proxy | - | MED | ✅ Done (Session 57) |
+| Fix scraping/tasks.py to use proxy pool | - | MED | ✅ Done (Session 57) |
 
-### Priority 3 (Discussion Needed)
+### Priority 3 (Optional - Future Enhancement)
 
-| Decision | Impact |
-|----------|--------|
-| Keep or Remove Parallel Scraping Mode? | If remove: delete scraping/tasks.py, async_fetcher.py, MUBENG_PROXY |
+| Action | Impact |
+|--------|--------|
+| Remove MUBENG_PROXY from settings | Only affects ScraplingMixin |
 | Unify Fetcher Usage | Consolidate ScraplingMixin vs direct Fetcher approaches |
 
 ---
 
 ## Estimated Impact
 
-- **Total Dead Code Removed**: ~159 lines (Session 56)
+- **Phase 1 Dead Code Removed**: ~159 lines (Session 56)
+- **Phase 2 Dead Code Removed**: ~306 lines (Session 57)
+- **Grand Total Removed**: ~465 lines
 - **Test Impact**: None - all 1036 tests pass
 - **Risk Level**: Low (verified)
 
 ---
 
-## Next Steps
+## Status: COMPLETE
 
 1. ~~Review this document~~ ✅
 2. ~~Approve P1 cleanup tasks~~ ✅
-3. ~~Run pytest after each deletion to verify no regressions~~ ✅ (1036 passed)
-4. ~~Update instance_002.md with session summary~~ Pending
-5. Consider P2 cleanup (mubeng_manager.py dead functions)
-6. Decision needed: Keep or remove PARALLEL_SCRAPING mode?
+3. ~~Execute P1 cleanup~~ ✅ (Session 56)
+4. ~~Approve P2 cleanup tasks~~ ✅
+5. ~~Execute P2 cleanup~~ ✅ (Session 57)
+6. ~~Run pytest after each deletion~~ ✅ (1036 passed)
+7. ~~Update research and tasks files~~ ✅
+
+**Decision Made**: Keep parallel scraping mode but fix to use proxy pool (not MUBENG_PROXY).
+
+**Remaining**: P3 is optional - unify ScraplingMixin to use proxy pool instead of MUBENG_PROXY.

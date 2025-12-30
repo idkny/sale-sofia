@@ -6,18 +6,26 @@ import time
 import uuid
 from typing import Any
 
+import httpx
 import redis
 from celery import chord, group
 
 from celery_app import celery_app
 from config.settings import (
+    PROXY_TIMEOUT_SECONDS,
     SCRAPING_CHUNK_SIZE,
     SCRAPING_HARD_TIME_LIMIT,
     SCRAPING_SOFT_TIME_LIMIT,
 )
+from paths import PROXIES_DIR
+from proxies.proxy_scorer import ScoredProxyPool
 from scraping.redis_keys import ScrapingKeys
 
 logger = logging.getLogger(__name__)
+
+# Proxy pool singleton for worker process
+_proxy_pool: ScoredProxyPool | None = None
+MAX_PROXY_ATTEMPTS = 10
 
 # Redis client singleton
 _redis_client = None
@@ -35,6 +43,42 @@ def get_redis_client():
             decode_responses=True,
         )
     return _redis_client
+
+
+def get_proxy_pool() -> ScoredProxyPool:
+    """Get or initialize proxy pool for this worker process."""
+    global _proxy_pool
+    if _proxy_pool is None:
+        proxy_file = PROXIES_DIR / "live_proxies.json"
+        _proxy_pool = ScoredProxyPool(proxy_file)
+        logger.info(f"Initialized proxy pool with {len(_proxy_pool.proxies)} proxies")
+    return _proxy_pool
+
+
+def quick_liveness_check(proxy_url: str) -> bool:
+    """Quick liveness check using httpx (same as main.py)."""
+    try:
+        with httpx.Client(proxy=proxy_url, timeout=PROXY_TIMEOUT_SECONDS) as client:
+            resp = client.get("https://httpbin.org/ip")
+            return resp.status_code == 200
+    except Exception:
+        return False
+
+
+def get_working_proxy() -> str | None:
+    """Get a working proxy from pool, with liveness check."""
+    pool = get_proxy_pool()
+    for _ in range(MAX_PROXY_ATTEMPTS):
+        proxy_url = pool.select_proxy()
+        if not proxy_url:
+            logger.warning("No proxies available in pool")
+            return None
+        if quick_liveness_check(proxy_url):
+            return proxy_url
+        pool.remove_proxy(proxy_url)
+        logger.debug(f"Removed dead proxy: {proxy_url}")
+    logger.warning(f"Failed to find working proxy after {MAX_PROXY_ATTEMPTS} attempts")
+    return None
 
 
 @celery_app.task(bind=True)
@@ -73,7 +117,11 @@ def dispatch_site_scraping(self, site_name: str, start_urls: list) -> dict:
     all_listing_urls = []
     for start_url in start_urls:
         try:
-            html = asyncio.run(fetch_page(start_url))
+            proxy = get_working_proxy()
+            if not proxy:
+                logger.warning(f"No proxy available for {start_url}")
+                continue
+            html = asyncio.run(fetch_page(start_url, proxy=proxy))
             urls = scraper.extract_search_results(html)
             all_listing_urls.extend(urls)
             logger.info(f"Collected {len(urls)} URLs from {start_url}")
@@ -150,19 +198,28 @@ def scrape_chunk(self, urls: list, job_id: str, site_name: str) -> list:
     domain = extract_domain(urls[0]) if urls else site_name
 
     results = []
+    pool = get_proxy_pool()
     for url in urls:
+        proxy = None
         try:
             # Check circuit breaker
             if not circuit_breaker.can_request(domain):
                 results.append({"url": url, "error": "circuit_open", "skipped": True})
                 continue
 
+            # Get working proxy
+            proxy = get_working_proxy()
+            if not proxy:
+                results.append({"url": url, "error": "no_proxy_available", "skipped": True})
+                continue
+
             # Fetch and extract (fetch_page handles rate limiting internally)
-            html = asyncio.run(fetch_page(url))
+            html = asyncio.run(fetch_page(url, proxy=proxy))
             listing = scraper.extract_listing(html, url)
 
             if listing:
                 circuit_breaker.record_success(domain)
+                pool.record_result(proxy, success=True)
                 results.append(
                     listing.to_dict() if hasattr(listing, "to_dict") else listing
                 )
@@ -171,6 +228,8 @@ def scrape_chunk(self, urls: list, job_id: str, site_name: str) -> list:
 
         except Exception as e:
             circuit_breaker.record_failure(domain, str(type(e).__name__))
+            if proxy:
+                pool.record_result(proxy, success=False)
             results.append({"url": url, "error": str(e)})
 
     # Update progress

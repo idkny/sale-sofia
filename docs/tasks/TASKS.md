@@ -58,6 +58,10 @@
 | 2 | Available |
 | 3 | Available |
 
+**Session 57 (2025-12-30)**: Instance 2 - Proxy Phase 2 complete (~306 lines removed). Deleted `mubeng_manager.py` (114 lines), `proxies_main.py` (192 lines). Fixed async_fetcher.py and scraping/tasks.py to use ScoredProxyPool. All 1036 tests pass.
+
+**Session 56 (2025-12-30)**: Instance 2 - Proxy Phase 1 complete (~159 lines removed). Deleted Solution F code, unused facades, Beat schedule.
+
 **Session 54 (2025-12-30)**: Instance 2 - Dead code cleanup (~483 lines). Deleted `proxy_validator.py` (408 lines, never imported), removed PREFLIGHT_* settings, fixed stale docstrings.
 
 **Session 53 (2025-12-30)**: Instance 2 - Proxy cleanup x2: (1) Simplified proxy scoring - removed weighted selection, score multipliers, persistence. (2) Removed PROXY_WAIT_TIMEOUT dead code.
@@ -75,29 +79,29 @@
 
 ## Pending Tasks
 
-### Proxy System Dead Code Cleanup
+### Proxy System Dead Code Cleanup ✅ COMPLETE
 
-> **Research**: [PROXY_SYSTEM_REVIEW.md](../research/PROXY_SYSTEM_REVIEW.md)
+> **Research**: [PROXY_SYSTEM_REVIEW.md](../../archive/research/PROXY_SYSTEM_REVIEW.md) (archived)
 > **Created**: Session 55 (2025-12-30)
-> **Estimated**: ~150-200 lines of dead code
+> **Completed**: Session 57 (2025-12-30)
+> **Total Removed**: ~465 lines of dead code
 
-#### Phase 1: Low Risk Cleanup (P1)
-- [ ] 1.1 Delete Solution F code from `proxy_scorer.py` (~100 lines)
-  - `_proxy_order`, `_index_map`, `_mubeng_proxy_file` attributes
-  - `set_proxy_order()`, `get_proxy_index()`, `set_mubeng_proxy_file()`
-  - `_rebuild_index_map()`, `_save_proxy_file()`
-- [ ] 1.2 Delete unused facades from `proxies_main.py` (~25 lines)
-  - `scrape_proxies()`, `check_proxies()`
-- [ ] 1.3 Update stale docstrings (~10 lines)
-  - proxy_scorer.py: Remove "weighted proxy selection" references
-- [ ] 1.4 Run pytest to verify no regressions
+#### Phase 1: Low Risk Cleanup (P1) ✅ Session 56
+- [x] 1.1 Delete Solution F code from `proxy_scorer.py` (~122 lines)
+- [x] 1.2 Delete unused facades from `proxies_main.py` (~25 lines)
+- [x] 1.3 Update stale docstrings
+- [x] 1.4 Remove 6-hour Beat schedule (~12 lines)
+- [x] 1.5 Run pytest (1036 passed)
 
-#### Phase 2: Medium Risk Cleanup (P2) - Needs Discussion
-- [ ] 2.1 Decision: Keep or remove PARALLEL_SCRAPING mode?
-- [ ] 2.2 If removing: Delete `scraping/tasks.py`, `async_fetcher.py`
-- [ ] 2.3 If keeping: Fix async_fetcher to use proxy pool instead of MUBENG_PROXY
-- [ ] 2.4 Clean up `mubeng_manager.py` (keep/remove based on P2.1)
-- [ ] 2.5 Remove/update MUBENG_PROXY from settings.py
+#### Phase 2: Medium Risk Cleanup (P2) ✅ Session 57
+- [x] 2.1 Decision: **KEEP** parallel scraping (will be default soon)
+- [x] 2.2 Delete `proxies/mubeng_manager.py` (~114 lines)
+- [x] 2.3 Delete `proxies/proxies_main.py` (~192 lines)
+- [x] 2.4 Fix `async_fetcher.py` - proxy now required (removed MUBENG_PROXY default)
+- [x] 2.5 Fix `scraping/tasks.py` - added ScoredProxyPool integration
+- [x] 2.6 Update settings.py comment
+- [x] 2.7 Add test fixture in conftest.py
+- [x] 2.8 Run pytest (1036 passed)
 
 ---
 
@@ -252,4 +256,4 @@
 
 ---
 
-**Last Updated**: 2025-12-30 (Session 55 - Proxy system architecture review)
+**Last Updated**: 2025-12-30 (Session 57 - Proxy Phase 2 cleanup complete)

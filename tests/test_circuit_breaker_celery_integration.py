@@ -194,17 +194,23 @@ class TestCircuitOpensAfterFailures:
 class TestCircuitBreakerCeleryInteraction:
     """Test circuit breaker integration with scrape_chunk task."""
 
+    @patch("scraping.tasks.get_working_proxy")
+    @patch("scraping.tasks.get_proxy_pool")
     @patch("scraping.tasks.asyncio.run")
     @patch("scraping.tasks.get_redis_client")
     @patch("websites.get_scraper")
     @patch("resilience.get_circuit_breaker")
     def test_scrape_chunk_checks_circuit_before_each_url(
         self, mock_get_cb, mock_get_scraper, mock_redis, mock_asyncio,
+        mock_get_pool, mock_get_working_proxy,
         fake_redis, celery_eager_mode, in_memory_circuit_breaker
     ):
         """scrape_chunk should check circuit breaker before fetching each URL."""
         mock_redis.return_value = fake_redis
         mock_get_cb.return_value = in_memory_circuit_breaker
+        mock_get_working_proxy.return_value = "http://test-proxy:8080"
+        mock_pool = MagicMock()
+        mock_get_pool.return_value = mock_pool
 
         # Setup scraper
         mock_scraper = MagicMock()
@@ -230,17 +236,21 @@ class TestCircuitBreakerCeleryInteraction:
         assert len(results) == 2
         assert all("error" not in r for r in results)
 
+    @patch("scraping.tasks.get_proxy_pool")
     @patch("scraping.tasks.asyncio.run")
     @patch("scraping.tasks.get_redis_client")
     @patch("websites.get_scraper")
     @patch("resilience.get_circuit_breaker")
     def test_scrape_chunk_skips_urls_when_circuit_open(
         self, mock_get_cb, mock_get_scraper, mock_redis, mock_asyncio,
+        mock_get_pool,
         fake_redis, celery_eager_mode, in_memory_circuit_breaker
     ):
         """scrape_chunk should skip URLs when circuit is open."""
         mock_redis.return_value = fake_redis
         mock_get_cb.return_value = in_memory_circuit_breaker
+        mock_pool = MagicMock()
+        mock_get_pool.return_value = mock_pool
 
         # Setup scraper (shouldn't be called)
         mock_scraper = MagicMock()
@@ -266,17 +276,23 @@ class TestCircuitBreakerCeleryInteraction:
         mock_scraper.extract_listing.assert_not_called()
         mock_asyncio.assert_not_called()
 
+    @patch("scraping.tasks.get_working_proxy")
+    @patch("scraping.tasks.get_proxy_pool")
     @patch("scraping.tasks.asyncio.run")
     @patch("scraping.tasks.get_redis_client")
     @patch("websites.get_scraper")
     @patch("resilience.get_circuit_breaker")
     def test_scrape_chunk_records_success_to_circuit_breaker(
         self, mock_get_cb, mock_get_scraper, mock_redis, mock_asyncio,
+        mock_get_pool, mock_get_working_proxy,
         fake_redis, celery_eager_mode, in_memory_circuit_breaker
     ):
         """scrape_chunk should record success to circuit breaker on successful extraction."""
         mock_redis.return_value = fake_redis
         mock_get_cb.return_value = in_memory_circuit_breaker
+        mock_get_working_proxy.return_value = "http://test-proxy:8080"
+        mock_pool = MagicMock()
+        mock_get_pool.return_value = mock_pool
 
         # Setup scraper to succeed
         mock_scraper = MagicMock()
@@ -304,17 +320,23 @@ class TestCircuitBreakerCeleryInteraction:
         assert status.success_count >= 1
         assert status.failure_count == 0
 
+    @patch("scraping.tasks.get_working_proxy")
+    @patch("scraping.tasks.get_proxy_pool")
     @patch("scraping.tasks.asyncio.run")
     @patch("scraping.tasks.get_redis_client")
     @patch("websites.get_scraper")
     @patch("resilience.get_circuit_breaker")
     def test_scrape_chunk_records_failure_to_circuit_breaker(
         self, mock_get_cb, mock_get_scraper, mock_redis, mock_asyncio,
+        mock_get_pool, mock_get_working_proxy,
         fake_redis, celery_eager_mode, in_memory_circuit_breaker
     ):
         """scrape_chunk should record failure to circuit breaker on exception."""
         mock_redis.return_value = fake_redis
         mock_get_cb.return_value = in_memory_circuit_breaker
+        mock_get_working_proxy.return_value = "http://test-proxy:8080"
+        mock_pool = MagicMock()
+        mock_get_pool.return_value = mock_pool
 
         # Setup scraper to fail
         mock_scraper = MagicMock()
@@ -340,17 +362,21 @@ class TestCircuitBreakerCeleryInteraction:
 class TestTaskRetryBehavior:
     """Test task retry behavior with circuit breaker."""
 
+    @patch("scraping.tasks.get_proxy_pool")
     @patch("scraping.tasks.asyncio.run")
     @patch("scraping.tasks.get_redis_client")
     @patch("websites.get_scraper")
     @patch("resilience.get_circuit_breaker")
     def test_task_respects_open_circuit_no_hammering(
         self, mock_get_cb, mock_get_scraper, mock_redis, mock_asyncio,
+        mock_get_pool,
         fake_redis, celery_eager_mode, in_memory_circuit_breaker
     ):
         """Task should respect open circuit and not hammer blocked domain."""
         mock_redis.return_value = fake_redis
         mock_get_cb.return_value = in_memory_circuit_breaker
+        mock_pool = MagicMock()
+        mock_get_pool.return_value = mock_pool
 
         # Setup scraper
         mock_scraper = MagicMock()
@@ -526,17 +552,23 @@ class TestMultiDomainIndependence:
         assert bazar_status.state == CircuitState.CLOSED
         assert bazar_status.failure_count == 0
 
+    @patch("scraping.tasks.get_working_proxy")
+    @patch("scraping.tasks.get_proxy_pool")
     @patch("scraping.tasks.asyncio.run")
     @patch("scraping.tasks.get_redis_client")
     @patch("websites.get_scraper")
     @patch("resilience.get_circuit_breaker")
     def test_scraping_multiple_domains_independent_circuits(
         self, mock_get_cb, mock_get_scraper, mock_redis, mock_asyncio,
+        mock_get_pool, mock_get_working_proxy,
         fake_redis, celery_eager_mode, in_memory_circuit_breaker
     ):
         """Scraping multiple domains should use independent circuits."""
         mock_redis.return_value = fake_redis
         mock_get_cb.return_value = in_memory_circuit_breaker
+        mock_get_working_proxy.return_value = "http://test-proxy:8080"
+        mock_pool = MagicMock()
+        mock_get_pool.return_value = mock_pool
 
         # Setup scraper
         mock_scraper = MagicMock()
@@ -721,17 +753,23 @@ class TestEdgeCases:
         status = cb.get_status(domain)
         assert status.failure_count == 0  # No tracking when disabled
 
+    @patch("scraping.tasks.get_working_proxy")
+    @patch("scraping.tasks.get_proxy_pool")
     @patch("scraping.tasks.asyncio.run")
     @patch("scraping.tasks.get_redis_client")
     @patch("websites.get_scraper")
     @patch("resilience.get_circuit_breaker")
     def test_scrape_chunk_handles_extraction_failure_without_opening_circuit(
         self, mock_get_cb, mock_get_scraper, mock_redis, mock_asyncio,
+        mock_get_pool, mock_get_working_proxy,
         fake_redis, celery_eager_mode, in_memory_circuit_breaker
     ):
         """Extraction failure (not fetch failure) should record failure to circuit."""
         mock_redis.return_value = fake_redis
         mock_get_cb.return_value = in_memory_circuit_breaker
+        mock_get_working_proxy.return_value = "http://test-proxy:8080"
+        mock_pool = MagicMock()
+        mock_get_pool.return_value = mock_pool
 
         # Setup scraper to return None (extraction failed)
         mock_scraper = MagicMock()
@@ -779,17 +817,23 @@ class TestEdgeCases:
 class TestFullIntegrationScenario:
     """End-to-end integration test with circuit breaker and Celery task."""
 
+    @patch("scraping.tasks.get_working_proxy")
+    @patch("scraping.tasks.get_proxy_pool")
     @patch("scraping.tasks.asyncio.run")
     @patch("scraping.tasks.get_redis_client")
     @patch("websites.get_scraper")
     @patch("resilience.get_circuit_breaker")
     def test_full_scenario_failures_open_circuit_then_recovery(
         self, mock_get_cb, mock_get_scraper, mock_redis, mock_asyncio,
+        mock_get_pool, mock_get_working_proxy,
         fake_redis, celery_eager_mode, in_memory_circuit_breaker
     ):
         """Full scenario: failures open circuit, timeout recovers, success closes."""
         mock_redis.return_value = fake_redis
         mock_get_cb.return_value = in_memory_circuit_breaker
+        mock_get_working_proxy.return_value = "http://test-proxy:8080"
+        mock_pool = MagicMock()
+        mock_get_pool.return_value = mock_pool
 
         # Setup scraper
         mock_scraper = MagicMock()

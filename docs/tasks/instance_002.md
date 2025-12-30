@@ -4,7 +4,7 @@ type: session_file
 project: sale-sofia
 instance: 2
 created_at: 2025-12-24
-updated_at: 2025-12-30 (Session 56)
+updated_at: 2025-12-30 (Session 57)
 ---
 
 # Instance 2 Session
@@ -15,23 +15,54 @@ updated_at: 2025-12-30 (Session 56)
 
 ## IMMEDIATE NEXT SESSION TASK
 
-**Continue Proxy System Improvements - Phase 2**
+**Proxy Cleanup Complete - Consider Next Tasks**
 
-Phase 1 cleanup complete. Continue based on `docs/research/PROXY_SYSTEM_REVIEW.md`:
+Phase 1 & 2 proxy cleanup complete (~465 lines removed). Options:
 
-1. **Decision needed**: Keep or remove PARALLEL_SCRAPING mode?
-   - If removing: delete `scraping/tasks.py`, `async_fetcher.py`, `MUBENG_PROXY`
-   - If keeping: fix `async_fetcher.py` to use proxy pool instead of `MUBENG_PROXY`
+1. **P3 Optional**: Unify ScraplingMixin to use proxy pool instead of MUBENG_PROXY
+   - Update `scrapling_base.py` to accept proxy from pool
+   - Remove MUBENG_PROXY from settings.py entirely
 
-2. **P2 Cleanup** (if decided to keep parallel mode):
-   - Clean up `mubeng_manager.py` dead functions (~40 lines)
-   - Remove/update `MUBENG_PROXY` from settings.py
+2. **OLX.bg Integration**: Continue generic scraper work
+   - Phase 4.4: Verify pagination works
+   - Phase 4.5: Integration test with live proxies
 
-3. **Consistency**: Unify fetcher usage (ScraplingMixin vs direct Fetcher)
+3. **Failed URL Tracking**: Implement retry system (TASKS.md backlog)
 
 ---
 
 ## Session History
+
+### 2025-12-30 (Session 57 - Phase 2 Cleanup Complete)
+
+| Task | Status |
+|------|--------|
+| Delete `proxies/mubeng_manager.py` | Complete |
+| Delete `proxies/proxies_main.py` | Complete |
+| Fix `async_fetcher.py` - proxy now required | Complete |
+| Fix `scraping/tasks.py` - use ScoredProxyPool | Complete |
+| Update settings.py comment | Complete |
+| Add test fixture in conftest.py | Complete |
+| Update tests to mock proxy functions | Complete |
+| Run pytest (1036 passed) | Complete |
+
+**Summary**: Completed Phase 2 proxy cleanup. Removed ~306 lines of dead code. Kept parallel scraping mode but fixed to use proxy pool instead of MUBENG_PROXY. Total removed across Phase 1+2: ~465 lines.
+
+**Files Deleted**:
+- `proxies/mubeng_manager.py` (~114 lines)
+- `proxies/proxies_main.py` (~192 lines)
+
+**Files Modified**:
+- `scraping/async_fetcher.py` - proxy now required
+- `scraping/tasks.py` - added proxy pool integration
+- `config/settings.py` - updated MUBENG_PROXY comment
+- `tests/conftest.py` - added auto-mock fixture
+- `tests/test_async_fetcher.py` - added TEST_PROXY
+- Multiple test files - added proxy mocks
+
+**Research Updated**: `docs/research/PROXY_SYSTEM_REVIEW.md` - Status: Complete
+
+---
 
 ### 2025-12-30 (Session 56 - Phase 1 Cleanup Complete)
 

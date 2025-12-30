@@ -14,7 +14,6 @@ from loguru import logger
 
 from config.settings import (
     ASYNC_FETCHER_MAX_CONCURRENT,
-    MUBENG_PROXY,
     PROXY_TIMEOUT_SECONDS,
 )
 from resilience.circuit_breaker import extract_domain, get_circuit_breaker
@@ -38,7 +37,7 @@ DEFAULT_HEADERS = {
 
 async def fetch_page(
     url: str,
-    proxy: str | None = None,
+    proxy: str,
     timeout: float = PROXY_TIMEOUT_SECONDS,
     headers: dict | None = None,
 ) -> str:
@@ -47,7 +46,7 @@ async def fetch_page(
 
     Args:
         url: URL to fetch
-        proxy: Proxy URL (defaults to MUBENG_PROXY if None)
+        proxy: Proxy URL (required, get from ScoredProxyPool)
         timeout: Request timeout in seconds
         headers: Optional custom headers (merged with defaults)
 
@@ -55,10 +54,13 @@ async def fetch_page(
         HTML content as string
 
     Raises:
+        ValueError: If proxy is None
         CircuitOpenException: If circuit breaker is open for domain
         BlockedException: If soft block detected in response
         httpx.HTTPError: On network/HTTP errors
     """
+    if not proxy:
+        raise ValueError("proxy is required - get from ScoredProxyPool")
     domain = extract_domain(url)
     circuit_breaker = get_circuit_breaker()
     rate_limiter = get_rate_limiter()
@@ -76,8 +78,7 @@ async def fetch_page(
     if headers:
         request_headers.update(headers)
 
-    # Use proxy (default to MUBENG_PROXY)
-    proxy_url = proxy if proxy is not None else MUBENG_PROXY
+    proxy_url = proxy
 
     try:
         async with httpx.AsyncClient(
@@ -116,7 +117,7 @@ async def fetch_page(
 
 async def fetch_pages_concurrent(
     urls: list[str],
-    proxy: str | None = None,
+    proxy: str,
     max_concurrent: int = ASYNC_FETCHER_MAX_CONCURRENT,
 ) -> list[tuple[str, str | Exception]]:
     """
@@ -124,7 +125,7 @@ async def fetch_pages_concurrent(
 
     Args:
         urls: List of URLs to fetch
-        proxy: Proxy URL (defaults to MUBENG_PROXY if None)
+        proxy: Proxy URL (required, get from ScoredProxyPool)
         max_concurrent: Maximum concurrent requests (default 5)
 
     Returns:

@@ -11,6 +11,9 @@ import httpx
 from scraping.async_fetcher import fetch_page, fetch_pages_concurrent
 from resilience.exceptions import BlockedException, CircuitOpenException
 
+# Test proxy URL
+TEST_PROXY = "http://test-proxy:8080"
+
 
 @pytest.fixture
 def mock_circuit_breaker():
@@ -59,7 +62,7 @@ async def test_fetch_page_success(mock_circuit_breaker, mock_rate_limiter, mock_
         mock_client.return_value = mock_client_instance
 
         # Execute
-        result = await fetch_page("https://example.com/page")
+        result = await fetch_page("https://example.com/page", proxy=TEST_PROXY)
 
         # Verify
         assert result == "<html><body>test content</body></html>"
@@ -77,7 +80,7 @@ async def test_fetch_page_circuit_breaker_open(mock_circuit_breaker, mock_rate_l
 
     # Execute and verify exception
     with pytest.raises(CircuitOpenException) as exc_info:
-        await fetch_page("https://example.com/page")
+        await fetch_page("https://example.com/page", proxy=TEST_PROXY)
 
     assert "Circuit breaker open for domain: example.com" in str(exc_info.value)
     mock_circuit_breaker.can_request.assert_called_once_with("example.com")
@@ -107,7 +110,7 @@ async def test_fetch_page_soft_block_detected(mock_circuit_breaker, mock_rate_li
 
             # Execute and verify exception
             with pytest.raises(BlockedException) as exc_info:
-                await fetch_page("https://example.com/page")
+                await fetch_page("https://example.com/page", proxy=TEST_PROXY)
 
             assert "Soft block detected: captcha_detected" in str(exc_info.value)
             mock_circuit_breaker.record_failure.assert_called_once_with(
@@ -137,7 +140,7 @@ async def test_fetch_page_http_error(mock_circuit_breaker, mock_rate_limiter, mo
 
         # Execute and verify exception
         with pytest.raises(httpx.HTTPStatusError):
-            await fetch_page("https://example.com/page")
+            await fetch_page("https://example.com/page", proxy=TEST_PROXY)
 
         mock_circuit_breaker.record_failure.assert_called_once_with(
             "example.com", block_type="http_403"
@@ -165,7 +168,7 @@ async def test_fetch_page_http_error_500(mock_circuit_breaker, mock_rate_limiter
 
         # Execute and verify exception
         with pytest.raises(httpx.HTTPStatusError):
-            await fetch_page("https://example.com/page")
+            await fetch_page("https://example.com/page", proxy=TEST_PROXY)
 
         mock_circuit_breaker.record_failure.assert_called_once_with(
             "example.com", block_type="http_500"
@@ -203,7 +206,7 @@ async def test_fetch_pages_concurrent_success(mock_circuit_breaker, mock_rate_li
             "https://example.com/page2",
             "https://example.com/page3",
         ]
-        results = await fetch_pages_concurrent(urls, max_concurrent=3)
+        results = await fetch_pages_concurrent(urls, proxy=TEST_PROXY, max_concurrent=3)
 
         # Verify
         assert len(results) == 3
@@ -250,7 +253,7 @@ async def test_fetch_pages_concurrent_partial_failure(mock_circuit_breaker, mock
             "https://example.com/page2",
             "https://example.com/page3",
         ]
-        results = await fetch_pages_concurrent(urls, max_concurrent=3)
+        results = await fetch_pages_concurrent(urls, proxy=TEST_PROXY, max_concurrent=3)
 
         # Verify
         assert len(results) == 3
@@ -309,7 +312,7 @@ async def test_fetch_pages_concurrent_respects_semaphore(mock_circuit_breaker, m
         # Execute with max_concurrent=2
         import asyncio
         urls = [f"https://example.com/page{i}" for i in range(10)]
-        results = await fetch_pages_concurrent(urls, max_concurrent=2)
+        results = await fetch_pages_concurrent(urls, proxy=TEST_PROXY, max_concurrent=2)
 
         # Verify
         assert len(results) == 10
@@ -334,7 +337,7 @@ async def test_fetch_page_network_error(mock_circuit_breaker, mock_rate_limiter,
 
         # Execute and verify exception
         with pytest.raises(httpx.RequestError):
-            await fetch_page("https://example.com/page")
+            await fetch_page("https://example.com/page", proxy=TEST_PROXY)
 
         mock_circuit_breaker.record_failure.assert_called_once_with(
             "example.com", block_type="network_error"
@@ -360,7 +363,7 @@ async def test_fetch_page_custom_headers(mock_circuit_breaker, mock_rate_limiter
 
         # Execute with custom headers
         custom_headers = {"X-Custom-Header": "test-value"}
-        await fetch_page("https://example.com/page", headers=custom_headers)
+        await fetch_page("https://example.com/page", proxy=TEST_PROXY, headers=custom_headers)
 
         # Verify headers were passed
         call_args = mock_client_instance.get.call_args
