@@ -54,9 +54,11 @@
 
 | Instance | Current Task |
 |----------|--------------|
-| 1 | Investigate PSC Anonymity Output |
+| 1 | Available |
 | 2 | Available |
 | 3 | Available |
+
+**Session 60 (2025-12-30)**: Instance 1 - PSC Anonymity Investigation. Finding: PSC does NOT output anonymity level (only `exit_ip != host` filtering). Keeping our HTTP header check for Elite vs Anonymous distinction.
 
 **Session 59 (2025-12-30)**: Instance 1 - Mubeng & SSL investigation. Created research file `MUBENG_SSL_INVESTIGATION.md`. Added "Remove Mubeng Binary Dependency" task to backlog. Finding: mubeng binary can be removed, SSL certificate infrastructure should be kept.
 
@@ -287,18 +289,30 @@ Investigation found:
 - [x] 1.2 Update `proxies/tasks.py` to use `PSC_TIMEOUT_SECONDS` instead of hardcoded 300
 - [x] 1.3 Run pytest to verify (1036 passed)
 
-### Investigate PSC Anonymity Output
+### Investigate PSC Anonymity Output ✅ COMPLETE (Session 60)
 
 > **Question**: Does PSC already output anonymity level in `proxies_pretty.json`?
-> **Goal**: If yes, remove duplicate anonymity checking from pipeline to simplify code.
-> **Note**: Liveness check duplication is OK - PSC returns many proxies that pass basic check but are too slow for real website requests. Mubeng provides more resilient validation.
+> **Finding**: NO - PSC does not output anonymity level. Keep our HTTP header check.
 
-#### Tasks
-- [ ] 1.1 Run PSC manually and inspect `proxies_pretty.json` output format
-- [ ] 1.2 Check if anonymity field exists in PSC output
-- [ ] 1.3 If yes: Remove `_enrich_with_anonymity()` call from `check_proxy_chunk_task()`
-- [ ] 1.4 If yes: Map PSC anonymity values to our Transparent/Anonymous/Elite format
-- [ ] 1.5 Run pytest to verify
+#### Investigation Results
+
+| Aspect | PSC | Our System |
+|--------|-----|------------|
+| **Method** | `exit_ip != host` | HTTP headers (VIA, X-FORWARDED-FOR, etc.) |
+| **Detection** | Binary: transparent vs non-transparent | 3 levels: Transparent/Anonymous/Elite |
+| **Output** | Folder-based (`proxies_anonymous/`) | Field in JSON (`anonymity: "Elite"`) |
+
+**PSC Source** (`output.rs:247-253`):
+```rust
+.filter(|proxy| proxy.exit_ip.as_ref().is_some_and(|ip| *ip != proxy.host))
+```
+
+**Conclusion**: Keep `_enrich_with_anonymity()` - provides granular Elite vs Anonymous detection that PSC cannot.
+
+#### Completed Tasks
+- [x] 1.1 Inspected `proxies_pretty.json` - fields: protocol, host, port, timeout, exit_ip, asn, geolocation
+- [x] 1.2 Confirmed NO anonymity field in PSC output
+- [x] 1.3-1.5 N/A - keeping our anonymity check
 
 ### Analytics & Insights
 - [ ] Price trends (historical price analysis per neighborhood)
@@ -322,4 +336,4 @@ Investigation found:
 
 ---
 
-**Last Updated**: 2025-12-30 (Session 60 - Added PSC timeout fix + anonymity investigation tasks)
+**Last Updated**: 2025-12-30 (Session 60 - PSC anonymity investigation complete)
